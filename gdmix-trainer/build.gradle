@@ -1,0 +1,21 @@
+apply plugin: 'li-python-lib'
+def PYTHON_VERSION = '3.7'
+
+python {
+  version = PYTHON_VERSION
+  supportedVersions = [PYTHON_VERSION]
+}
+
+dependencies {
+  python spec.product.'li-tensorflow'.'tensorflow-python'
+  python spec.product.'tensorboard-mp'.'tensorboard-mp'
+  python spec.product.'tensorflow-estimator'.'tensorflow-estimator'
+  python spec.product.'tensorflow-ranking-mp'.'tensorflow-ranking-mp'
+  python spec.external.fastavro
+  python spec.external.decorator
+  python spec.external.detext
+  python spec.external.smartArg
+  python spec.external.scipy
+  python spec.external.sklearn
+  python spec.external.psutil
+}

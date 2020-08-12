@@ -91,17 +91,16 @@ class Driver(abc.ABC):
         :return:    None
         """
         # Log distributed execution context, which includes cluster configuration
-        logger.info("Commencing {} training".format(self.effect_name))
-        logger.info("Execution context : {}".format(self.execution_context))
+        logger.info(f"Commencing {self.effect_name} training")
+        logger.info(f"Execution context : {self.execution_context}")
 
         # Create partition_index_list
         partition_index_list = self._get_partition_list()
-        logger.info("This worker on work on the following list of partitions : {}".format(partition_index_list))
+        logger.info(f"This worker on work on the following list of partitions : {partition_index_list}")
 
         # Sequentially train model on partitions
         for partition_index in partition_index_list:
-            logger.info(
-                "Commencing {} training for partition index : {}".format(self.effect_name, partition_index))
+            logger.info(f"Commencing {self.effect_name} training for partition index : {partition_index}")
 
             # Resolve partitioned data path from raw path params from user
             checkpoint_path = self._anchor_directory(
@@ -124,7 +123,7 @@ class Driver(abc.ABC):
             # Chief should export model
             is_chief = self.execution_context[constants.IS_CHIEF]
             if export_model and is_chief:
-                logger.info("Exporting model to directory : {}".format(output_model_dir))
+                logger.info(f"Exporting model to directory : {output_model_dir}")
                 self.model.export(output_model_dir=output_model_dir)
 
     def run_inference(self, schema_params):
@@ -139,7 +138,7 @@ class Driver(abc.ABC):
         logger.info("Execution context : {}".format(self.execution_context))
 
         logger.info('Creating dirs recursively at: {0}'.format(
-            self.base_training_params[constants.VALIDATION_OUTPUT_DIR]))
+            self.base_training_params.validation_output_dir))
 
         if self.execution_context[constants.TASK_TYPE] != constants.TASK_TYPE_WORKER:
             logger.info("Only workers should run inference. Exiting")
@@ -157,7 +156,7 @@ class Driver(abc.ABC):
                 # Resolve partitioned data path from raw path params from user
                 training_data_path = self._anchor_directory(self.model.training_data_path, partition_index)
                 inference_output_dir = os.path.join(
-                    self._anchor_directory(self.base_training_params[constants.TRAINING_OUTPUT_DIR], partition_index))
+                    self._anchor_directory(self.base_training_params.training_output_dir, partition_index))
 
                 # Run inference
                 self.model.predict(output_dir=inference_output_dir,
@@ -170,7 +169,7 @@ class Driver(abc.ABC):
                 # Resolve partitioned data path from raw path params from user
                 validation_data_path = self._anchor_directory(self.model.validation_data_path, partition_index)
                 inference_output_dir = os.path.join(
-                    self._anchor_directory(self.base_training_params[constants.VALIDATION_OUTPUT_DIR], partition_index))
+                    self._anchor_directory(self.base_training_params.validation_output_dir, partition_index))
 
                 # Run inference
                 self.model.predict(output_dir=inference_output_dir,
@@ -195,15 +194,15 @@ class Driver(abc.ABC):
 
     def _prepare_training_context(self, partition_index):
         # If training Scipy-based model for Random effect, add output files to training context
-        if self.base_training_params[constants.STAGE] == constants.RANDOM_EFFECT:
+        if self.base_training_params.stage == constants.RANDOM_EFFECT:
             active_training_inference_output_file = os.path.join(
-                self._anchor_directory(self.base_training_params[constants.TRAINING_OUTPUT_DIR], partition_index),
+                self._anchor_directory(self.base_training_params.training_output_dir, partition_index),
                 "part-{0:05d}-active.avro".format(self.execution_context[constants.TASK_INDEX]))
             passive_training_inference_output_file = os.path.join(
-                self._anchor_directory(self.base_training_params[constants.TRAINING_OUTPUT_DIR], partition_index),
+                self._anchor_directory(self.base_training_params.training_output_dir, partition_index),
                 "part-{0:05d}-passive.avro".format(self.execution_context[constants.TASK_INDEX]))
             validation_inference_output_file = os.path.join(
-                self._anchor_directory(self.base_training_params[constants.VALIDATION_OUTPUT_DIR], partition_index),
+                self._anchor_directory(self.base_training_params.validation_output_dir, partition_index),
                 "part-{0:05d}.avro".format(self.execution_context[constants.TASK_INDEX]))
             training_context = dict(self.execution_context)
 

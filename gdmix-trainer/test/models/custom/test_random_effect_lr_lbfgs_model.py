@@ -20,9 +20,9 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
 
     def get_raw_params(self, partition_entity='memberId', num_of_lbfgs_iterations=None):
         base_training_params = setup_fake_base_training_params(training_stage=constants.RANDOM_EFFECT)
-        base_training_params[constants.BATCH_SIZE] = 2
+        base_training_params.batch_size = 2
         # flatten the params
-        raw_params = [x for key in base_training_params for x in ['--' + key, str(base_training_params[key])]]
+        raw_params = base_training_params.__to_argv__()
         model_params = setup_fake_raw_model_params(training_stage=constants.RANDOM_EFFECT)
         raw_params.extend(model_params)
         raw_params.extend(['--' + constants.MODEL_IDS_DIR, test_dataset_path])

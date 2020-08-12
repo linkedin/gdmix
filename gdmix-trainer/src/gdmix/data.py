@@ -1,4 +1,5 @@
 # photon-ml output model format
+
 BAYESIAN_LINEAR_MODEL_SCHEMA = """
 {
   "type" : "record",

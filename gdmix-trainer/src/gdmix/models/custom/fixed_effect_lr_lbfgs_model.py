@@ -1,24 +1,26 @@
-import argparse
-import numpy as np
-import os
-import psutil
-import time
 import logging
-import tensorflow.compat.v1 as tf1
+import os
+import time
+from dataclasses import dataclass
 
+import numpy as np
+import psutil
+import tensorflow.compat.v1 as tf1
 from fastavro import parse_schema
-from gdmix.io.dataset_metadata import DatasetMetadata
-from gdmix.io.input_data_pipeline import per_record_input_fn
-from gdmix.models.api import Model
-from gdmix.models.custom.base_lr_argparser import parser as lr_parser
-from gdmix.models.photon_ml_writer import PhotonMLWriter
-from gdmix.util import constants
-from gdmix.util.distribution_utils import shard_input_files
-from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, str2bool, export_scipy_lr_model_to_avro,\
-    load_scipy_models_from_avro, copy_files
+from gdmix.params import SchemaParams, Params
+from smart_arg import arg_suite
 from scipy.optimize import fmin_l_bfgs_b
 from tensorflow.python.ops import collective_ops
 
+from gdmix.io.dataset_metadata import DatasetMetadata
+from gdmix.io.input_data_pipeline import per_record_input_fn
+from gdmix.models.api import Model
+from gdmix.models.custom.base_lr_params import LRParams
+from gdmix.models.photon_ml_writer import PhotonMLWriter
+from gdmix.util import constants
+from gdmix.util.distribution_utils import shard_input_files
+from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, export_scipy_lr_model_to_avro, \
+    load_scipy_models_from_avro, copy_files
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -31,37 +33,43 @@ def logging(msg):
     logger.info("[FELR] {}".format(msg))
 
 
+@arg_suite
+@dataclass
+class FixedLRParams(LRParams):
+    """Logistic regression model with scipy LBFGS + TF."""
+    copy_to_local: bool = True  # Copying data to local or not
+
+
 class FixedEffectLRModelLBFGS(Model):
     """
-    Logstic regression model with scipy LBFGS + TF.
+    Logistic regression model with scipy LBFGS + TF.
     """
     # TF all reduce op group identifier
     TF_ALL_REDUCE_GROUP_KEY = 0
 
-    def __init__(self, raw_model_params, base_training_params):
-        self.model_params = self._parse_parameters(raw_model_params)
-        self.training_output_dir = base_training_params[constants.TRAINING_OUTPUT_DIR]
-        self.validation_output_dir = base_training_params[constants.VALIDATION_OUTPUT_DIR]
+    def __init__(self, raw_model_params, base_training_params: Params):
+        self.model_params: FixedLRParams = self._parse_parameters(raw_model_params)
+        self.training_output_dir = base_training_params.training_output_dir
+        self.validation_output_dir = base_training_params.validation_output_dir
         self.local_training_input_dir = "local_training_input_dir"
-        self.model_params[constants.FEATURE_BAGS] = list(self.model_params[constants.FEATURE_BAGS].split(','))
         self.lbfgs_iteration = 0
-        self.training_data_path = self.model_params[constants.TRAIN_DATA_PATH]
-        self.validation_data_path = self.model_params[constants.VALIDATION_DATA_PATH]
-        self.metadata_file = self.model_params[constants.METADATA_FILE]
-        self.feature_file = self.model_params[constants.FEATURE_FILE]
-        self.checkpoint_path = self.model_params[constants.MODEL_OUTPUT_DIR]
-        self.data_format = self.model_params[constants.DATA_FORMAT]
+        self.training_data_path = self.model_params.train_data_path
+        self.validation_data_path = self.model_params.validation_data_path
+        self.metadata_file = self.model_params.metadata_file
+        self.feature_file = self.model_params.feature_file
+        self.checkpoint_path = self.model_params.model_output_dir
+        self.data_format = self.model_params.data_format
 
-        self.feature_bag_name = self.model_params[constants.FEATURE_BAGS][0]
-        self.offset_column_name = self.model_params[constants.OFFSET]
+        self.feature_bag_name = self.model_params.feature_bags[0]
+        self.offset_column_name = self.model_params.offset
 
-        self.batch_size = int(self.model_params[constants.BATCH_SIZE])
-        self.copy_to_local = self.model_params[constants.COPY_TO_LOCAL]
-        self.num_correction_pairs = self.model_params[constants.NUM_OF_LBFGS_CURVATURE_PAIRS]
-        self.factor = self.model_params[constants.LBFGS_TOLERANCE] / np.finfo(float).eps
-        self.is_regularize_bias = self.model_params[constants.REGULARIZE_BIAS]
-        self.max_iteration = self.model_params[constants.NUM_OF_LBFGS_ITERATIONS]
-        self.l2_reg_weight = self.model_params[constants.L2_REG_WEIGHT]
+        self.batch_size = int(self.model_params.batch_size)
+        self.copy_to_local = self.model_params.copy_to_local
+        self.num_correction_pairs = self.model_params.num_of_lbfgs_curvature_pairs
+        self.factor = self.model_params.lbfgs_tolerance / np.finfo(float).eps
+        self.is_regularize_bias = self.model_params.regularize_bias
+        self.max_iteration = self.model_params.num_of_lbfgs_iterations
+        self.l2_reg_weight = self.model_params.l2_reg_weight
 
         self.metadata = self._load_metadata()
         self.tensor_metadata = DatasetMetadata(self.metadata_file)
@@ -72,7 +80,7 @@ class FixedEffectLRModelLBFGS(Model):
         self.server = None
 
         # validate parameters:
-        assert len(self.model_params[constants.FEATURE_BAGS]) == 1, "Only support one feature bag"
+        assert len(self.model_params.feature_bags) == 1, "Only support one feature bag"
         assert self.global_num_samples > 0,\
             "Number of training samples must be set in the metadata and be positive"
         assert self.feature_file and tf1.io.gfile.exists(self.feature_file), \
@@ -122,7 +130,7 @@ class FixedEffectLRModelLBFGS(Model):
                                             job_name='worker',
                                             task_index=task_index)
 
-    def _inference_model_fn(self, diter, x_placeholder, num_iterations, schema_params):
+    def _inference_model_fn(self, diter, x_placeholder, num_iterations, schema_params: SchemaParams):
         """ Implement the forward pass to get logit. """
         sample_id_list = tf1.constant([], tf1.int64)
         label_list = tf1.constant([], tf1.int64)
@@ -131,9 +139,9 @@ class FixedEffectLRModelLBFGS(Model):
         prediction_score_per_coordinate_list = tf1.constant([], tf1.float64)
 
         feature_bag_name = self.feature_bag_name
-        sample_id_column_name = schema_params[constants.SAMPLE_ID]
-        label_column_name = schema_params[constants.LABEL]
-        sample_weight_column_name = schema_params[constants.SAMPLE_WEIGHT]
+        sample_id_column_name = schema_params.sample_id
+        label_column_name = schema_params.label
+        sample_weight_column_name = schema_params.sample_weight
         offset_column_name = self.offset_column_name
         has_offset = self._has_feature(offset_column_name)
         has_label = self._has_label(label_column_name)
@@ -180,14 +188,14 @@ class FixedEffectLRModelLBFGS(Model):
         return sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
 
     def _train_model_fn(self, diter, x_placeholder, num_workers, num_features, global_num_samples, num_iterations,
-                        schema_params):
+                        schema_params: SchemaParams):
         """ The training objective function and the gradients. """
         value = tf1.constant(0.0, tf1.float64)
         # Add bias
         gradients = tf1.constant(np.zeros(num_features + 1))
         feature_bag_name = self.feature_bag_name
-        label_column_name = schema_params[constants.LABEL]
-        sample_weight_column_name = schema_params[constants.SAMPLE_WEIGHT]
+        label_column_name = schema_params.label
+        sample_weight_column_name = schema_params.sample_weight
         offset_column_name = self.offset_column_name
         is_regularize_bias = self.is_regularize_bias
         has_weight = self._has_feature(sample_weight_column_name)
@@ -253,27 +261,27 @@ class FixedEffectLRModelLBFGS(Model):
         return value, gradients
 
     def _write_inference_result(self, sample_ids, labels, weights, prediction_score,
-                                prediction_score_per_coordinate, task_index, schema_params, output_dir):
+                                prediction_score_per_coordinate, task_index, schema_params: SchemaParams, output_dir):
         """ Write inference results. """
         photon_ml_writer = PhotonMLWriter(schema_params=schema_params)
         output_avro_schema = photon_ml_writer.get_inference_output_avro_schema(
             self.metadata,
-            self._has_label(schema_params[constants.LABEL]),
+            self._has_label(schema_params.label),
             True,
-            has_weight=self._has_feature(schema_params[constants.SAMPLE_WEIGHT]))
+            has_weight=self._has_feature(schema_params.sample_weight))
         parsed_schema = parse_schema(output_avro_schema)
 
         records = []
         for rec_id, rec_label, rec_weight, rec_prediction_score, rec_prediction_score_per_coordinate in \
                 zip(sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate):
-            rec = {schema_params[constants.SAMPLE_ID]: int(rec_id),
-                   schema_params[constants.PREDICTION_SCORE]: float(rec_prediction_score),
-                   schema_params[constants.PREDICTION_SCORE_PER_COORDINATE]: float(rec_prediction_score_per_coordinate)
+            rec = {schema_params.sample_id: int(rec_id),
+                   schema_params.prediction_score: float(rec_prediction_score),
+                   schema_params.prediction_score_per_coordinate: float(rec_prediction_score_per_coordinate)
                    }
-            if self._has_label(schema_params[constants.LABEL]):
-                rec[schema_params[constants.LABEL]] = int(rec_label)
-            if self._has_feature(schema_params[constants.SAMPLE_WEIGHT]):
-                rec[schema_params[constants.SAMPLE_WEIGHT]] = int(rec_weight)
+            if self._has_label(schema_params.label):
+                rec[schema_params.label] = int(rec_label)
+            if self._has_feature(schema_params.sample_weight):
+                rec[schema_params.sample_weight] = int(rec_weight)
             records.append(rec)
 
         output_file = os.path.join(output_dir, "part-{0:05d}.avro".format(task_index))
@@ -553,13 +561,4 @@ class FixedEffectLRModelLBFGS(Model):
         tf_session.close()
 
     def _parse_parameters(self, raw_model_parameters):
-        parser = argparse.ArgumentParser(parents=[lr_parser])
-
-        # Training parameters
-        parser.add_argument("--" + constants.COPY_TO_LOCAL, type=str2bool, nargs='?', const=True, required=False, default=True,
-                            help="Boolean for copying data to local or not.")
-        model_params, other_args = parser.parse_known_args(raw_model_parameters)
-        model_params_dict = vars(model_params)
-        """validate the parameters"""
-        assert int(model_params_dict[constants.BATCH_SIZE]) > 0, "Batch size must be positive number"
-        return model_params_dict
+        return FixedLRParams.__from_argv__(raw_model_parameters, error_on_unknown=False)

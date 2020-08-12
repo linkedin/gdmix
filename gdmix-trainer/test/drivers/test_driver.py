@@ -117,7 +117,7 @@ class TestDriver(tf.test.TestCase):
         self.random_effect_driver.run_training(schema_params=self.schema_params, export_model=False, output_model_dir=None)
 
         # Read dummy partition index list. Parse the partitions random effect worker should work on
-        with tf.io.gfile.GFile(self.base_training_params[constants.PARTITION_LIST_FILE]) as f:
+        with tf.io.gfile.GFile(self.base_training_params.partition_list_file) as f:
             line = f.readline()
         all_partitions = [int(l) for l in line.split(',')]
         partition_index_list = [all_partitions[i] for i in
@@ -148,19 +148,19 @@ class TestDriver(tf.test.TestCase):
         :param test_create_dataset: mock create_dataset function
         :return: None
         """
-        self.base_training_params[constants.ACTION] = constants.ACTION_INFERENCE
+        self.base_training_params.action = constants.ACTION_INFERENCE
         # Run inference
         self.fixed_effect_driver.run_inference(schema_params=self.schema_params)
         inference_calls = []
         inference_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params[constants.TRAINING_OUTPUT_DIR]),
+                                             self.base_training_params.training_output_dir),
                                          input_data_path=self.mock_model.training_data_path,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=self.mock_model.checkpoint_path,
                                          execution_context=self.fixed_effect_driver.execution_context,
                                          schema_params=self.schema_params))
         inference_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params[constants.VALIDATION_OUTPUT_DIR]),
+                                             self.base_training_params.validation_output_dir),
                                          input_data_path=self.mock_model.validation_data_path,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=self.mock_model.checkpoint_path,
@@ -175,12 +175,12 @@ class TestDriver(tf.test.TestCase):
         :param test_create_dataset: mock create_dataset function
         :return: None
         """
-        self.base_training_params[constants.ACTION] = constants.ACTION_INFERENCE
+        self.base_training_params.action = constants.ACTION_INFERENCE
         # Run inference
         self.random_effect_driver.run_inference(schema_params=self.schema_params)
 
         # Read dummy partition index list. Parse the partitions random effect worker should work on
-        with tf.io.gfile.GFile(self.base_training_params[constants.PARTITION_LIST_FILE]) as f:
+        with tf.io.gfile.GFile(self.base_training_params.partition_list_file) as f:
             line = f.readline()
         all_partitions = [int(l) for l in line.split(',')]
         partition_index_list = [all_partitions[i] for i in
@@ -197,7 +197,7 @@ class TestDriver(tf.test.TestCase):
             validation_data_path = self.random_effect_driver._anchor_directory(
                 self.mock_model.validation_data_path, partition_index)
             infer_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params[constants.TRAINING_OUTPUT_DIR],
+                                             self.base_training_params.training_output_dir,
                                              RandomEffectDriver._RANDOM_EFFECT_PARTITION_DIR_PREFIX + str(partition_index)),
                                          input_data_path=training_data_path,
                                          metadata_file=self.mock_model.metadata_file,
@@ -205,7 +205,7 @@ class TestDriver(tf.test.TestCase):
                                          execution_context=self.random_effect_driver.execution_context,
                                          schema_params=self.schema_params))
             infer_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params[constants.VALIDATION_OUTPUT_DIR],
+                                             self.base_training_params.validation_output_dir,
                                              RandomEffectDriver._RANDOM_EFFECT_PARTITION_DIR_PREFIX + str(partition_index)),
                                          input_data_path=validation_data_path,
                                          metadata_file=self.mock_model.metadata_file,

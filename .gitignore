@@ -32,7 +32,13 @@
 /dist/
 /ligradle/
 TEST-*.xml
-__pycache__/
-/*/build
 .DS_Store
+tensorflow-plugin-generated/
+photon-plugin-generated
+venv/
+.vscode/
+.project
+.settings/
+__pycache__
+.cache
 

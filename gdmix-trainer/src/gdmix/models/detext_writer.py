@@ -2,7 +2,6 @@ import fastavro
 import logging
 import tensorflow as tf
 
-from gdmix.util import constants
 from gdmix.util.io_utils import try_write_avro_blocks
 
 logger = logging.getLogger(__name__)
@@ -22,10 +21,10 @@ class DetextWriter:
             'name': 'validation_result',
             'type': 'record',
             'fields': [
-                {'name': self.schema_params[constants.SAMPLE_ID], 'type': 'long'},
-                {'name': self.schema_params[constants.SAMPLE_WEIGHT], 'type': 'float'},
-                {'name': self.schema_params[constants.LABEL], 'type': 'int'},
-                {'name': self.schema_params[constants.PREDICTION_SCORE], 'type': 'float'}
+                {'name': self.schema_params.sample_id, 'type': 'long'},
+                {'name': self.schema_params.sample_weight, 'type': 'float'},
+                {'name': self.schema_params.label, 'type': 'int'},
+                {'name': self.schema_params.prediction_score, 'type': 'float'}
             ],
         }
         return schema
@@ -39,10 +38,10 @@ class DetextWriter:
             # we only support pointwise training for detext
             # label is list of one scalar
             # score is also scalar
-            record = {self.schema_params[constants.PREDICTION_SCORE]: predicts[i][0],
-                      self.schema_params[constants.SAMPLE_ID]: ids[i],
-                      self.schema_params[constants.LABEL]: int(labels[i][0]),
-                      self.schema_params[constants.SAMPLE_WEIGHT]: weights[i]}
+            record = {self.schema_params.prediction_score: predicts[i][0],
+                      self.schema_params.sample_id: ids[i],
+                      self.schema_params.label: int(labels[i][0]),
+                      self.schema_params.sample_weight: weights[i]}
             records.append(record)
         return batch_size
 

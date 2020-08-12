@@ -6,6 +6,8 @@ import detext.train.train as detext_train
 import detext.utils.misc_utils as detext_utils
 from detext.train.data_fn import input_fn
 from detext.utils import vocab_utils
+from detext.run_detext import DetextArg
+from tensorflow.contrib.training import HParams
 
 from gdmix.models.api import Model
 from gdmix.models.detext_writer import DetextWriter
@@ -39,7 +41,7 @@ class FixedEffectDetextEstimatorModel(Model):
               execution_context,
               schema_params):
         # Delegate to super class
-        detext_driver.main(None)
+        detext_driver.run_detext(self.model_params)
 
     def predict(self,
                 output_dir,
@@ -78,7 +80,7 @@ class FixedEffectDetextEstimatorModel(Model):
                                                  self.model_params.filter_window_sizes)
                                              if self.model_params.ftr_ext == 'cnn' else 0)
 
-        self.estimator_based_model = detext_train.get_estimator(self.model_params,
+        self.estimator_based_model = detext_train.get_estimator(detext_utils.extend_hparams(HParams(**self.model_params._asdict())),
                                                                 strategy=None,  # local mode
                                                                 best_checkpoint=self.best_checkpoint)
         output = self.estimator_based_model.predict(inference_dataset, yield_single_examples=False)
@@ -104,4 +106,4 @@ class FixedEffectDetextEstimatorModel(Model):
         logger.info("Detext has built-in export operations during training")
 
     def _parse_parameters(self, raw_model_parameters):
-        return detext_utils.extend_hparams(detext_driver.get_hparams())
+        return DetextArg.__from_argv__(raw_model_parameters, error_on_unknown=False)

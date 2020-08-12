@@ -183,8 +183,8 @@ def _get_params(paths, max_iters):
     :return: Three different parameter sets.
     """
     base_training_params = setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT)
-    base_training_params[constants.TRAINING_OUTPUT_DIR] = paths.training_score_path
-    base_training_params[constants.VALIDATION_OUTPUT_DIR] = paths.validation_score_path
+    base_training_params.training_output_dir = paths.training_score_path
+    base_training_params.validation_output_dir = paths.validation_score_path
 
     schema_params = setup_fake_schema_params()
 

@@ -1,0 +1,159 @@
+{
+  "name": "gdmix",
+  "group": "com.linkedin.@spec.name@",
+  "version": "0.8.*",
+  "scmUrl": "ssh://git.corp.linkedin.com:29418/multiproducts/gdmix.git",
+  "comment": "",
+  "description": "Generalized Deep Mixed Models",
+  "build": {
+    "commands": {
+      "build": "ligradle -Prelease=true -PallArtifacts build",
+      "precommit": "ligradle flake8",
+      "post-publish": "mtv tag-metric-lkg && bash bumpSksDeps.sh",
+      "snapshot": "ligradle -Psnapshot=true build",
+      "test": "echo 'testing done by build command'"
+    },
+    "toolchains": {
+      "gradle": {
+        "plugins": {
+          "gradle-scala": {
+            "libraries": [
+              "plugins"
+            ],
+            "version": "0.*"
+          },
+          "ligradle-hadoop": {
+            "libraries": [
+              "ligradle-hadoop"
+            ],
+            "version": "3.*"
+          },
+          "ligradle-jvm": {
+            "libraries": [
+              "product-plugins"
+            ],
+            "version": "4.*"
+          },
+          "gradleAvroPlugin": "com.commercehub.gradle.plugin:gradle-avro-plugin:0.8.1",
+          "gradleScalaTest": "gradle.plugin.com.github.maiflai:gradle-scalatest:0.24",
+          "shadow": "com.github.jengelman.gradle.plugins:shadow:2.0.4",
+          "ligradle-python": {
+            "libraries": [
+              "ligradle-python"
+            ],
+            "version": "1.*"
+          }
+        },
+        "version": "5.6.4"
+      }
+    },
+    "type": "gradle",
+    "versions": {
+      "java": "1.8.0_121",
+      "scala": "2.11.8"
+    }
+  },
+  "runtime": {},
+  "review": {},
+  "topology": {
+    "applications": {
+      "gdmix": {
+        "kind": "generic",
+        "payloads": [
+          {
+            "name": "gdmix"
+          }
+        ],
+        "name": "gdmix",
+        "instance": "i001",
+        "meta": {
+          "features": [],
+          "force_kill_delay": 5
+        }
+      }
+    }
+  },
+  "archive": {
+    "artifacts": {},
+    "databases": {},
+    "images": {},
+    "repo_name": "SNA"
+  },
+  "dependencyResolution": {},
+  "external": {
+    "avroMapred": "org.apache.avro:avro-mapred:1.7.7:hadoop2",
+    "commonsCli": "commons-cli:commons-cli:1.2",
+    "commonsIo": "commons-io:commons-io:2.6",
+    "decorator": "pypi:decorator:4.4.2",
+    "smartArg": "pypi:smart-arg:0.1.1",
+    "detext": "pypi:detext-nodep:2.0.9",
+    "fastavro": "pypi:fastavro:0.21.22",
+    "jacksonDataBindFasterXML": "com.fasterxml.jackson.core:jackson-databind:2.6.7.1",
+    "jacksonModuleParanamer": "com.fasterxml.jackson.module:jackson-module-paranamer:2.6.7",
+    "json4sCore_2_11": "org.json4s:json4s-core_2.11:3.2.11",
+    "json4sExt_2_11": "org.json4s:json4s-ext_2.11:3.2.11",
+    "json4sJackson_2_11": "org.json4s:json4s-jackson_2.11:3.2.11",
+    "junit": "junit:junit:4.13",
+    "mypy": "pypi:mypy:0.761",
+    "pegdown": "org.pegdown:pegdown:1.4.2",
+    "psutil": "pypi:psutil:5.7.0",
+    "scalaLibrary_2.11": "org.scala-lang:scala-library:2.11.12",
+    "scalaTest_2.11": "org.scalatest:scalatest_2.11:3.0.3",
+    "scalaXml_2_11": "org.scala-lang.modules:scala-xml_2.11:1.2.0",
+    "scipy": "pypi:scipy:1.3.2",
+    "sklearn": "pypi:scikit-learn:0.21.2",
+    "sparkTfrecord_2_11": "com.linkedin.sparktfrecord:spark-tfrecord_2.11:0.1.1",
+    "testng": "org.testng:testng:6.10"
+  },
+  "product": {
+    "hadoop": {
+      "libraries": [
+        "hadoop-mapreduce-client-core"
+      ],
+      "version": "2.7.*"
+    },
+    "li-tensorflow": {
+      "libraries": [
+        "tensorflow-python"
+      ],
+      "version": "1.14.*"
+    },
+    "spark-common": {
+      "libraries": [
+        "spark-common_2.11"
+      ],
+      "version": "2.*"
+    },
+    "spark-mp": {
+      "group": "com.linkedin.spark",
+      "libraries": [
+        "spark-core_2.11",
+        "spark-sql_2.11",
+        "spark-mllib_2.11"
+      ],
+      "version": "2.3.0.*"
+    },
+    "tensorboard-mp": {
+      "libraries": [
+        "tensorboard-mp"
+      ],
+      "version": "1.14.*"
+    },
+    "tensorflow-ranking-mp": {
+      "libraries": [
+        "tensorflow-ranking-mp"
+      ],
+      "version": "0.1.1.4"
+    },
+    "tensorflow-estimator": {
+      "libraries": [
+        "tensorflow-estimator"
+      ],
+      "version": "1.14.*"
+    }
+  },
+  "trunkDev": {
+    "autoRevert": false
+  },
+  "extSCM": {}
+}
