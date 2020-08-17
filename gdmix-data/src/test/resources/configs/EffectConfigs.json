@@ -1,0 +1,58 @@
+[
+  {
+    "isRandomEffect": true,
+    "coordinateName": "per-member",
+    "perEntityName": "memberId",
+    "labels":["response"],
+    "columnConfigList": [
+      {
+        "name": "weight",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": false,
+        "isOutputSparse": false,
+        "sharedFeatureSpace": false
+      },
+      {
+        "name": "response",
+        "dtype": "int",
+        "shape": []
+      },
+      {
+        "name": "memberId",
+        "dtype": "string",
+        "shape": []
+      },
+      {
+        "name": "per_member",
+        "dtype": "float",
+        "shape": [2, 3],
+        "isInputNTV": false,
+        "isOutputSparse": false
+      }
+    ]
+  },
+  {
+    "isRandomEffect": false,
+    "coordinateName": "fixed-effect",
+    "perEntityName": null,
+    "labels":["response", "label"],
+    "columnConfigList": [
+      {
+        "name": "response",
+        "dtype": "int",
+        "shape": []
+      },
+      {
+        "name": "label",
+        "dtype": "float",
+        "shape": []
+      },
+      {
+        "name": "global",
+        "dtype": "float",
+        "shape": [12]
+      }
+    ]
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "features": [
+    {
+      "name": "weight",
+      "dtype": "float",
+      "shape": [],
+      "isSparse": false
+    },
+    {
+      "name": "weight",
+      "dtype": "int",
+      "shape": [],
+      "isSparse": false
+    },
+    {
+      "name": "response",
+      "dtype": "float",
+      "shape": [],
+      "isSparse": false
+    }
+  ],
+  "labels": [
+    {
+      "name": "response",
+      "dtype": "int",
+      "shape": [],
+      "isSparse": false
+    }
+  ]
+}

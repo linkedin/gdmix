@@ -1,0 +1,90 @@
+[
+  {
+    "isRandomEffect": false,
+    "coordinateName": "fixed-effect",
+    "perEntityName": null,
+    "labels":["response"],
+    "columnConfigList": [
+      {
+        "name": "response",
+        "dtype": "float",
+        "shape": []
+      },
+      {
+        "name": "global",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": true,
+        "isOutputSparse": true,
+        "sharedFeatureSpace": true
+      },
+      {
+        "name": "uid",
+        "dtype": "long",
+        "shape": []
+      }
+    ]
+  },
+  {
+    "isRandomEffect": true,
+    "coordinateName": "per-member",
+    "perEntityName": "memberId",
+    "labels":["response"],
+    "columnConfigList": [
+      {
+        "name": "memberId",
+        "dtype": "long",
+        "shape": []
+      },
+      {
+        "name": "response",
+        "dtype": "float",
+        "shape": []
+      },
+      {
+        "name": "perMember",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": true,
+        "isOutputSparse": true,
+        "sharedFeatureSpace": true
+      },
+      {
+        "name": "uid",
+        "dtype": "long",
+        "shape": []
+      }
+    ]
+  },
+  {
+    "isRandomEffect": true,
+    "coordinateName": "per-item",
+    "perEntityName": "itemId",
+    "labels":["response"],
+    "columnConfigList": [
+      {
+        "name": "itemId",
+        "dtype": "long",
+        "shape": []
+      },
+      {
+        "name": "response",
+        "dtype": "float",
+        "shape": []
+      },
+      {
+        "name": "perItem",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": true,
+        "isOutputSparse": false,
+        "sharedFeatureSpace": false
+      },
+      {
+        "name": "uid",
+        "dtype": "long",
+        "shape": []
+      }
+    ]
+  }
+]

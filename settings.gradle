@@ -1,0 +1,28 @@
+buildscript {
+  repositories {
+    jcenter()
+  }
+  dependencies {
+  }
+}
+
+/* Modules to use */
+def modules = [
+  'gdmix-data',
+  'gdmix-data-all'
+]
+
+include(*modules)
+
+/* Scala projects */
+def scalaProjects = ['gdmix-data', 'gdmix-data-all']
+
+def scalaSuffix = "_2.11"
+
+gradle.ext.scalaSuffix = scalaSuffix
+
+// Make sure the suffix is in sync with the scala version
+scalaProjects.forEach {
+  project(new File(rootProject.projectDir, it)).name += scalaSuffix
+}
+

@@ -1,0 +1,25 @@
+{
+  "numberOfTrainingSamples" : 6,
+  "features" : [ {
+    "name" : "itemId",
+    "dtype" : "long",
+    "shape" : [ ],
+    "isSparse" : false
+  }, {
+    "name" : "perItem",
+    "dtype" : "float",
+    "shape" : [ 6 ],
+    "isSparse" : false
+  }, {
+    "name" : "uid",
+    "dtype" : "long",
+    "shape" : [ ],
+    "isSparse" : false
+  } ],
+  "labels" : [ {
+    "name" : "response",
+    "dtype" : "float",
+    "shape" : [ ],
+    "isSparse" : false
+  } ]
+}

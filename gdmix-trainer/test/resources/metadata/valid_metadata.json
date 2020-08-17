@@ -1,0 +1,25 @@
+{
+  "numberOfTrainingSamples": 1000,
+  "features": [
+    {
+      "name": "weight",
+      "dtype": "float",
+      "shape": [234],
+      "isSparse": true
+    },
+    {
+      "name": "f1",
+      "dtype": "float",
+      "shape": [3],
+      "isSparse": false
+    }
+  ],
+  "labels": [
+    {
+      "name": "response",
+      "dtype": "int",
+      "shape": [],
+      "isSparse": false
+    }
+  ]
+}

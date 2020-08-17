@@ -1,0 +1,16 @@
+from gdmix.util.constants import *
+
+DISTRIBUTED = "distributed"
+FIXED_EFFECT_CONFIG = "fixed_effect_config"
+GDMIX_TFJOB = "gdmix_tfjob"
+GDMIX_SPARKJOB = "gdmix_sparkjob"
+METRIC = "metric"
+MODELS = "models"
+OUTPUT_COLUMN_NAME = "output_column_name"
+RANDOM_EFFECT_CONFIG = "random_effect_config"
+SINGLE_NODE = "single_node"
+TRAIN_SCORES = "train_scores"
+VALIDATION_SCORES = "validation_scores"
+DETEXT_MODEL_OUTPUT_DIR = "out_dir"
+DETEXT_DEV_FILE = "dev_file"
+DETEXT_TRAIN_FILE = "train_file"

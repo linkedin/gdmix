@@ -1,0 +1,83 @@
+[
+  {
+    "isRandomEffect": false,
+    "coordinateName": "fixed-effect",
+    "perEntityName": null,
+    "labels":["response"],
+    "columnConfigList": [
+      {
+        "name": "weight",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": false,
+        "isOutputSparse": false,
+        "sharedFeatureSpace": true
+      },
+      {
+        "name": "response",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": false,
+        "isOutputSparse": false
+      },
+      {
+        "name": "global",
+        "dtype": "float",
+        "shape": [32],
+        "isInputNTV": false,
+        "isOutputSparse": false
+      }
+    ]
+  },
+  {
+    "isRandomEffect": false,
+    "coordinateName": "fixed-effect",
+    "perEntityName": null,
+    "labels":["response"],
+    "columnConfigList": [
+      {
+        "name": "weight",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": false,
+        "isOutputSparse": false,
+        "sharedFeatureSpace": true
+      },
+      {
+        "name": "response",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": false,
+        "isOutputSparse": false
+      },
+      {
+        "name": "fixed-effect",
+        "dtype": "float",
+        "shape": [12],
+        "isInputNTV": false,
+        "isOutputSparse": false
+      }
+    ]
+  },
+  {
+    "isRandomEffect": true,
+    "coordinateName": "per-member",
+    "perEntityName": "memberId",
+    "labels":["response"],
+    "columnConfigList": [
+      {
+        "name": "per-member",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": true,
+        "isOutputSparse": false,
+        "sharedFeatureSpace": true
+      },
+      {
+        "name": "response",
+        "dtype": "float",
+        "shape": []
+      }
+    ]
+  }
+]

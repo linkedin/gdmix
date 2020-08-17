@@ -1,0 +1,21 @@
+package com.linkedin.gdmix.data
+
+import org.testng.Assert.assertEquals
+import org.testng.annotations.Test
+import com.linkedin.gdmix.utils.Constants._
+import com.linkedin.gdmix.utils.JsonUtils
+
+/**
+ * Unit tests for [[BestModelSelector]].
+ */
+class BestModelSelectorTest {
+
+  val hparams = "eyIwIjogWyJmZTpvcHRpbWl6ZXJfdHlwZTpVbmlvblRlbXBsYXRlKHsnY29tLmxpbmtlZGluLmdkbWl4LmNvbmZpZ3MuZXhwZXJpbWVudGFsLm9wdGltaXplci5TR0QnOiB7J2xlYXJuaW5nUmF0ZSc6IDAuMDAxfX0pIiwgInJlOm51bWJlcl9vZl9wYXJ0aXRpb246MTAwIl0sICIxIjogWyJmZTpvcHRpbWl6ZXJfdHlwZTpVbmlvblRlbXBsYXRlKHsnY29tLmxpbmtlZGluLmdkbWl4LmNvbmZpZ3MuZXhwZXJpbWVudGFsLm9wdGltaXplci5TR0QnOiB7J2xlYXJuaW5nUmF0ZSc6IDAuMDAxfX0pIiwgInJlOm51bWJlcl9vZl9wYXJ0aXRpb246MjAwIl0sICIyIjogWyJmZTpvcHRpbWl6ZXJfdHlwZTpVbmlvblRlbXBsYXRlKHsnY29tLmxpbmtlZGluLmdkbWl4LmNvbmZpZ3MuZXhwZXJpbWVudGFsLm9wdGltaXplci5TR0QnOiB7J2xlYXJuaW5nUmF0ZSc6IDAuMDF9fSkiLCAicmU6bnVtYmVyX29mX3BhcnRpdGlvbjoxMDAiXSwgIjMiOiBbImZlOm9wdGltaXplcl90eXBlOlVuaW9uVGVtcGxhdGUoeydjb20ubGlua2VkaW4uZ2RtaXguY29uZmlncy5leHBlcmltZW50YWwub3B0aW1pemVyLlNHRCc6IHsnbGVhcm5pbmdSYXRlJzogMC4wMX19KSIsICJyZTpudW1iZXJfb2ZfcGFydGl0aW9uOjIwMCJdLCAiNCI6IFsiZmU6b3B0aW1pemVyX3R5cGU6VW5pb25UZW1wbGF0ZSh7J2NvbS5saW5rZWRpbi5nZG1peC5jb25maWdzLmV4cGVyaW1lbnRhbC5vcHRpbWl6ZXIuU0dEJzogeydsZWFybmluZ1JhdGUnOiAwLjF9fSkiLCAicmU6bnVtYmVyX29mX3BhcnRpdGlvbjoxMDAiXSwgIjUiOiBbImZlOm9wdGltaXplcl90eXBlOlVuaW9uVGVtcGxhdGUoeydjb20ubGlua2VkaW4uZ2RtaXguY29uZmlncy5leHBlcmltZW50YWwub3B0aW1pemVyLlNHRCc6IHsnbGVhcm5pbmdSYXRlJzogMC4xfX0pIiwgInJlOm51bWJlcl9vZl9wYXJ0aXRpb246MjAwIl19"
+
+  @Test
+  def testDeserialize(): Unit = {
+    val hparamMap = BestModelSelector.deserialize(hparams)
+    assertEquals(hparamMap.size, 6)
+    assertEquals(JsonUtils.toJsonString(hparamMap("0")), "[ \"fe:optimizer_type:UnionTemplate({'com.linkedin.gdmix.configs.experimental.optimizer.SGD': {'learningRate': 0.001}})\", \"re:number_of_partition:100\" ]")
+  }
+}

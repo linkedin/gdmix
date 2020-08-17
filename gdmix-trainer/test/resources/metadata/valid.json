@@ -1,0 +1,76 @@
+{
+  "features": [
+    {
+      "name": "weight",
+      "dtype": "float",
+      "shape": [],
+      "isSparse": false
+    },
+    {
+      "name": "profileImage",
+      "parserKey": "profileImage",
+      "dtype": "bytes",
+      "shape": [],
+      "isSparse": false
+    },
+    {
+      "name": "stringFixedLenSeq",
+      "parserKey": "stringFixedLenSeq[*]",
+      "dtype": "string",
+      "shape": [
+        4
+      ],
+      "isSparse": false,
+      "numUniqueValues": 123,
+      "defaultValue": "xxx"
+    },
+    {
+      "name": "memberJobCrossFeatures",
+      "parserKey": "memberJobCrossFeatures[*].indices",
+      "dtype": "long",
+      "shape": [
+        -1
+      ],
+      "numUniqueValues": 1964,
+      "isSparse": false,
+      "isDocumentFeature": true
+    },
+    {
+      "name": "intSparseSeq",
+      "parserKey": "intSparseSeq[*].id",
+      "dtype": "int",
+      "shape": [
+        -1
+      ],
+      "isSparse": false,
+      "isDocumentFeature": false
+    },
+    {
+      "name": "imageVarLenSeq",
+      "parserKey": "imageVarLenSeq[*]",
+      "dtype": "bytes",
+      "shape": [
+        -1
+      ],
+      "isSparse": false
+    },
+    {
+      "name": "sparseFeature",
+      "parserKey": "sparseFeature",
+      "dtype": "float",
+      "shape": [
+        1001
+      ],
+      "isSparse": true
+    }
+  ],
+  "labels": [
+    {
+      "isSparse": false,
+      "name": "response",
+      "parserKey": "response",
+      "dtype": "int",
+      "shape": []
+    }
+  ]
+}

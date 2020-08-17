@@ -1,0 +1,39 @@
+{
+  "features" : [
+    {
+      "name" : "global",
+      "dtype" : "float",
+      "shape" : [
+        2
+      ],
+      "numUniqueValues" : null,
+      "isSparse" : true
+    },
+    {
+      "name" : "weight",
+      "dtype" : "float",
+      "shape" : [
+      ],
+      "numUniqueValues" : null,
+      "isSparse" : false
+    },
+    {
+      "name" : "uid",
+      "dtype" : "long",
+      "shape" : [
+      ],
+      "numUniqueValues" : 9,
+      "isSparse" : false
+    }
+  ],
+  "labels" : [
+    {
+      "name" : "label",
+      "dtype" : "int",
+      "shape" : [
+      ],
+      "numUniqueValues" : 1,
+      "isSparse" : false
+    }
+  ]
+}

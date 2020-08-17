@@ -1,0 +1,78 @@
+ACTION = "action"
+STAGE = "stage"
+LABEL = "label"
+MODEL_TYPE = "model_type"
+LBFGS = "lbfgs"
+PREDICTION_SCORE = "prediction_score"
+PREDICTION_SCORE_PER_COORDINATE = "prediction_score_per_coordinate"
+OFFSET = "offset"
+SAMPLE_ID = "sample_id"
+SAMPLE_WEIGHT = "sample_weight"
+FEATURE_BAGS = "feature_bags"
+PARTITION_ENTITY = "partition_entity"
+TRAIN_DATA_PATH = "train_data_path"
+VALIDATION_DATA_PATH = "validation_data_path"
+MODEL_OUTPUT_DIR = "model_output_dir"
+DATA_FORMAT = "data_format"
+COPY_TO_LOCAL = "copy_to_local"
+
+FEATURE_FILE = "feature_file"
+
+# Training parameters-related constants
+BATCH_SIZE = "batch_size"
+L2_REG_WEIGHT = "l2_reg_weight"
+MAX_TRAINING_QUEUE_SIZE = "max_training_queue_size"
+TRAINING_QUEUE_TIMEOUT_IN_SECONDS = "training_queue_timeout_in_seconds"
+NUM_OF_CONSUMERS = "num_of_consumers"
+ENABLE_LOCAL_INDEXING = "enable_local_indexing"
+REGULARIZE_BIAS = "regularize_bias"
+NUM_OF_LBFGS_CURVATURE_PAIRS = "num_of_lbfgs_curvature_pairs"
+NUM_OF_LBFGS_ITERATIONS = "num_of_lbfgs_iterations"
+LBFGS_TOLERANCE = "lbfgs_tolerance"
+
+AUC = "auc",
+ACCURACY = "accuracy"
+ACTIVE = "active"
+PASSIVE = "passive"
+
+TRAINING_OUTPUT_DIR = "training_output_dir"
+VALIDATION_OUTPUT_DIR = "validation_output_dir"
+ACTIVE_TRAINING_OUTPUT_FILE = "active_training_output_file"
+PASSIVE_TRAINING_OUTPUT_FILE = "passive_training_output_file"
+TFRECORD_REGEX_PATTERN = "*.tfrecord"
+VALIDATION_OUTPUT_FILE = "validation_output_file"
+PASSIVE_TRAINING_DATA_PATH = "passive_training_data_path"
+RANDOM_EFFECT = "random_effect"
+FIXED_EFFECT = "fixed_effect"
+
+# Constants for random effect raining
+MODEL_IDS_DIR = "model_ids_dir"
+PARTITION_INDEX = "partition_index"
+PARTITION_LIST_FILE = "partition_list_file"
+
+# String constants related to execution context
+IS_CHIEF = "is_chief"
+NUM_SHARDS = "num_shards"
+SHARD_INDEX = "shard_index"
+NUM_EPOCHS = "num_epochs"
+NUM_WORKERS = "num_workers"
+WORKER = "worker"
+CLUSTER_SPEC = "cluster_spec"
+TASK_INDEX = "task_index"
+TASK_TYPE = "task_type"
+TASK_TYPE_CHIEF = "chief"
+TASK_TYPE_WORKER = "worker"
+TF_CONFIG = "TF_CONFIG"
+
+# Dataset constants
+DATASET_MODULE = "dataset_module"
+DATASET_CREATOR = "dataset_creator"
+TFRECORD = "tfrecord"
+INPUT_DIR = "input_dir"
+METADATA_FILE = "metadata_file"
+ACTION_INFERENCE = "inference"
+ACTION_TRAIN = "train"
+
+# Supported models
+LOGISTIC_REGRESSION = "logistic_regression"
+DETEXT = "detext"

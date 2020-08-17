@@ -1,0 +1,35 @@
+name: SparkApplication-launcher-name
+description: SparkApplication launcher name
+inputs:
+- {name: Name,                      type: String,                       description: 'SparkApplication name.'}
+- {name: Namespace,                 type: String,   default: k8s-spark, description: 'SparkApplication namespace.'}
+- {name: Version,                   type: String,   default: v1beta2,   description: 'SparkApplication version.'}
+- {name: Restart Policy,            type: String,   default: Never,    description: 'Defines the policy when the SparkApplication fails.'}
+- {name: Image,            type: String,   default: '',   description: 'spark image'}
+- {name: Main Class,            type: String,   default: '',   description: 'spark job main class'}
+- {name: Arguments,            type: String,   default: '',   description: 'spark job arguments'}
+- {name: Main Application File,  type: String,   default: '',   description: 'spark job main file'}
+- {name: Spark Version,            type: String,   default: '2.4.5-SNAPSHOT',  description: 'spark version'}
+- {name: Driver Spec,                   type: JSON,     default: '{}',      description: 'SparkApplication driver spec.'}
+- {name: Executor Spec,               type: JSON,     default: '{}',      description: 'SparkApplication executor spec.'}
+- {name: SparkApplication Timeout Minutes,     type: Integer,  default: 1440,      description: 'Time in minutes to wait for the spark application to complete.'}
+- {name: Delete Finished SparkApplication,     type: Bool,     default: 'True' ,   description: 'Whether to delete the spark application after it is finished.'}
+implementation:
+  container:
+      image: linkedin/sparkapplication-launcher
+    command: [python, /launcher/launch_sparkapplication.py]
+    args: [
+      --name,                     {inputValue: Name},
+      --namespace,                {inputValue: Namespace},
+      --version,                  {inputValue: Version},
+      --restartPolicy,            {inputValue: Restart Policy},
+      --image,                    {inputValue: Image},
+      --mainClass,                {inputValue: Main Class},
+      --arguments,                {inputValue: Arguments},
+      --mainApplicationFile,      {inputValue: Main Application File},
+      --sparkVersion,             {inputValue: Spark Version},
+      --driverSpec,               {inputValue: Driver Spec},
+      --executorSpec,             {inputValue: Executor Spec},
+      --sparkApplicationTimeoutMinutes,   {inputValue: SparkApplication Timeout Minutes},
+      --deleteAfterDone,          {inputValue: Delete Finished SparkApplication},
+    ]

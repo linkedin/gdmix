@@ -1,0 +1,32 @@
+[
+  {
+    "isRandomEffect": true,
+    "coordinateName": "per-member",
+    "perEntityName": "memberId",
+    "labels":["lable", "response"],
+    "columnConfigList": [
+      {
+        "name": "weight",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": false,
+        "isOutputSparse": false,
+        "sharedFeatureSpace": true
+      },
+      {
+        "name": "response",
+        "dtype": "float",
+        "shape": [],
+        "isInputNTV": false,
+        "isOutputSparse": false
+      },
+      {
+        "name": "per-member",
+        "dtype": "float",
+        "shape": [32],
+        "isInputNTV": false,
+        "isOutputSparse": false
+      }
+    ]
+  }
+]

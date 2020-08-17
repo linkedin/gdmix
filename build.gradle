@@ -1,0 +1,104 @@
+buildscript {
+    repositories {
+        jcenter()
+    }
+}
+
+plugins {
+  id "maven-publish"
+  id "com.jfrog.bintray" version "1.7.3"
+  id 'com.github.johnrengelman.shadow' version '2.0.1'
+}
+
+allprojects {
+  apply plugin: 'eclipse'
+  apply plugin: 'idea'
+  repositories {
+        jcenter()
+    }
+}
+
+// The gradle variables defined here are visible in sub-projects
+ext {
+  sparkVersion = '2.4.6'
+  scalaSuffix = "_2.11"
+}
+
+subprojects {
+  // Put the build dir into the rootProject
+  buildDir = "../build/$name"
+
+  tasks.withType(Jar) {
+    version '0.1.0'
+  }
+
+  plugins.withType(JavaPlugin) {
+    tasks.withType(Test) {
+      useTestNG()
+
+      // Exclude tests (ex. gradle test -Pexclude=SomeTestClass)
+      def excludedTests = project.properties['exclude']
+      if (excludedTests) {
+        excludedTests.replaceAll('\\s', '').split('[,]').each {
+          exclude "**/${it}.class"
+        }
+      }
+
+      afterSuite { desc, result ->
+        if (!desc.parent) {
+          println ":${project.name} -- Executed ${result.testCount} tests: ${result.successfulTestCount} succeeded, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped"
+        }
+      }
+
+      // Forward standard out from child JVMs to the console
+      testLogging {
+        showStackTraces = true
+        showStandardStreams = true
+        showExceptions = true
+        showCauses = true
+        displayGranularity = maxGranularity
+        exceptionFormat = 'full'
+      }
+
+      outputs.upToDateWhen { false }
+
+      systemProperty "log4j.configuration", "file:${project.rootDir}/log4j.properties"
+
+      minHeapSize = "2G"
+      maxHeapSize = "8G"
+    }
+
+    dependencies {
+      testCompile 'org.testng:testng:6.10'
+    }
+
+    sourceCompatibility = 1.8
+  }
+
+  tasks.withType(ScalaCompile) {
+    scalaCompileOptions.additionalParameters = ["-feature", "-deprecation", "-verbose", "-optimize", "-unchecked", "-Yinline-warnings", "-g:vars"]
+
+    configure(scalaCompileOptions.forkOptions) {
+      memoryMaximumSize = '1g'
+    }
+    configurations.zinc.transitive = true
+
+  }
+
+  idea {
+    module {
+      testSourceDirs += file('src/test/scala')
+    }
+  }
+
+  configurations.all {
+    resolutionStrategy {
+      force 'com.fasterxml.jackson.core:jackson-databind:2.6.7'
+    }
+  }
+
+  // This task allows to get the dependencies from all the sub-project from the main directory
+  // (otherwise, you have to change to each sub-project directory to get its dependencies)
+  task allDeps(type: DependencyReportTask) {}
+
+}

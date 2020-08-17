@@ -1,0 +1,27 @@
+apply plugin: 'scala'
+apply plugin: 'com.github.johnrengelman.shadow'
+
+configurations {
+  all*.exclude group: 'org.eclipse.jetty'
+}
+
+dependencies {
+  compile project(":gdmix-data$scalaSuffix")
+}
+
+jar.enabled = false
+
+shadowJar {
+  // Remove the classifier as we want the shadow jar to be the main jar
+  classifier = ''
+  configurations = [project.configurations.runtime]
+
+  mergeServiceFiles()
+
+  relocate 'org.json4s', 'gdmix.shaded.org.json4s'
+
+}
+
+artifacts {
+  archives shadowJar
+}

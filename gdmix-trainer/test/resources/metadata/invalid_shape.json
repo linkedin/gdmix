@@ -1,0 +1,11 @@
+{
+  "features": [
+    {
+      "name": "textFeature",
+      "dtype": "string",
+      "shape": 7,
+      "isSparse": false
+    }
+  ],
+  "labels": [ ]
+}
