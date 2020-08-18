@@ -309,8 +309,8 @@ the overall AUC is also lifted(0.7680 v.s. 0.7599). We can still see significant
 *Please note user might get slight different results due to the random training/validation data partition in [download_process_movieLens_data.py](scripts/download_process_movieLens_data.py)*.
 
 
-## Run GDMix on Kubernetes for distributed training
-GDMix's distributed training is based on [Kubernetes](https://kubernetes.io/docs/home/), and leverages Kubernetes job scheduling services [Kubeflow](https://www.kubeflow.org/docs/started/getting-started/) and [spark-on-k8s-operator](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator) to run TensorFlow and Spark job distributedly on Kubernetes, and uses [Kubeflow Pipeline](https://www.kubeflow.org/docs/pipelines/overview/pipelines-overview/) to orchestrate jobs. Besides that, a centralized storage is needed for storing training data and models. User can use
+## Distributed training on Kubernetes
+Distributed training of GDMix is based on [Kubernetes](https://kubernetes.io/docs/home/). It leverages Kubernetes job scheduling services [Kubeflow](https://www.kubeflow.org/docs/started/getting-started/) and [spark-on-k8s-operator](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator) to run TensorFlow and Spark job distributedly on Kubernetes. It also uses [Kubeflow Pipeline](https://www.kubeflow.org/docs/pipelines/overview/pipelines-overview/) to orchestrate jobs. In this case, a centralized storage is needed for storing training data and models. Users can use
 [Kubernetes-HDFS](https://github.com/apache-spark-on-k8s/kubernetes-HDFS/tree/master/charts) or [NFS](https://www.kubeflow.org/docs/other-guides/kubeflow-on-multinode-cluster/#background-on-kubernetes-storage) as the centralized storage.
 For more information about distributed training, please refer to [gdmix-workflow README](gdmix-workflow/README.md). The figure below shows a snapshot of the GDMix movieLens example from Kubeflow Pipeline UI.
 
