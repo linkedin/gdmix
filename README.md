@@ -61,7 +61,7 @@ pytest
 ```
 
 ## GDMix implementation
-### GDMix implementation overview
+### Implementation overview
 The overall GDMix training flow is shown in Figure 1. The data preparation step is provided by user and the input files should meet the requirements shown in the next section [Input data](#Input-data).
 The fixed effect captures the global trend and the random effects account for the individuality. The complexity of enormous cross-features from a recommender system is overcomed by taking a [parallel blockwise coordinate descent approach](https://www.kdd.org/kdd2016/papers/files/adf0562-zhangA.pdf), in which the fixed effect and random effects can be regarded as “coordinates”, during each optimization step, we optimize one coordinate at a time and keep the rest constant. By iterating over all the coordinates a few times, we arrive at a solution that is close to the solution to the original problem.
 
