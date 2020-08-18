@@ -220,7 +220,7 @@ pip install gdmix-trainer gdmix-workflow
 #### Train logsitic regression models
 A GDMix config [lr-single-node-movieLens.config](gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config) is provided for the demo purpose, download it and start gdmix training with following command:
 ```
-wget https://github.com/linkedin/gdmix/blob/master/gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config
+wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config
 
 python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
 ```
@@ -293,7 +293,7 @@ We added movie title as an additional feature for the `global` model, and the ne
 
 We use the [detext-single-node-movieLens.config](gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config) GDMix config to do the training:
 ```
-wget https://github.com/linkedin/gdmix/blob/master/gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config
+wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config
 
 python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
 ```
