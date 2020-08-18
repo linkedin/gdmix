@@ -163,7 +163,7 @@ GDMix config is a json file that specifies GDMix training related parameters suc
 ## Try out the [movieLens](https://grouplens.org/datasets/movielens/) example
 In this section we will introduce how to train a fixed effect model `global` and two random effect models `per-user` and `per-movie` using GDMix with the [movieLens data](https://grouplens.org/datasets/movielens/). The features for each model are prepared in the script [download_process_movieLens_data.py](scripts/download_process_movieLens_data.py). `per-user` uses feature age, gender and occupation, `per-movie` uses feature genre and release date, and `global` uses all the five features.
 
-### Run GDMix in container
+### Run GDMix in a container
 The easiest way to try the movieLens example is to run it in a pre-built docker container:
 ```
 docker run --name gdmix -it linkedin/gdmix bash
