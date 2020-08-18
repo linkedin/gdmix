@@ -152,20 +152,33 @@ class Driver(abc.ABC):
             logger.info(
                 "Commencing {} inference for partition index : {}".format(self.effect_name, partition_index))
 
-            # Resolve partitioned data path from raw path params from user
-            validation_data_path = self._anchor_directory(self.model.validation_data_path,
-                                                          partition_index)
-            inference_output_dir = os.path.join(
-                self._anchor_directory(self.base_training_params[constants.VALIDATION_OUTPUT_DIR], partition_index))
-
             self.execution_context[constants.PARTITION_INDEX] = partition_index
-            # Run inference
-            self.model.predict(output_dir=inference_output_dir,
-                               input_data_path=validation_data_path,
-                               metadata_file=self.model.metadata_file,
-                               checkpoint_path=self.model.checkpoint_path,
-                               execution_context=self.execution_context,
-                               schema_params=schema_params)
+            if self.model.training_data_path is not None:
+                # Resolve partitioned data path from raw path params from user
+                training_data_path = self._anchor_directory(self.model.training_data_path, partition_index)
+                inference_output_dir = os.path.join(
+                    self._anchor_directory(self.base_training_params[constants.TRAINING_OUTPUT_DIR], partition_index))
+
+                # Run inference
+                self.model.predict(output_dir=inference_output_dir,
+                                   input_data_path=training_data_path,
+                                   metadata_file=self.model.metadata_file,
+                                   checkpoint_path=self.model.checkpoint_path,
+                                   execution_context=self.execution_context,
+                                   schema_params=schema_params)
+            if self.model.validation_data_path is not None:
+                # Resolve partitioned data path from raw path params from user
+                validation_data_path = self._anchor_directory(self.model.validation_data_path, partition_index)
+                inference_output_dir = os.path.join(
+                    self._anchor_directory(self.base_training_params[constants.VALIDATION_OUTPUT_DIR], partition_index))
+
+                # Run inference
+                self.model.predict(output_dir=inference_output_dir,
+                                   input_data_path=validation_data_path,
+                                   metadata_file=self.model.metadata_file,
+                                   checkpoint_path=self.model.checkpoint_path,
+                                   execution_context=self.execution_context,
+                                   schema_params=schema_params)
             logger.info(
                 "Inference for partition index : {} complete".format(partition_index))
 
