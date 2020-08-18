@@ -61,7 +61,7 @@ pytest
 ```
 
 ## GDMix implementation
-### GDMix implementation overview
+### Implementation overview
 The overall GDMix training flow is shown in Figure 1. The data preparation step is provided by user and the input files should meet the requirements shown in the next section [Input data](#Input-data).
 The fixed effect captures the global trend and the random effects account for the individuality. The complexity of enormous cross-features from a recommender system is overcomed by taking a [parallel blockwise coordinate descent approach](https://www.kdd.org/kdd2016/papers/files/adf0562-zhangA.pdf), in which the fixed effect and random effects can be regarded as “coordinates”, during each optimization step, we optimize one coordinate at a time and keep the rest constant. By iterating over all the coordinates a few times, we arrive at a solution that is close to the solution to the original problem.
 
@@ -163,18 +163,18 @@ GDMix config is a json file that specifies GDMix training related parameters suc
 ## Try out the [movieLens](https://grouplens.org/datasets/movielens/) example
 In this section we will introduce how to train a fixed effect model `global` and two random effect models `per-user` and `per-movie` using GDMix with the [movieLens data](https://grouplens.org/datasets/movielens/). The features for each model are prepared in the script [download_process_movieLens_data.py](scripts/download_process_movieLens_data.py). `per-user` uses feature age, gender and occupation, `per-movie` uses feature genre and release date, and `global` uses all the five features.
 
-### Run GDMix in container
+### Run GDMix in a container
 The easiest way to try the movieLens example is to run it in a pre-built docker container:
 ```
 docker run --name gdmix -it linkedin/gdmix bash
 ```
 - Train logistic regression models for the `global`  `per-user` and `per-movie` (see the section [Train logsitic regression models](#Train-logsitic-regression-models) for details):
 ```
-python -m gdmixworkflow.main --config_path=lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
+python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
 ```
 - Train a deep and wide neutal network model for the `global` and two logistic regression models for the `per-user` and `per-movie` (see the section [Train neural network model plus logsitic regression models](#Train-neural-network-model-plus-logsitic-regression-models) for details):
 ```
-python -m gdmixworkflow.main --config_path=detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
+python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
 ```
 
 ### Run GDMix directly
@@ -220,7 +220,7 @@ pip install gdmix-trainer gdmix-workflow
 #### Train logsitic regression models
 A GDMix config [lr-single-node-movieLens.config](gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config) is provided for the demo purpose, download it and start gdmix training with following command:
 ```
-wget https://github.com/linkedin/gdmix/blob/master/gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config
+wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config
 
 python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
 ```
@@ -293,7 +293,7 @@ We added movie title as an additional feature for the `global` model, and the ne
 
 We use the [detext-single-node-movieLens.config](gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config) GDMix config to do the training:
 ```
-wget https://github.com/linkedin/gdmix/blob/master/gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config
+wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config
 
 python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
 ```
@@ -309,8 +309,8 @@ the overall AUC is also lifted(0.7680 v.s. 0.7599). We can still see significant
 *Please note user might get slight different results due to the random training/validation data partition in [download_process_movieLens_data.py](scripts/download_process_movieLens_data.py)*.
 
 
-## Run GDMix on Kubernetes for distributed training
-GDMix's distributed training is based on [Kubernetes](https://kubernetes.io/docs/home/), and leverages Kubernetes job scheduling services [Kubeflow](https://www.kubeflow.org/docs/started/getting-started/) and [spark-on-k8s-operator](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator) to run TensorFlow and Spark job distributedly on Kubernetes, and uses [Kubeflow Pipeline](https://www.kubeflow.org/docs/pipelines/overview/pipelines-overview/) to orchestrate jobs. Besides that, a centralized storage is needed for storing training data and models. User can use
+## Distributed training on Kubernetes
+Distributed training of GDMix is based on [Kubernetes](https://kubernetes.io/docs/home/). It leverages Kubernetes job scheduling services [Kubeflow](https://www.kubeflow.org/docs/started/getting-started/) and [spark-on-k8s-operator](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator) to run TensorFlow and Spark job distributedly on Kubernetes. It also uses [Kubeflow Pipeline](https://www.kubeflow.org/docs/pipelines/overview/pipelines-overview/) to orchestrate jobs. In this case, a centralized storage is needed for storing training data and models. Users can use
 [Kubernetes-HDFS](https://github.com/apache-spark-on-k8s/kubernetes-HDFS/tree/master/charts) or [NFS](https://www.kubeflow.org/docs/other-guides/kubeflow-on-multinode-cluster/#background-on-kubernetes-storage) as the centralized storage.
 For more information about distributed training, please refer to [gdmix-workflow README](gdmix-workflow/README.md). The figure below shows a snapshot of the GDMix movieLens example from Kubeflow Pipeline UI.
 
