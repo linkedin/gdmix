@@ -20,16 +20,14 @@ object OffsetUpdater {
     options.addOption("trainInputScorePath", true, "training input score path")
     options.addOption("trainPerCoordinateScorePath", true, "path to the per-coordinate training score of the previous iteration")
     options.addOption("trainOutputDataPath", true, "output partition data path for training")
-    options.addOption("validInputDataPath", true, "validation input dataset path")
-    options.addOption("validInputScorePath", true, "validation input score path")
-    options.addOption("validPerCoordinateScorePath", true, "path to the per-coordinate validation score of the previous iteration")
-    options.addOption("validOutputDataPath", true, "output partition data path for validation")
+    options.addOption("validationInputDataPath", true, "validation input dataset path")
+    options.addOption("validationInputScorePath", true, "validation input score path")
+    options.addOption("validationPerCoordinateScorePath", true, "path to the per-coordinate validation score of the previous iteration")
+    options.addOption("validationOutputDataPath", true, "output partition data path for validation")
     options.addOption("predictionScore", true, "column name of prediction score")
     options.addOption("predictionScorePerCoordinate", true, "column name of prediction score per-coordinate")
     options.addOption("offset", true, "column name of offset")
     options.addOption("uid", true, "column name of unique id")
-    options.addOption("inputMetadataFile", true, "input metadata file")
-    options.addOption("outputMetadataFile", true, "output metadata file")
     options.addOption("dataFormat", true, "either avro or tfrecord")
 
     // Get the parser.
@@ -41,16 +39,14 @@ object OffsetUpdater {
     val trainInputScorePath = cmd.getOptionValue("trainInputScorePath")
     val trainPerCoordinateScorePath = cmd.getOptionValue("trainPerCoordinateScorePath")
     val trainOutputDataPath = cmd.getOptionValue("trainOutputDataPath")
-    val validInputDataPath = cmd.getOptionValue("validInputDataPath")
-    val validInputScorePath = cmd.getOptionValue("validInputScorePath")
-    val validPerCoordinateScorePath = cmd.getOptionValue("validPerCoordinateScorePath")
-    val validOutputDataPath = cmd.getOptionValue("validOutputDataPath")
+    val validationInputDataPath = cmd.getOptionValue("validationInputDataPath")
+    val validationInputScorePath = cmd.getOptionValue("validationInputScorePath")
+    val validationPerCoordinateScorePath = cmd.getOptionValue("validationPerCoordinateScorePath")
+    val validationOutputDataPath = cmd.getOptionValue("validationOutputDataPath")
     val predictionScore = cmd.getOptionValue("predictionScore", "predictionScore")
     val predictionScorePerCoordinate = cmd.getOptionValue("predictionScorePerCoordinate", "predictionScorePerCoordinate")
     val offset = cmd.getOptionValue("offset", "offset")
     val uid = cmd.getOptionValue("uid", "uid")
-    val inputMetadataFile = cmd.getOptionValue("inputMetadataFile")
-    val outputMetadataFile = cmd.getOptionValue("outputMetadataFile")
     val dataFormat = cmd.getOptionValue("dataFormat", AVRO)
 
     // Sanity check.
@@ -81,32 +77,25 @@ object OffsetUpdater {
     IoUtils.saveDataFrame(trainOutputData, trainOutputDataPath, dataFormat)
 
     // Update offset in validation data.
-    if (validInputDataPath != null
-      && validInputScorePath != null
-      && validPerCoordinateScorePath != null
-      && validOutputDataPath != null) {
-      val validInputData = IoUtils.readDataFrame(spark, validInputDataPath, dataFormat)
+    if (validationInputDataPath != null
+      && validationInputScorePath != null
+      && validationPerCoordinateScorePath != null
+      && validationOutputDataPath != null) {
+      val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath, dataFormat)
       // scores in AVRO format
-      val validInputScore = IoUtils.readDataFrame(spark, validInputScorePath, AVRO)
+      val validationInputScore = IoUtils.readDataFrame(spark, validationInputScorePath, AVRO)
       // scores in AVRO format
-      val validPerCoordinateScore = IoUtils.readDataFrame(spark, validPerCoordinateScorePath, AVRO)
-      val validOutputData = updateOffset(
-        validInputData,
-        validInputScore,
-        Some(validPerCoordinateScore),
+      val validationPerCoordinateScore = IoUtils.readDataFrame(spark, validationPerCoordinateScorePath, AVRO)
+      val validationOutputData = updateOffset(
+        validationInputData,
+        validationInputScore,
+        Some(validationPerCoordinateScore),
         predictionScore,
         predictionScorePerCoordinate,
         offset,
         uid)
-      IoUtils.saveDataFrame(validOutputData, validOutputDataPath, dataFormat)
+      IoUtils.saveDataFrame(validationOutputData, validationOutputDataPath, dataFormat)
     }
-
-    MetadataGenerator.addColumnsToMetadata(
-      trainOutputData.schema,
-      inputMetadataFile,
-      outputMetadataFile,
-      dataFormat)
-
     // Terminate Spark session
     spark.stop()
   }
