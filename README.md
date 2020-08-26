@@ -1,4 +1,5 @@
 # GDMix
+![](figures/logo.png)
 
 ## What is it
 Generalized Deep [Mixed Model](https://en.wikipedia.org/wiki/Mixed_model) (GDMix) is a framework to train non-linear fixed effect and random effect models. This kind of models are widely used in personalization of search and recommender systems. This project is an extension of our early effort on generalized linear models [Photon ML](https://github.com/linkedin/photon-ml). It is implemented in Tensorflow, Scipy and Spark.
