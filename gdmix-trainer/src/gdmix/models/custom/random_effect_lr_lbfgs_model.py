@@ -39,10 +39,14 @@ class RandomEffectLRLBFGSModel(Model):
             self.model_params[constants.FEATURE_BAGS] = list(self.model_params[constants.FEATURE_BAGS].split(','))
         self.checkpoint_path = os.path.join(self.model_params[constants.MODEL_OUTPUT_DIR])
         self.metadata_file = self.model_params[constants.METADATA_FILE]
+        # If TRAIN_DATA_PATH is set, initialize active/passive training data path, else set to None
         if self.model_params[constants.TRAIN_DATA_PATH] is not None:
             self.training_data_path = os.path.join(self.model_params[constants.TRAIN_DATA_PATH], constants.ACTIVE)
             self.passive_training_data_path = os.path.join(self.model_params[constants.TRAIN_DATA_PATH],
                                                            constants.PASSIVE)
+        else:
+            self.training_data_path = None
+            self.passive_training_data_path = None
         self.validation_data_path = self.model_params[constants.VALIDATION_DATA_PATH]
         self.partition_index = None
 
