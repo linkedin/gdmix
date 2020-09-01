@@ -83,8 +83,6 @@ class PhotonMLWriter:
         """
         Run inference on custom LR RE model
 
-        NOTE - currently this implementation only supports datasets with batch size = 1. A fix for supporting
-        larger batch sizes will be added soon
         :param inference_dataset:      Dataset to run inference on
         :param model_coefficients:     Custom LR model coefficients
         :param lr_model:               Custom LR model object
