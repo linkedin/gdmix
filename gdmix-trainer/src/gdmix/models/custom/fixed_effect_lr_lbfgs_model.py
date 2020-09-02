@@ -28,7 +28,7 @@ tf1.disable_eager_execution()
 
 def logging(msg):
     """ logging util. """
-    logger.info("[LBFGS] {}".format(msg))
+    logger.info("[FELR] {}".format(msg))
 
 
 class FixedEffectLRModelLBFGS(Model):
@@ -169,15 +169,15 @@ class FixedEffectLRModelLBFGS(Model):
             logits_with_offsets = logits + tf1.expand_dims(tf1.cast(offsets, tf1.float64), 1)
             prediction_score_list = tf1.concat([prediction_score_list, tf1.reshape(logits_with_offsets, [-1])], axis=0)
 
-            return i, sample_id_list, label_list, weight_list, prediction_score_per_coordinate_list, prediction_score_list
+            return i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
 
-        _, sample_id_list, label_list, weight_list, prediction_score_per_coordinate_list, prediction_score_list \
+        _, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list \
             = tf1.while_loop(cond, body,
                              loop_vars=[i, sample_id_list, label_list, weight_list,
-                                        prediction_score_per_coordinate_list, prediction_score_list],
+                                        prediction_score_list, prediction_score_per_coordinate_list],
                              shape_invariants=[i.get_shape()] + [tf1.TensorShape([None])] * 5)
 
-        return sample_id_list, label_list, weight_list, prediction_score_per_coordinate_list, prediction_score_list
+        return sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
 
     def _train_model_fn(self, diter, x_placeholder, num_workers, num_features, global_num_samples, num_iterations,
                         schema_params):
@@ -248,13 +248,12 @@ class FixedEffectLRModelLBFGS(Model):
         init_dataset_op, value_op, gradients_op = ops
         tf_session.run(init_dataset_op)
         value, gradients = tf_session.run([value_op, gradients_op], feed_dict={x_placeholder: x})
-        logging("Iteration {}: value = {}".format(self.lbfgs_iteration, value))
-        logging("Iteration {}: memory used: {} GB".format(self.lbfgs_iteration, self._check_memory()))
-        logging("Iteration {}: --- {} seconds ---".format(self.lbfgs_iteration, time.time() - start_time))
+        logging(f"Funcall #{self.lbfgs_iteration:4}, total lose = {value}, "
+                f"memory used: {self._check_memory()} GB, took {time.time() - start_time} seconds")
         return value, gradients
 
-    def _write_inference_result(self, sample_ids, labels, weights, scores,
-                                scores_and_offsets, task_index, schema_params, output_dir):
+    def _write_inference_result(self, sample_ids, labels, weights, prediction_score,
+                                prediction_score_per_coordinate, task_index, schema_params, output_dir):
         """ Write inference results. """
         photon_ml_writer = PhotonMLWriter(schema_params=schema_params)
         output_avro_schema = photon_ml_writer.get_inference_output_avro_schema(
@@ -265,11 +264,11 @@ class FixedEffectLRModelLBFGS(Model):
         parsed_schema = parse_schema(output_avro_schema)
 
         records = []
-        for rec_id, rec_label, rec_weight, rec_score, rec_score_and_offset in \
-                zip(sample_ids, labels, weights, scores, scores_and_offsets):
+        for rec_id, rec_label, rec_weight, rec_prediction_score, rec_prediction_score_per_coordinate in \
+                zip(sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate):
             rec = {schema_params[constants.SAMPLE_ID]: int(rec_id),
-                   schema_params[constants.PREDICTION_SCORE]: float(rec_score),
-                   schema_params[constants.PREDICTION_SCORE_PER_COORDINATE]: float(rec_score_and_offset)
+                   schema_params[constants.PREDICTION_SCORE]: float(rec_prediction_score),
+                   schema_params[constants.PREDICTION_SCORE_PER_COORDINATE]: float(rec_prediction_score_per_coordinate)
                    }
             if self._has_label(schema_params[constants.LABEL]):
                 rec[schema_params[constants.LABEL]] = int(rec_label)
@@ -288,12 +287,13 @@ class FixedEffectLRModelLBFGS(Model):
     def _run_inference(self, x, tf_session, x_placeholder, ops, task_index, schema_params, output_dir):
         """ Run inference on training or validation dataset. """
         start_time = time.time()
-        sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op = ops
-        sample_ids, labels, weights, scores, scores_and_offsets = tf_session.run(
-            [sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op],
+        sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op = ops
+        sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate = tf_session.run(
+            [sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op],
             feed_dict={x_placeholder: x})
 
-        self._write_inference_result(sample_ids, labels, weights, scores, scores_and_offsets, task_index,
+        self._write_inference_result(sample_ids, labels, weights, prediction_score,
+                                     prediction_score_per_coordinate, task_index,
                                      schema_params, output_dir)
         logging("Inference --- {} seconds ---".format(time.time()-start_time))
 
@@ -369,20 +369,22 @@ class FixedEffectLRModelLBFGS(Model):
             inference_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
 
             inference_train_data_diter = tf1.data.make_one_shot_iterator(train_dataset)
-            train_sample_ids_op, train_labels_op, train_weights_op, train_scores_op, train_scores_and_offsets_op = self._inference_model_fn(
-                inference_train_data_diter,
-                inference_x_placeholder,
-                train_num_iterations,
-                schema_params)
+            train_sample_ids_op, train_labels_op, train_weights_op, train_prediction_score_op, \
+                train_prediction_score_per_coordinate_op = self._inference_model_fn(
+                    inference_train_data_diter,
+                    inference_x_placeholder,
+                    train_num_iterations,
+                    schema_params)
 
             inference_validation_data_diter = tf1.data.make_one_shot_iterator(valid_dataset)
             assigned_validation_files = self._get_assigned_files(validation_data_path, num_workers, task_index)
             validation_data_num_iterations = self._get_num_iterations(assigned_validation_files)
-            valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_scores_op, valid_scores_and_offsets_op = self._inference_model_fn(
-                inference_validation_data_diter,
-                inference_x_placeholder,
-                validation_data_num_iterations,
-                schema_params)
+            valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
+                valid_prediction_score_per_coordinate_op = self._inference_model_fn(
+                    inference_validation_data_diter,
+                    inference_x_placeholder,
+                    validation_data_num_iterations,
+                    schema_params)
 
             if num_workers > 1:
                 all_reduce_sync_op = collective_ops.all_reduce(
@@ -423,7 +425,8 @@ class FixedEffectLRModelLBFGS(Model):
                 "{}\n------------------------------".format(f_min, info['funcalls'], info['task']))
 
         logging("Inference training data starts...")
-        inference_training_data_ops = (train_sample_ids_op, train_labels_op, train_weights_op, train_scores_op, train_scores_and_offsets_op)
+        inference_training_data_ops = (train_sample_ids_op, train_labels_op, train_weights_op,
+                                       train_prediction_score_op, train_prediction_score_per_coordinate_op)
         self._run_inference(self.model_coefficients,
                             tf_session,
                             inference_x_placeholder,
@@ -433,7 +436,8 @@ class FixedEffectLRModelLBFGS(Model):
                             self.training_output_dir)
 
         logging("Inference validation data starts...")
-        inference_validation_data_ops = (valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_scores_op, valid_scores_and_offsets_op)
+        inference_validation_data_ops = (valid_sample_ids_op, valid_labels_op, valid_weights_op,
+                                         valid_prediction_score_op, valid_prediction_score_per_coordinate_op)
         self._run_inference(self.model_coefficients,
                             tf_session,
                             inference_x_placeholder,
@@ -460,7 +464,7 @@ class FixedEffectLRModelLBFGS(Model):
         weights = self.model_coefficients[:-1]
         bias = self.model_coefficients[-1]
         list_of_weight_indices = np.arange(weights.shape[0])
-        output_file = os.path.join(self.checkpoint_path, "global_model.avro")
+        output_file = os.path.join(self.checkpoint_path, "part-00000.avro")
         export_scipy_lr_model_to_avro(model_ids=["global model"],
                                       list_of_weight_indices=np.expand_dims(list_of_weight_indices, axis=0),
                                       list_of_weight_values=np.expand_dims(weights, axis=0),
