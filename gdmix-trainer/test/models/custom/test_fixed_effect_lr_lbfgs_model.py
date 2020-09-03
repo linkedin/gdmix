@@ -28,6 +28,7 @@ AllPaths = namedtuple("AllPaths", "training_data_path "
 ExpectedData = namedtuple("ExpectedData", "features "
                                           "labels "
                                           "offsets "
+                                          "previous_model "
                                           "coefficients "
                                           "per_coordinate_scores "
                                           "total_scores")
@@ -39,11 +40,12 @@ _L2_REG_WEIGHT = 1.0
 
 _NUM_LBFGS_CORRECTIONS = 10
 _PRECISION = 1.0e-12
-_MAX_ITERS = 100
+_LARGE_MAX_ITERS = 100
+_SMALL_MAX_ITERS = 1
 
 # Ports are hard-coded for now. We should verify them to be unused.
 # Packages like portpicker come in handy. (https://github.com/google/python_portpicker)
-_PORTS = [14356, 15234, 15379]
+_PORTS = [13456, 14356, 15234, 15379]
 
 
 class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
@@ -51,8 +53,9 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
     Test logistic regression model with lbfgs solver
     """
     def setUp(self):
-        self.datasets_without_offset = _create_expected_data(False)
-        self.datasets_with_offset = _create_expected_data(True)
+        self.datasets_without_offset = _create_expected_data(False, 0, False)
+        self.datasets_with_offset = _create_expected_data(True, 0, False)
+        self.datasets_with_offset_and_previous_model = _create_expected_data(True, 0, True)
 
     def testSingleWorkerTraining(self):
         """
@@ -60,9 +63,11 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :return: None
         """
         # test single worker training without offset
-        self._run_single_worker(False, _PORTS[0])
+        self._run_single_worker(False, _PORTS[0], False)
         # test single worker training with offset
-        self._run_single_worker(True, _PORTS[1])
+        self._run_single_worker(True, _PORTS[1], False)
+        # test single worker training with offset and previous model
+        self._run_single_worker(True, _PORTS[2], True)
 
     def testSingleWorkerPrediction(self):
         """
@@ -71,13 +76,12 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         """
         base_dir = tempfile.mkdtemp()
         paths = _prepare_paths(base_dir, True)
-        training_params = _get_params(paths)
+        training_params = _get_params(paths, _LARGE_MAX_ITERS)
         datasets = self.datasets_with_offset
         _write_model(datasets['training'].coefficients, paths.feature_file, paths.model_output_dir)
         _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True)
-        proc_func = _ProcFunc(0, [_PORTS[2]], training_params)
-        proc_func.__call__(paths, True)
-        self._check_scores(datasets['training'], paths.training_score_path)
+        proc_func = _ProcFunc(0, [_PORTS[3]], training_params)
+        proc_func.__call__(paths, False)
         self._check_scores(datasets['validation'], paths.validation_score_path)
         tf.io.gfile.rmtree(base_dir)
 
@@ -90,7 +94,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         """
         model_file = os.path.join(model_dir, "part-00000.avro")
         model = load_scipy_models_from_avro(model_file)[0]
-        self.assertAllClose(coefficients, model, msg='model mismatch')
+        self.assertAllClose(coefficients, model, msg='models mismatch')
 
     def _check_scores(self, expected_scores, score_path):
         """
@@ -107,7 +111,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         self.assertAllClose(expected_total_scores, actual_total_scores,
                             msg='total score mismatch')
 
-    def _run_single_worker(self, has_offset, port):
+    def _run_single_worker(self, has_offset, port, use_previous_model):
         """
         A test for single worker training. Dataset were pre-generated.
         The model, training scores and validation scores are checked against expected values.
@@ -116,12 +120,18 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :return: None
         """
         base_dir = tempfile.mkdtemp()
-        paths = _prepare_paths(base_dir, has_offset)
-        training_params = _get_params(paths)
         if has_offset:
-            datasets = self.datasets_with_offset
+            if use_previous_model:
+                datasets = self.datasets_with_offset_and_previous_model
+            else:
+                datasets = self.datasets_with_offset
         else:
             datasets = self.datasets_without_offset
+        paths = _prepare_paths(base_dir, has_offset, datasets["training"].previous_model)
+        if use_previous_model:
+            training_params = _get_params(paths, _SMALL_MAX_ITERS)
+        else:
+            training_params = _get_params(paths, _LARGE_MAX_ITERS)
         _write_tfrecord_datasets(datasets, paths, 2, has_offset)
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
@@ -131,13 +141,15 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         tf.io.gfile.rmtree(base_dir)
 
 
-def _prepare_paths(base_dir, has_offset):
+def _prepare_paths(base_dir, has_offset, previous_model=None):
     """
     Get an AllPaths namedtuple containing all needed paths.
     Create the directories needed for testing.
     Create feature and metadata files.
+    Create previous model if needed.
     :param base_dir: The base directory where all the subfolers will be created.
     :param has_offset: Whether to include offset in the training dataset.
+    :param previous_model: Previous model coefficents for warm start training.
     :return: AllPaths namedtuple
     """
     feature_dir = os.path.join(base_dir, "featureList")
@@ -159,10 +171,12 @@ def _prepare_paths(base_dir, has_offset):
     tf.io.gfile.mkdir(all_paths.validation_score_path)
     _create_feature_file(all_paths.feature_file)
     _create_metadata_file(all_paths.metadata_file, has_offset)
+    if previous_model is not None:
+        _write_model(previous_model, all_paths.feature_file, all_paths.model_output_dir)
     return all_paths
 
 
-def _get_params(paths):
+def _get_params(paths, max_iters):
     """
     Get the various parameter for model initialization.
     :param paths: An AllPaths namedtuple.
@@ -179,7 +193,7 @@ def _get_params(paths):
                         '--' + constants.VALIDATION_DATA_PATH, paths.validation_data_path,
                         '--' + constants.METADATA_FILE, paths.metadata_file,
                         '--' + constants.FEATURE_FILE, paths.feature_file,
-                        '--' + constants.NUM_OF_LBFGS_ITERATIONS, f"{_MAX_ITERS}",
+                        '--' + constants.NUM_OF_LBFGS_ITERATIONS, f"{max_iters}",
                         '--' + constants.MODEL_OUTPUT_DIR, paths.model_output_dir,
                         '--' + constants.COPY_TO_LOCAL, 'False',
                         '--' + constants.BATCH_SIZE, '16',
@@ -213,11 +227,12 @@ def _build_execution_context(worker_index, ports):
     return execution_context
 
 
-def _create_expected_data(has_offset, seed=0):
+def _create_expected_data(has_offset, seed, use_previous_model):
     """
     Generated expected data for comparison.
     :param has_offset: Whether to use offset.
     :param seed: Random seed
+    :param use_previous_model: Whether to generate/use a previous model.
     :return: Training and validation datasets.
     """
     np.random.seed(seed)
@@ -233,7 +248,13 @@ def _create_expected_data(has_offset, seed=0):
         validation_offsets = np.zeros(_NUM_SAMPLES)
     train_features_plus_one = np.hstack((training_features, np.ones((_NUM_SAMPLES, 1))))
     validation_features_plus_one = np.hstack((validation_features, np.ones((_NUM_SAMPLES, 1))))
-    coefficients = _solve_for_coefficients(train_features_plus_one, training_labels, training_offsets)
+    previous_model = _solve_for_coefficients(train_features_plus_one, training_labels,
+                                             training_offsets, _LARGE_MAX_ITERS)
+    if use_previous_model:
+        coefficients = _solve_for_coefficients(train_features_plus_one, training_labels,
+                                               training_offsets, _SMALL_MAX_ITERS, previous_model)
+    else:
+        coefficients = previous_model
     training_per_coordinate_scores, training_total_scores = _predict(coefficients, train_features_plus_one,
                                                                      training_offsets)
     validation_per_coordinate_scores, validation_total_scores = _predict(coefficients, validation_features_plus_one,
@@ -241,12 +262,14 @@ def _create_expected_data(has_offset, seed=0):
     return {'training': ExpectedData(training_features.astype(np.float32),
                                      training_labels,
                                      training_offsets.astype(np.float32),
+                                     previous_model.astype(np.float32) if use_previous_model else None,
                                      coefficients.astype(np.float32),
                                      training_per_coordinate_scores.astype(np.float32),
                                      training_total_scores.astype(np.float32)),
             'validation': ExpectedData(validation_features.astype(np.float32),
                                        validation_labels,
                                        validation_offsets.astype(np.float32),
+                                       previous_model.astype(np.float32) if use_previous_model else None,
                                        coefficients.astype(np.float32),
                                        validation_per_coordinate_scores.astype(np.float32),
                                        validation_total_scores.astype(np.float32))}
@@ -265,12 +288,14 @@ def _predict(theta, features, offsets):
     return per_coordinate_scores, total_scores
 
 
-def _solve_for_coefficients(features, labels, offsets):
+def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=None):
     """
     Solve LR mdoels with LBFGS solver.
     :param features: Feature matrix
     :param labels: Label vector
     :param offsets: Input offsets.
+    :param max_iter: maximum number of LBFGS steps.
+    :param theta_initial: Initial value for theta.
     :return: Estimated coefficients.
     """
     def _loss(theta, features, offsets, labels):
@@ -287,7 +312,8 @@ def _solve_for_coefficients(features, labels, offsets):
         grad = cost_grad + reg_grad
         return grad
 
-    theta_initial = np.zeros(_NUM_FEATURES+1)  # add the intercept
+    if theta_initial is None:
+        theta_initial = np.zeros(_NUM_FEATURES+1)  # add the intercept
     # Run minimization
     result = fmin_l_bfgs_b(func=_loss,
                            x0=theta_initial,
@@ -295,7 +321,7 @@ def _solve_for_coefficients(features, labels, offsets):
                            fprime=_gradient,
                            m=_NUM_LBFGS_CORRECTIONS,
                            factr=_PRECISION,
-                           maxiter=_MAX_ITERS,
+                           maxiter=max_iter,
                            args=(features, offsets, labels),
                            disp=0)
 
@@ -320,7 +346,7 @@ def _write_tfrecord_datasets(data, paths, num_files, has_offset):
 def _write_single_dataset(data, output_path, num_files, has_offset):
     """
     Write a single dataset to tfrecord files.
-    :param data: A dict of input data, including training and validtion datasets.
+    :param data: A dict of input data, including training and validation datasets.
     :param output_path: Output path for the generated files.
     :param num_files: The number of files to be generated.
     :param has_offset: Whether to use offset.

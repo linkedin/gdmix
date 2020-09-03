@@ -97,9 +97,17 @@ class RandomEffectLRLBFGSModel(Model):
                                    tensor_metadata.get_features())).shape[0]
         assert num_features > 0, "number of features must > 0"
 
+        # load initial model if available
+        initial_model_weights = self._load_weights(self.model_params[constants.MODEL_OUTPUT_DIR],
+                                                   self.partition_index, True)
+        if len(initial_model_weights) > 0:
+            logger.info("Found a previous model, loaded as an initial point for training.")
+        else:
+            logger.info("No previous models found, use all zeros as the model initial point")
         # Train using a bounded buffer solution
         with Manager() as manager:
             managed_results_dictionary = manager.dict()
+            managed_results_dictionary.update(initial_model_weights)
 
             # Create and kick-off one or more consumer jobs
             consumer_processes = [
@@ -237,8 +245,18 @@ class RandomEffectLRLBFGSModel(Model):
         export_scipy_lr_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values, biases, feature_file,
                                       output_file)
 
-    def _load_weights(self, model_dir, model_index):
-        assert tf.io.gfile.exists(model_dir), "Model path {} doesn't exist".format(model_dir)
+    def _load_weights(self, model_dir, model_index, catch_exception=False):
+        model_file = os.path.join(model_dir, "part-{0:05d}.avro".format(model_index))
+        logger.info("Loading model from {}".format(model_file))
+        model_exist = tf.io.gfile.exists(model_file)
+
+        # Handle exception when the model file does not exist
+        # two possibilities, either return empty dict, or raise exception.
+        if not model_exist:
+            if catch_exception:
+                return dict()
+            else:
+                raise FileNotFoundError(f"Model file {model_file} does not exist")
 
         # Read feature file and map features to global index
         feature_list = read_feature_list(self.model_params[constants.FEATURE_FILE])
@@ -246,7 +264,6 @@ class RandomEffectLRLBFGSModel(Model):
                              in enumerate(feature_list)}
 
         # Get the model file and read the avro model
-        model_file = os.path.join(model_dir, "part-{0:05d}.avro".format(model_index))
         model_coefficients = {}
         with tf.io.gfile.GFile(model_file, 'rb') as fo:
             avro_reader = fastavro.reader(fo)

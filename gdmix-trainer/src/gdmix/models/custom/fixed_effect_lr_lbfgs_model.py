@@ -401,6 +401,16 @@ class FixedEffectLRModelLBFGS(Model):
         tf_session = tf1.train.MonitoredSession(session_creator=session_creator)
         tf_session.run(init_variables_op)
 
+        # load existing model if available
+        logging("Try to load initial model coefficients...")
+        prev_model = self._load_model(catch_exception=True)
+        if prev_model is None or len(prev_model) != self.num_features + 1:
+            logging("No initial model found, use all zeros instead.")
+            x0 = np.zeros(self.num_features + 1)
+        else:
+            logging("Found a previous model,  loaded as the initial point for training")
+            x0 = prev_model
+
         # Run all reduce warm up
         logging("All-reduce-warmup starts...")
         if num_workers > 1:
@@ -413,7 +423,7 @@ class FixedEffectLRModelLBFGS(Model):
         start_time = time.time()
         self.model_coefficients, f_min, info = fmin_l_bfgs_b(
             func=self._compute_loss_and_gradients,
-            x0=np.zeros(self.num_features + 1),
+            x0=x0,
             approx_grad=False,
             m=self.num_correction_pairs,  # number of variable metrics corrections. default is 10.
             factr=self.factor,            # control precision, smaller the better.
@@ -472,14 +482,21 @@ class FixedEffectLRModelLBFGS(Model):
                                       feature_file=self.feature_file,
                                       output_file=output_file)
 
-    def _load_model(self):
+    def _load_model(self, catch_exception=False):
         """ Load model from avro file. """
+        model = None
         logging("Loading model from {}".format(self.checkpoint_path))
-        assert self.checkpoint_path and tf1.io.gfile.exists(self.checkpoint_path), "checkpoint path {} doesn't exist".format(self.checkpoint_path)
-        model_file = tf1.io.gfile.glob("{}/*.avro".format(self.checkpoint_path))
-        assert len(model_file) == 1, "Load model failed, no model file or multiple model files found in the model diretory {}".format(self.checkpoint)
-        models = load_scipy_models_from_avro(model_file[0])
-        return models[0]
+        model_exist = self.checkpoint_path and tf1.io.gfile.exists(self.checkpoint_path)
+        if model_exist:
+            model_file = tf1.io.gfile.glob("{}/*.avro".format(self.checkpoint_path))
+            if len(model_file) == 1:
+                model = load_scipy_models_from_avro(model_file[0])[0]
+            elif not catch_exception:
+                raise ValueError("Load model failed, no model file or multiple model"
+                                 " files found in the model diretory {}".format(self.checkpoint))
+        elif not catch_exception:
+            raise FileNotFoundError("checkpoint path {} doesn't exist".format(self.checkpoint_path))
+        return model
 
     def export(self, output_model_dir):
         logging("No need model export for LR model. ")

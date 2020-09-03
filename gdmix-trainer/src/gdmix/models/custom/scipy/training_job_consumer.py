@@ -43,14 +43,20 @@ class TrainingJobConsumer:
                 break
 
             # Train model
+            entity_id = training_job.entity_id
+            theta_initial = None
+            training_result = training_results_dict.get(entity_id, None)
+            if training_result is not None:
+                theta_initial = training_result.training_result
             training_result = self.lr_trainer.fit(X=training_job.X,
                                                   y=training_job.y,
                                                   weights=training_job.weights,
-                                                  offsets=training_job.offsets)
+                                                  offsets=training_job.offsets,
+                                                  theta_initial=theta_initial)
             # Map trained model to entity ID
-            training_results_dict[training_job.entity_id] = TrainingResult(training_result=training_result[0],
-                                                                           unique_global_indices=training_job.
-                                                                           unique_global_indices)
+            training_results_dict[entity_id] = TrainingResult(training_result=training_result[0],
+                                                              unique_global_indices=training_job.
+                                                              unique_global_indices)
 
             self.processed_counter += 1
             if self.processed_counter % TrainingJobConsumer._CONSUMER_LOGGING_FREQUENCY == 0:
