@@ -1,13 +1,12 @@
 import logging
-import os
-import time
-from dataclasses import dataclass
-
 import numpy as np
+import os
 import psutil
 import tensorflow.compat.v1 as tf1
+import time
+
+from dataclasses import dataclass
 from fastavro import parse_schema
-from gdmix.params import SchemaParams, Params
 from smart_arg import arg_suite
 from scipy.optimize import fmin_l_bfgs_b
 from tensorflow.python.ops import collective_ops
@@ -17,6 +16,7 @@ from gdmix.io.input_data_pipeline import per_record_input_fn
 from gdmix.models.api import Model
 from gdmix.models.custom.base_lr_params import LRParams
 from gdmix.models.photon_ml_writer import PhotonMLWriter
+from gdmix.params import SchemaParams, Params
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
 from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, export_scipy_lr_model_to_avro, \
@@ -37,7 +37,9 @@ def logging(msg):
 @dataclass
 class FixedLRParams(LRParams):
     """Logistic regression model with scipy LBFGS + TF."""
-    copy_to_local: bool = True  # Copying data to local or not
+    copy_to_local: bool = True  # Copying data to local or not.
+    num_server_creation_retries: int = 50  # Number of retries to establish tf server.
+    retry_interval: int = 2  # Number of seconds between retries.
 
 
 class FixedEffectLRModelLBFGS(Model):
@@ -77,6 +79,8 @@ class FixedEffectLRModelLBFGS(Model):
         self.num_features = self._get_num_features()
         self.model_coefficients = None
 
+        self.num_server_creation_retries = self.model_params.num_server_creation_retries
+        self.retry_interval = self.model_params.retry_interval
         self.server = None
 
         # validate parameters:
@@ -125,10 +129,21 @@ class FixedEffectLRModelLBFGS(Model):
         task_index = execution_context[constants.TASK_INDEX]
         config = tf1.ConfigProto()
         config.experimental.collective_group_leader = '/job:worker/replica:0/task:0'
-        self.server = tf1.distribute.Server(cluster_spec,
-                                            config=config,
-                                            job_name='worker',
-                                            task_index=task_index)
+        exception = None
+        for i in range(self.num_server_creation_retries):
+            try:
+                logging(f"No. {i+1} attempt to create a TF Server, "
+                        f"max {self.num_server_creation_retries} attempts")
+                self.server = tf1.distribute.Server(cluster_spec,
+                                                    config=config,
+                                                    job_name='worker',
+                                                    task_index=task_index)
+                return
+            except Exception as e:
+                exception = e
+                # sleep for retry_interval seconds before next retry
+                time.sleep(self.retry_interval)
+        raise exception
 
     def _inference_model_fn(self, diter, x_placeholder, num_iterations, schema_params: SchemaParams):
         """ Implement the forward pass to get logit. """
