@@ -1,11 +1,9 @@
 from dataclasses import dataclass
 from typing import List
 
-from gdmix.params import DeprecatedApis
-
 
 @dataclass
-class LRParams(DeprecatedApis):
+class LRParams:
     """Base logistic regression parameters"""
 
     # Input / output files or directories

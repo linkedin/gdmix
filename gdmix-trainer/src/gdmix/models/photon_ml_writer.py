@@ -5,7 +5,6 @@ import tensorflow as tf
 import time
 from scipy.sparse import csr_matrix
 from gdmix.util.io_utils import try_write_avro_blocks
-from gdmix.util import constants
 from gdmix.models.custom.scipy.utils import convert_to_training_jobs
 
 logger = logging.getLogger(__name__)
@@ -26,18 +25,18 @@ class PhotonMLWriter:
             'name': 'validation_result',
             'type': 'record',
             'fields': [
-                {'name': self.schema_params[constants.SAMPLE_ID], 'type': 'long'},
-                {'name': self.schema_params[constants.PREDICTION_SCORE], 'type': 'float'}
+                {'name': self.schema_params.sample_id, 'type': 'long'},
+                {'name': self.schema_params.prediction_score, 'type': 'float'}
             ]
         }
         if has_label:
-            schema.get('fields').append({'name': self.schema_params[constants.LABEL],
+            schema.get('fields').append({'name': self.schema_params.label,
                                          'type': 'int'})
-        if has_weight or metadata.get(self.schema_params[constants.SAMPLE_WEIGHT]) is not None:
-            schema.get('fields').append({'name': self.schema_params[constants.SAMPLE_WEIGHT],
+        if has_weight or metadata.get(self.schema_params.sample_weight) is not None:
+            schema.get('fields').append({'name': self.schema_params.sample_weight,
                                          'type': 'float'})
         if has_logits_per_coordinate:
-            schema.get('fields').append({'name': self.schema_params[constants.PREDICTION_SCORE_PER_COORDINATE],
+            schema.get('fields').append({'name': self.schema_params.prediction_score_per_coordinate,
                                          'type': 'float'})
         return schema
 
@@ -58,23 +57,23 @@ class PhotonMLWriter:
             prediction_per_coordinate = predicts_per_coordinate.flatten()
         batch_size = predicts.size
         assert (batch_size == predicts.size)
-        if self.schema_params[constants.SAMPLE_WEIGHT] in metadata:
-            sample_weights = metadata[self.schema_params[constants.SAMPLE_WEIGHT]].flatten()
+        if self.schema_params.sample_weight in metadata:
+            sample_weights = metadata[self.schema_params.sample_weight].flatten()
             assert (batch_size == sample_weights.size)
-        if self.schema_params[constants.SAMPLE_ID] in metadata:
-            sample_ids = metadata[self.schema_params[constants.SAMPLE_ID]].flatten()
+        if self.schema_params.sample_id in metadata:
+            sample_ids = metadata[self.schema_params.sample_id].flatten()
             assert (batch_size == sample_ids.size)
 
         for i in range(batch_size):
-            record = {self.schema_params[constants.PREDICTION_SCORE]: predicts[i]}
+            record = {self.schema_params.prediction_score: predicts[i]}
             if labels is not None:
-                record[self.schema_params[constants.LABEL]] = labels[i]
+                record[self.schema_params.label] = labels[i]
             if predicts_per_coordinate is not None:
-                record[self.schema_params[constants.PREDICTION_SCORE_PER_COORDINATE]] = prediction_per_coordinate[i]
-            if self.schema_params[constants.SAMPLE_WEIGHT] in metadata:
-                record[self.schema_params[constants.SAMPLE_WEIGHT]] = sample_weights[i]
-            if self.schema_params[constants.SAMPLE_ID] in metadata:
-                record[self.schema_params[constants.SAMPLE_ID]] = sample_ids[i]
+                record[self.schema_params.prediction_score_per_coordinate] = prediction_per_coordinate[i]
+            if self.schema_params.sample_weight in metadata:
+                record[self.schema_params.sample_weight] = sample_weights[i]
+            if self.schema_params.sample_id in metadata:
+                record[self.schema_params.sample_id] = sample_ids[i]
             records.append(record)
         return batch_size
 
@@ -98,16 +97,16 @@ class PhotonMLWriter:
 
         # Set up output schema
         validation_results = []
-        has_label = self.schema_params[constants.LABEL] in labels
+        has_label = self.schema_params.label in labels
         has_logits_per_coordinate = True  # Always true for custom scipy-based LR
-        has_weight = self.schema_params[constants.SAMPLE_WEIGHT] in [feature.name for feature in
-                                                                     tensor_metadata.get_features()]
+        has_weight = self.schema_params.sample_weight in [feature.name for feature in
+                                                          tensor_metadata.get_features()]
         validation_schema = fastavro.parse_schema(self.get_inference_output_avro_schema(metadata,
                                                                                         has_label,
                                                                                         has_logits_per_coordinate,
                                                                                         has_weight))
 
-        num_features = next(filter(lambda x: x.name == self.schema_params[constants.FEATURE_BAGS][0],
+        num_features = next(filter(lambda x: x.name == self.schema_params.feature_bags[0],
                                    tensor_metadata.get_features())).shape[0]
 
         # Run session over the dataset, and write to output file
@@ -185,7 +184,7 @@ class PhotonMLWriter:
     def _run_batched_inference(self, lr_model, model_coefficients, processed_inference_job, num_features,
                                validation_results):
         if processed_inference_job.entity_id in model_coefficients:
-            if self.schema_params[constants.ENABLE_LOCAL_INDEXING]:
+            if self.schema_params.enable_local_indexing:
                 # Convert locally indexed weights to global space. Since global indices are shifted by one because of
                 # the bias term, increase global index values by 1
                 locally_indexed_custom_theta = model_coefficients[processed_inference_job.entity_id].training_result
@@ -203,8 +202,8 @@ class PhotonMLWriter:
         else:
             logits = processed_inference_job.offsets
         logits_per_coordinate = logits - processed_inference_job.offsets
-        metadata_val = {self.schema_params[constants.SAMPLE_WEIGHT]: processed_inference_job.weights,
-                        self.schema_params[constants.SAMPLE_ID]: processed_inference_job.ids}
+        metadata_val = {self.schema_params.sample_weight: processed_inference_job.weights,
+                        self.schema_params.sample_id: processed_inference_job.ids}
         return self.append_validation_results(validation_results,
                                               processed_inference_job.y,
                                               logits, metadata_val, logits_per_coordinate)

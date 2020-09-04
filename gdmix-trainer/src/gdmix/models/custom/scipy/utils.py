@@ -1,7 +1,6 @@
 import numpy as np
 from collections import namedtuple
 from scipy.sparse import coo_matrix
-from gdmix.util import constants
 
 # Create a named tuple to represent training jobs
 TrainingJob = namedtuple("TrainingJob", "entity_id X y offsets weights ids unique_global_indices")
@@ -23,7 +22,7 @@ def convert_to_training_jobs(features_val, labels_val, conversion_params, num_fe
     :return:
     """
     # Extract number of entities in batch
-    num_entities = features_val[conversion_params[constants.PARTITION_ENTITY]].shape[0]
+    num_entities = features_val[conversion_params.partition_entity].shape[0]
 
     # Now, construct entity_id, X, y, offsets, uids and weights
     training_jobs = []
@@ -31,14 +30,14 @@ def convert_to_training_jobs(features_val, labels_val, conversion_params, num_fe
     y_index = 0
     for entity in range(num_entities):
         # Construct entity ID
-        entity_id = features_val[conversion_params[constants.PARTITION_ENTITY]][entity]
+        entity_id = features_val[conversion_params.partition_entity][entity]
 
         # Construct data matrix X. Slice portion of arrays from X_index through the number of rows for the entity
-        indices = features_val[conversion_params[constants.FEATURE_BAGS][0] + INDICES_SUFFIX].indices
+        indices = features_val[conversion_params.feature_bags[0] + INDICES_SUFFIX].indices
         rows = indices[np.where(indices[:, 0] == entity)][:, 1]
-        values = features_val[conversion_params[constants.FEATURE_BAGS][0] + VALUES_SUFFIX].values[
+        values = features_val[conversion_params.feature_bags[0] + VALUES_SUFFIX].values[
                  X_index: X_index + len(rows)]
-        cols = features_val[conversion_params[constants.FEATURE_BAGS][0] + INDICES_SUFFIX].values[
+        cols = features_val[conversion_params.feature_bags[0] + INDICES_SUFFIX].values[
                X_index: X_index + len(rows)]
 
         # Get sample count
@@ -53,16 +52,16 @@ def convert_to_training_jobs(features_val, labels_val, conversion_params, num_fe
             X = coo_matrix((values, (rows, cols)), shape=(sample_count, num_features))
 
         # Construct y, offsets, weights and ids. Slice portion of arrays from y_index through sample_count
-        y = labels_val[conversion_params[constants.LABEL]].values[y_index: y_index + sample_count]
-        offsets = features_val[conversion_params[constants.OFFSET]].values[
+        y = labels_val[conversion_params.label].values[y_index: y_index + sample_count]
+        offsets = features_val[conversion_params.offset].values[
                   y_index: y_index + sample_count]
-        if conversion_params[constants.SAMPLE_WEIGHT] in features_val:
-            weights = features_val[conversion_params[constants.SAMPLE_WEIGHT]].values[
+        if conversion_params.sample_weight in features_val:
+            weights = features_val[conversion_params.sample_weight].values[
                       y_index: y_index + sample_count]
         else:
             weights = np.ones(sample_count)
 
-        ids = features_val[conversion_params[constants.SAMPLE_ID]].values[y_index: y_index + sample_count]
+        ids = features_val[conversion_params.sample_id].values[y_index: y_index + sample_count]
 
         training_jobs.append(TrainingJob(entity_id=entity_id, X=X, y=y, offsets=offsets, weights=weights, ids=ids,
                                          unique_global_indices=unique_global_indices))

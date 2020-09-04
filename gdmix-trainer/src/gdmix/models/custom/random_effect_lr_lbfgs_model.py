@@ -18,6 +18,7 @@ from gdmix.models.custom.scipy.gdmix_process import GDMixProcess
 from gdmix.models.custom.scipy.training_job_consumer import TrainingJobConsumer, TrainingResult
 from gdmix.models.custom.scipy.utils import convert_to_training_jobs
 from gdmix.models.photon_ml_writer import PhotonMLWriter
+from gdmix.params import SchemaParams
 from gdmix.util import constants
 from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, name_term_to_string
 
@@ -38,6 +39,11 @@ class REParams(LRParams):
     max_training_queue_size: int = 10  # Maximum size of training job queue
     training_queue_timeout_in_seconds: int = 300  # Training queue put timeout in seconds.
     num_of_consumers: int = 2  # Number of consumer processes that will train RE models in parallel.
+
+
+@dataclass
+class PredictionParams(SchemaParams, REParams):
+    """For predictions"""
 
 
 class RandomEffectLRLBFGSModel(Model):
@@ -111,7 +117,7 @@ class RandomEffectLRLBFGSModel(Model):
         assert num_features > 0, "number of features must > 0"
 
         # load initial model if available
-        initial_model_weights = self._load_weights(self.model_params[constants.MODEL_OUTPUT_DIR],
+        initial_model_weights = self._load_weights(self.model_params.model_output_dir,
                                                    self.partition_index, True)
         if len(initial_model_weights) > 0:
             logger.info("Found a previous model, loaded as an initial point for training.")
@@ -157,12 +163,13 @@ class RandomEffectLRLBFGSModel(Model):
                 "Both feature file and avro model output directory required to export model. Skipping export")
 
         # Run inference on active training set
+        prediction_params = PredictionParams(**asdict(self.model_params), **asdict(schema_params))
         if constants.ACTIVE_TRAINING_OUTPUT_FILE in execution_context:
             logger.info("Running inference on the active training dataset")
             self._predict(inference_dataset=train_data, model_coefficients=results_dictionary, metadata=metadata,
                           tensor_metadata=tensor_metadata,
                           output_file=execution_context[constants.ACTIVE_TRAINING_OUTPUT_FILE],
-                          prediction_params={**asdict(self.model_params), **asdict(schema_params)})
+                          prediction_params=prediction_params)
             logger.info("Inference on active training dataset complete")
 
         # Run inference on passive training set
@@ -181,7 +188,7 @@ class RandomEffectLRLBFGSModel(Model):
                           metadata=metadata,
                           tensor_metadata=tensor_metadata,
                           output_file=execution_context[constants.PASSIVE_TRAINING_OUTPUT_FILE],
-                          prediction_params={**asdict(self.model_params), **asdict(schema_params)})
+                          prediction_params=prediction_params)
             logger.info("Inference on passive training dataset complete")
 
         # Run inference on validation set
@@ -190,7 +197,7 @@ class RandomEffectLRLBFGSModel(Model):
             self._predict(inference_dataset=validation_data, model_coefficients=results_dictionary, metadata=metadata,
                           tensor_metadata=tensor_metadata,
                           output_file=execution_context[constants.VALIDATION_OUTPUT_FILE],
-                          prediction_params={**asdict(self.model_params), **asdict(schema_params)})
+                          prediction_params=prediction_params)
             logger.info("Inference on validation dataset complete")
 
     def _produce_training_jobs(self, train_data, training_job_queue, schema_params, num_features):
@@ -204,6 +211,7 @@ class RandomEffectLRLBFGSModel(Model):
         # link -
         # https://github.com/tensorflow/tensorflow/issues/14442)
         processed_counter = 0
+        prediction_params = PredictionParams(**asdict(self.model_params), **asdict(schema_params))
         with tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(use_per_session_threads=True)) as sess:
             sess.run(iterator.initializer)
             while True:
@@ -211,7 +219,7 @@ class RandomEffectLRLBFGSModel(Model):
                     # Extract and process raw entity data
                     features_val, labels_val = sess.run([features, labels])
                     training_jobs = convert_to_training_jobs(features_val, labels_val,
-                                                             {**asdict(self.model_params), **asdict(schema_params)},
+                                                             prediction_params,
                                                              num_features=num_features,
                                                              enable_local_indexing=self.model_params.enable_local_indexing)
 
@@ -326,7 +334,7 @@ class RandomEffectLRLBFGSModel(Model):
         # Delegate to in-memory scoring function
         self._predict(inference_dataset=inference_dataset, model_coefficients=model_weights, metadata=metadata,
                       tensor_metadata=tensor_metadata, output_file=output_file,
-                      prediction_params={**asdict(self.model_params), **asdict(schema_params)})
+                      prediction_params=PredictionParams(**asdict(self.model_params), **asdict(schema_params)))
 
     def _predict(self, inference_dataset, model_coefficients, metadata, tensor_metadata, output_file,
                  prediction_params):
@@ -336,7 +344,6 @@ class RandomEffectLRLBFGSModel(Model):
                                                      lambda_l2=self.model_params.l2_reg_weight)
 
         # Create PhotonMLWriter object
-        prediction_params.update(asdict(self.model_params))
         inference_runner = PhotonMLWriter(schema_params=prediction_params)
 
         # Delegate inference to PhotonMLWriter object

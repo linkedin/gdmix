@@ -1,8 +1,8 @@
 import logging
 import sys
 
-from gdmix.params import Params
 from gdmix.factory.driver_factory import DriverFactory
+from gdmix.params import Params, SchemaParams
 from gdmix.util import constants
 
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +18,8 @@ def run(args):
     """
     # Parse base training parameters that are required for all models. For other arguments, the
     # Driver delegates parsing to the specific model it encapsulates
-    params: Params = Params.__from_argv__(args, error_on_unknown=False)
+    params = Params.__from_argv__(args, error_on_unknown=False)
+    schema_params = SchemaParams.__from_argv__(args, error_on_unknown=False)
 
     # Log parsed base training parameters
     logger.info(f"Parsed schema params amd gdmix args (params): {params}")
@@ -28,11 +29,11 @@ def run(args):
 
     # Run driver to either [1] train, [2] run evaluation or [3] export model
     if params.action == constants.ACTION_TRAIN:
-        driver.run_training(schema_params=params, export_model=True)
+        driver.run_training(schema_params=schema_params, export_model=True)
     elif params.action == constants.ACTION_INFERENCE:
-        driver.run_inference(schema_params=params)
+        driver.run_inference(schema_params=schema_params)
     else:
-        raise Exception("Unsupported action")
+        raise Exception(f"Unsupported action {params.action}")
 
 
 if __name__ == '__main__':
