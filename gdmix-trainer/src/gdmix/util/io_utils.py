@@ -8,10 +8,12 @@ import os
 import tensorflow as tf
 import time
 
-from gdmix.data import BAYESIAN_LINEAR_MODEL_SCHEMA
+from gdmix.models.schemas import BAYESIAN_LINEAR_MODEL_SCHEMA
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+INTERCEPT = "(INTERCEPT)"
 
 
 def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
@@ -37,23 +39,41 @@ def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
         raise
 
 
-def load_scipy_models_from_avro(model_file):
-    """ load model(s) from avro file. """
+def load_linear_models_from_avro(model_file, feature_file):
+    """
+    Load linear models from avro files.
+    The models are in photon-ml format.
+    Intercept is moved to the end of the coefficient array.
+    :param model_file: Model avro file, photon-ml format
+    :param feature_file: A file containing all features of the model (intercept excluded)
+    :return:
+    """
 
-    def get_one_model_weights(model_record):
-        """ load one model weights. """
-        model_coefficients = []
+    def get_one_model_weights(model_record, feature_map):
+        """
+        Load a single model from avro record
+        :param model_record: photon-ml LR model in avro record format
+        :param feature_map: feature name to index map
+        :return: a numpy array of the model coefficients, intercept is at the end. Elements are in np.float64.
+        """
+        num_features = len(feature_map)
+        model_coefficients = np.zeros(num_features+1, dtype=np.float64)
         for ntv in model_record["means"]:
-            model_coefficients.append(np.float64(ntv['value']))
-        bias = model_coefficients[0]
-        weights = model_coefficients[1:]
-        return np.array(weights + [bias])
+            name, term, value = ntv['name'], ntv['term'], np.float64(ntv['value'])
+            if name == INTERCEPT and term == '':
+                model_coefficients[num_features] = value  # Intercept at the end.
+            else:
+                full_feature_name = name_term_to_string(name, term)
+                feature_index = feature_map[full_feature_name]
+                model_coefficients[feature_index] = value
+        return model_coefficients
 
     models = []
+    feature_map = get_feature_map(feature_file)
     with tf.io.gfile.GFile(model_file, 'rb') as fo:
         avro_reader = fastavro.reader(fo)
         for record in avro_reader:
-            model_coefficients = get_one_model_weights(record)
+            model_coefficients = get_one_model_weights(record, feature_map)
             models.append(model_coefficients)
     return models
 
@@ -71,26 +91,27 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     """
     records = {u'modelId': model_id, u'modelClass': model_class, u'means': [],
                u'lossFunction': ""}
-    record = {u'name': '(INTERCEPT)', u'term': '', u'value': bias}
+    record = {u'name': INTERCEPT, u'term': '', u'value': bias}
     records[u'means'].insert(0, record)
     for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
         feat = feature_list[w_i]
-        record = {u'name': feat[0], u'term': feat[1], u'value': w_v}
+        name, term = name_term_from_string(feat)
+        record = {u'name': name, u'term': term, u'value': w_v}
         records[u'means'].append(record)
     return records
 
 
-def export_scipy_lr_model_to_avro(model_ids,
-                                  list_of_weight_indices,
-                                  list_of_weight_values,
-                                  biases,
-                                  feature_file,
-                                  output_file,
-                                  model_log_interval=1000,
-                                  model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"
-                                  ):
+def export_linear_model_to_avro(model_ids,
+                                list_of_weight_indices,
+                                list_of_weight_values,
+                                biases,
+                                feature_file,
+                                output_file,
+                                model_log_interval=1000,
+                                model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"
+                                ):
     """
-    Export scipy-based random effect logistic regression model in avro format for photon-ml to consume
+    Export random effect logistic regression model in avro format for photon-ml to consume
     :param model_ids:               a list of model ids used in generated avro file
     :param list_of_weight_indices:  list of indices for entity-specific model weights
     :param list_of_weight_values:   list of values for entity-specific model weights
@@ -142,15 +163,54 @@ def export_scipy_lr_model_to_avro(model_ids,
 
 
 def read_feature_list(feature_file):
+    """
+    Get feature names from the feature file.
+    Note: intercept is not included here since it is not part of the raw data.
+    :param feature_file: user provided feature file, each row is a "name,term" feature name
+    :return: list of feature names
+    """
     feature_list = []
     with tf.io.gfile.GFile(feature_file) as f:
         f.seekable = lambda: False
         for line in f:
-            fields = line.strip().split(',')
-            if len(fields) == 1:
-                fields.append('')
+            fields = line.strip()
             feature_list.append(fields)
     return feature_list
+
+
+def name_term_from_string(name_term_string):
+    """
+    Convert "name,term" string to (name, term)
+    :param name_term_string: A string where name and term joined by ","
+    :return: (name, term) tuple
+    """
+    fields = name_term_string.split(',')
+    if len(fields) == 1:
+        fields.append('')
+    return fields[0], fields[1]
+
+
+def name_term_to_string(name, term):
+    """
+    Convert (name, term) to "name,term" string.
+    :param name: Name of the feature.
+    :param term: Term of the feature.
+    :return: "name,term" string
+    """
+    return ','.join([name, term])
+
+
+def get_feature_map(feature_file):
+    """
+    Get feature -> index map.
+    The index of a feature is the position of the feature in the file.
+    The index starts from zero.
+    :param feature_file: The file containing a list of features.
+    :return: a dict of feature_name and its index.
+    """
+    feature_list = read_feature_list(feature_file)
+    n = len(feature_list)
+    return dict(zip(feature_list, range(n)))
 
 
 def read_json_file(file_path: str):

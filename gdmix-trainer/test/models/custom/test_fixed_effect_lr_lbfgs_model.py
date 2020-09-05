@@ -9,7 +9,7 @@ from collections import namedtuple
 from drivers.test_helper import setup_fake_base_training_params, setup_fake_schema_params
 from gdmix.models.custom.fixed_effect_lr_lbfgs_model import FixedEffectLRModelLBFGS
 from gdmix.util import constants
-from gdmix.util.io_utils import load_scipy_models_from_avro, export_scipy_lr_model_to_avro
+from gdmix.util.io_utils import load_linear_models_from_avro, export_linear_model_to_avro
 from scipy.optimize import fmin_l_bfgs_b
 from scipy.special import expit
 
@@ -85,7 +85,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         self._check_scores(datasets['validation'], paths.validation_score_path)
         tf.io.gfile.rmtree(base_dir)
 
-    def _check_model(self, coefficients, model_dir):
+    def _check_model(self, coefficients, model_dir, feature_file):
         """
         Check if model coefficients are as expected
         :param coefficients: Expected coefficients
@@ -93,7 +93,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :return: None
         """
         model_file = os.path.join(model_dir, "part-00000.avro")
-        model = load_scipy_models_from_avro(model_file)[0]
+        model = load_linear_models_from_avro(model_file, feature_file)[0]
         self.assertAllClose(coefficients, model, msg='models mismatch')
 
     def _check_scores(self, expected_scores, score_path):
@@ -135,7 +135,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         _write_tfrecord_datasets(datasets, paths, 2, has_offset)
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
-        self._check_model(datasets['training'].coefficients, paths.model_output_dir)
+        self._check_model(datasets['training'].coefficients, paths.model_output_dir, paths.feature_file)
         self._check_scores(datasets['training'], paths.training_score_path)
         self._check_scores(datasets['validation'], paths.validation_score_path)
         tf.io.gfile.rmtree(base_dir)
@@ -378,12 +378,12 @@ def _write_model(coefficients, feature_file, model_output_dir):
     model_file = os.path.join(model_output_dir, "part-00000.avro")
     weights = coefficients[:-1]
     bias = coefficients[-1]
-    export_scipy_lr_model_to_avro(model_ids=["global model"],
-                                  list_of_weight_indices=np.expand_dims(np.arange(_NUM_FEATURES), axis=0),
-                                  list_of_weight_values=np.expand_dims(weights, axis=0),
-                                  biases=np.expand_dims(bias, axis=0),
-                                  feature_file=feature_file,
-                                  output_file=model_file)
+    export_linear_model_to_avro(model_ids=["global model"],
+                                list_of_weight_indices=np.expand_dims(np.arange(_NUM_FEATURES), axis=0),
+                                list_of_weight_values=np.expand_dims(weights, axis=0),
+                                biases=np.expand_dims(bias, axis=0),
+                                feature_file=feature_file,
+                                output_file=model_file)
 
 
 def _get_sparse_representation(feature):

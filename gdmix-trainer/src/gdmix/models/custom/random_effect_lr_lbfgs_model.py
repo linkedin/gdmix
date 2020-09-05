@@ -19,7 +19,7 @@ from gdmix.models.custom.scipy.training_job_consumer import TrainingJobConsumer,
 from gdmix.models.custom.scipy.utils import convert_to_training_jobs
 from gdmix.models.photon_ml_writer import PhotonMLWriter
 from gdmix.util import constants
-from gdmix.util.io_utils import read_json_file, export_scipy_lr_model_to_avro, read_feature_list
+from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, name_term_to_string
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,9 +35,9 @@ class REParams(LRParams):
     partition_entity: Optional[str] = None  # Partition entity name.
     # Training parameters for custom Scipy-based training
     enable_local_indexing: Optional[bool] = None  # Enable local indexing for model training
-    max_training_queue_size: int = 5000  # Maximum size of training job queue
+    max_training_queue_size: int = 10  # Maximum size of training job queue
     training_queue_timeout_in_seconds: int = 300  # Training queue put timeout in seconds.
-    num_of_consumers: int = 8  # Number of consumer processes that will train RE models in parallel.
+    num_of_consumers: int = 2  # Number of consumer processes that will train RE models in parallel.
 
 
 class RandomEffectLRLBFGSModel(Model):
@@ -46,8 +46,6 @@ class RandomEffectLRLBFGSModel(Model):
 
     Supports training entity-based models. Several models can be trained in parallel on multiple processes.
     """
-
-    COMMA_SEPARATOR = ","
 
     def __init__(self, raw_model_params):
         super(RandomEffectLRLBFGSModel, self).__init__(raw_model_params)
@@ -254,8 +252,8 @@ class RandomEffectLRLBFGSModel(Model):
         if not tf.io.gfile.exists(output_dir):
             tf.io.gfile.makedirs(output_dir)
         # Delegate to export function
-        export_scipy_lr_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values, biases, feature_file,
-                                      output_file)
+        export_linear_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values, biases, feature_file,
+                                    output_file)
 
     def _load_weights(self, model_dir, model_index, catch_exception=False):
         model_file = os.path.join(model_dir, "part-{0:05d}.avro".format(model_index))
@@ -270,10 +268,8 @@ class RandomEffectLRLBFGSModel(Model):
             else:
                 raise FileNotFoundError(f"Model file {model_file} does not exist")
 
-        # Read feature file and map features to global index
-        feature_list = read_feature_list(self.model_params.feature_file)
-        feature2global_id = {feat[0] + RandomEffectLRLBFGSModel.COMMA_SEPARATOR + feat[1]: global_id for global_id, feat
-                             in enumerate(feature_list)}
+        # Read feature index map
+        feature2global_id = get_feature_map(self.model_params.feature_file)
 
         # Get the model file and read the avro model
         model_coefficients = {}
@@ -295,9 +291,8 @@ class RandomEffectLRLBFGSModel(Model):
             model_coefficients.append(np.float64(ntv["value"]))
             # Add global index if non-intercept feature
             if idx != 0:
-                unique_global_indices.append(
-                    feature2global_id[ntv["name"] + RandomEffectLRLBFGSModel.COMMA_SEPARATOR + ntv["term"]])
-
+                name_term_string = name_term_to_string(ntv["name"], ntv["term"])
+                unique_global_indices.append(feature2global_id[name_term_string])
         return model_id, TrainingResult(training_result=np.array(model_coefficients),
                                         unique_global_indices=np.array(unique_global_indices))
 

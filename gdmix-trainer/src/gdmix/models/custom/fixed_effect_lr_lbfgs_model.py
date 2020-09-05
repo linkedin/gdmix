@@ -19,8 +19,8 @@ from gdmix.models.photon_ml_writer import PhotonMLWriter
 from gdmix.params import SchemaParams, Params
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
-from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, export_scipy_lr_model_to_avro, \
-    load_scipy_models_from_avro, copy_files
+from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, export_linear_model_to_avro, \
+    load_linear_models_from_avro, copy_files
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -498,12 +498,12 @@ class FixedEffectLRModelLBFGS(Model):
         bias = self.model_coefficients[-1]
         list_of_weight_indices = np.arange(weights.shape[0])
         output_file = os.path.join(self.checkpoint_path, "part-00000.avro")
-        export_scipy_lr_model_to_avro(model_ids=["global model"],
-                                      list_of_weight_indices=np.expand_dims(list_of_weight_indices, axis=0),
-                                      list_of_weight_values=np.expand_dims(weights, axis=0),
-                                      biases=np.expand_dims(bias, axis=0),
-                                      feature_file=self.feature_file,
-                                      output_file=output_file)
+        export_linear_model_to_avro(model_ids=["global model"],
+                                    list_of_weight_indices=np.expand_dims(list_of_weight_indices, axis=0),
+                                    list_of_weight_values=np.expand_dims(weights, axis=0),
+                                    biases=np.expand_dims(bias, axis=0),
+                                    feature_file=self.feature_file,
+                                    output_file=output_file)
 
     def _load_model(self, catch_exception=False):
         """ Load model from avro file. """
@@ -513,7 +513,7 @@ class FixedEffectLRModelLBFGS(Model):
         if model_exist:
             model_file = tf1.io.gfile.glob("{}/*.avro".format(self.checkpoint_path))
             if len(model_file) == 1:
-                model = load_scipy_models_from_avro(model_file[0])[0]
+                model = load_linear_models_from_avro(model_file[0], self.feature_file)[0]
             elif not catch_exception:
                 raise ValueError("Load model failed, no model file or multiple model"
                                  " files found in the model diretory {}".format(self.checkpoint))
