@@ -18,15 +18,21 @@ class TestIoUtils(tf.test.TestCase):
         self.terms = ['x', '', 'z']
         self.name_term_strings = ['a,x', 'b,', 'c,z']
         self.feature_file = os.path.join(self.base_dir, 'feature.txt')
+        self.short_feature_file = os.path.join(self.base_dir, 'short_feature.txt')
         self.model_file = os.path.join(self.base_dir, 'model.avro')
         self.weight_indices = [np.array([0, 2]), np.array([0, 1, 2])]
         self.weight_values = [np.array([0.1, 0.2]), np.array([1.1, 0.3, 0.4])]
         self.biases = np.array([0.5, -0.7])
         self.expected_models = [[0.1, 0, 0.2, 0.5], [1.1, 0.3, 0.4, -0.7]]
+        self.expected_short_models = [[0.1, 0, 0.5], [1.1, 0.3, -0.7]]
 
         with open(self.feature_file, 'w') as f:
             for feature in self.name_term_strings:
                 f.write(feature + "\n")
+        # feature list with one fewer feature.
+        with open(self.short_feature_file, 'w') as f:
+            for i in range(len(self.name_term_strings)-1):
+                f.write(self.name_term_strings[i] + "\n")
         export_linear_model_to_avro(model_ids=["model 1", "model 2"],
                                     list_of_weight_indices=self.weight_indices,
                                     list_of_weight_values=self.weight_values,
@@ -62,6 +68,9 @@ class TestIoUtils(tf.test.TestCase):
         models = load_linear_models_from_avro(self.model_file, self.feature_file)
         for i in range(len(models)):
             self.assertAllEqual(models[i], self.expected_models[i])
+        short_models = load_linear_models_from_avro(self.model_file, self.short_feature_file)
+        for i in range(len(short_models)):
+            self.assertAllEqual(short_models[i], self.expected_short_models[i])
 
     def testGenOneAvroModel(self):
         """

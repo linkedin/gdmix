@@ -64,8 +64,9 @@ def load_linear_models_from_avro(model_file, feature_file):
                 model_coefficients[num_features] = value  # Intercept at the end.
             else:
                 full_feature_name = name_term_to_string(name, term)
-                feature_index = feature_map[full_feature_name]
-                model_coefficients[feature_index] = value
+                if full_feature_name in feature_map:  # Take only the features that in the current training dataset.
+                    feature_index = feature_map[full_feature_name]
+                    model_coefficients[feature_index] = value
         return model_coefficients
 
     models = []
