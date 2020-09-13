@@ -1,5 +1,8 @@
 import argparse
 import collections
+import itertools
+from typing import Iterator
+
 import fastavro
 import json
 import logging
@@ -16,10 +19,11 @@ logger.setLevel(logging.INFO)
 INTERCEPT = "(INTERCEPT)"
 
 
-def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
+def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None, wipe_records=False):
     """
     write a block into avro file. This is used continuously when the whole file does not fit in memory.
 
+    :param wipe_records: Wipe records after a successful write if True
     :param f: file handle.
     :param schema: avro schema used by the writer.
     :param records: a set of records to be written to the avro file.
@@ -29,7 +33,8 @@ def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
     """
     try:
         fastavro.writer(f, schema, records)
-        records[:] = []
+        if wipe_records:
+            records.clear()
         if suc_msg:
             logger.info(suc_msg)
     except Exception as exp:
@@ -133,34 +138,17 @@ def export_linear_model_to_avro(model_ids,
     logger.info("num features: {}".format(num_features))
 
     # STEP [3]
-    model_avro_records = []
     schema = fastavro.parse_schema(json.loads(BAYESIAN_LINEAR_MODEL_SCHEMA))
-    with tf.io.gfile.GFile(output_file, 'wb') as f:
-        f.seekable = lambda: False
-        records = gen_one_avro_model(str(model_ids[0]), model_class, list_of_weight_indices[0],
-                                     list_of_weight_values[0],
-                                     biases[0], feature_list)
-        model_avro_records.append(records)
-        err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[0], output_file)
-        try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
 
-    # write the remaining models
-    with tf.io.gfile.GFile(output_file, 'ab+') as f:
-        f.seek(0, 2)  # seek to the end of the file, 0 is offset, 2 means the end of file
-        f.seekable = lambda: True
-        f.readable = lambda: True
-        for i in range(1, num_models):
+    def batched_records():
+        for i in range(0, num_models):
             records = gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i],
                                          list_of_weight_values[i],
                                          biases[i], feature_list)
-            model_avro_records.append(records)
-            if i % model_log_interval == 0:
-                err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[i], output_file)
-                try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-        if len(model_avro_records):
-            err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[-1], output_file)
-            try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-    logger.info("dumped avro model file at {}".format(output_file))
+            yield records
+
+    batched_write_avro(batched_records(), output_file, schema, model_log_interval)
+    logger.info(f"dumped avro model file at {output_file}")
 
 
 def read_feature_list(feature_file):
@@ -185,10 +173,9 @@ def name_term_from_string(name_term_string):
     :param name_term_string: A string where name and term joined by ","
     :return: (name, term) tuple
     """
-    fields = name_term_string.split(',')
-    if len(fields) == 1:
-        fields.append('')
-    return fields[0], fields[1]
+    name, *term = name_term_string.split(',')
+    assert len(term) <= 1, f"One ',' expected, but found more in {name_term_string!r}."
+    return name, term[0] if term else ''
 
 
 def name_term_to_string(name, term):
@@ -225,13 +212,12 @@ def read_json_file(file_path: str):
     """
 
     if not tf.io.gfile.exists(file_path):
-        raise IOError("Path '{}' does not exist.".format(file_path))
+        raise IOError(f"Path '{file_path}' does not exist.")
     try:
         with tf.io.gfile.GFile(file_path) as json_file:
             return json.load(json_file)
     except Exception as e:
-        raise ValueError("Error '{}' while loading file '{}'."
-                         .format(e, file_path))
+        raise ValueError(f"Error '{e}' while loading file '{file_path}'.")
 
 
 def str2bool(v):
@@ -286,3 +272,78 @@ def namedtuple_with_defaults(typename, field_names, defaults=()):
         prototype = T(*defaults)
     T.__new__.__defaults__ = tuple(prototype)
     return T
+
+
+def batched_write_avro(records: Iterator, output_file, schema, write_frequency=1000, batch_size=1024):
+    """ For the first block, the file needs to be open in âwâ mode, while the
+        rest of the blocks needs the âaâ mode. This restriction makes it
+        necessary to open the files at least twice, one for the first block,
+        one for the remaining. So itâs not possible to put them into the
+        while loop within a file context.  """
+    f = None
+    t0 = time.time()
+    n_batch = 0
+    logger.info(f"Writing to {output_file} with batch size of {batch_size}.")
+    try:
+        for batch in _chunked_iterator(records, batch_size):
+            if n_batch == 0:
+                with tf.io.gfile.GFile(output_file, 'wb') as f0:  # Create the file in 'w' mode
+                    f0.seekable = lambda: False
+                    try_write_avro_blocks(f0, schema, batch, None, create_error_message(n_batch, output_file))
+                f = tf.io.gfile.GFile(output_file, 'ab+')  # reopen the file in 'a' mode for later writes
+                f.seekable = f.readable = lambda: True
+                f.seek(0, 2)  # seek to the end of the file, 0 is offset, 2 means the end of file
+            else:
+                try_write_avro_blocks(f, schema, batch, None, create_error_message(n_batch, output_file))
+            n_batch += 1
+            if n_batch % write_frequency == 0:
+                delta_time = time.time() - t0
+                logger.info(f"nbatch = {n_batch}, deltaT = {delta_time:0.2f} seconds, speed = {n_batch / delta_time :0.2f} batches/sec")
+        logger.info(f"Finished writing to {output_file}.")
+    finally:
+        f and f.close()
+
+
+def _chunked_iterator(iterator: Iterator, chuck_size):
+    while True:
+        chunk_it = itertools.islice(iterator, chuck_size)
+        try:
+            first_el = next(chunk_it)
+            yield itertools.chain((first_el,), chunk_it)
+        except StopIteration:
+            return
+
+
+def create_error_message(n_batch, output_file) -> str:
+    return f'An error occurred while writing batch #{n_batch} to path {output_file}'
+
+
+def dataset_reader(dataset=None, iterator=None):
+    """Create an python iterator/generator with the TF dataset or interator"""
+    assert dataset and not iterator or iterator, "Either dataset or iterator_and_fetches are needed."
+    logger.info("Dataset initialized")
+    # Create TF iterator
+    iterator = iterator or tf.compat.v1.data.make_initializable_iterator(dataset)
+    # Iterate through TF dataset in a throttled manner
+    # (Forking after the TensorFlow runtime creates internal threads is unsafe, use config provided in this
+    # link -
+    # https://github.com/tensorflow/tensorflow/issues/14442)
+    with tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(use_per_session_threads=True)) as sess:
+        sess.run(iterator.initializer)
+        while True:
+            try:
+                # Extract and process raw entity data
+                yield sess.run(iterator.get_next())
+            except tf.errors.OutOfRangeError:
+                break
+
+
+def get_inference_output_avro_schema(metadata, has_label, has_logits_per_coordinate, schema_params, has_weight=False):
+    fields = [{'name': schema_params.sample_id, 'type': 'long'}, {'name': schema_params.prediction_score, 'type': 'float'}]
+    if has_label:
+        fields.append({'name': schema_params.label, 'type': 'int'})
+    if has_weight or metadata.get(schema_params.sample_weight) is not None:
+        fields.append({'name': schema_params.sample_weight, 'type': 'float'})
+    if has_logits_per_coordinate:
+        fields.append({'name': schema_params.prediction_score_per_coordinate, 'type': 'float'})
+    return {'name': 'validation_result', 'type': 'record', 'fields': fields}

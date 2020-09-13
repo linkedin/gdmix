@@ -16,8 +16,7 @@ class FixedEffectDriver(Driver):
     """
 
     def __init__(self, base_training_params, model):
-        self.effect_name = constants.FIXED_EFFECT
-        super().__init__(base_training_params, model)
+        super().__init__(base_training_params, model, constants.FIXED_EFFECT)
 
     def _validate_params(self):
         pass

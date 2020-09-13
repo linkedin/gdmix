@@ -20,10 +20,9 @@ class BinaryLogisticRegressionTrainer:
     intercept term or not.
     """
 
-    def __init__(self, lambda_l2=1.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10, max_iter=100,
-                 regularize_bias=False):
+    def __init__(self, lambda_l2=1.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10, max_iter=100, regularize_bias=False):
         self.lambda_l2 = lambda_l2
-        assert solver in ["lbfgs"]
+        assert solver in ("lbfgs",)
         self.solver = solver
 
         # Iterations stop when (f^k - f^{k+1})/max{|f^k|,|f^{k+1}|,1} <= precision * eps

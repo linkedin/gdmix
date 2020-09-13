@@ -22,7 +22,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         base_training_params = setup_fake_base_training_params(training_stage=constants.RANDOM_EFFECT)
         base_training_params.batch_size = 2
         # flatten the params
-        raw_params = base_training_params.__to_argv__()
+        raw_params = list(base_training_params.__to_argv__())
         model_params = setup_fake_raw_model_params(training_stage=constants.RANDOM_EFFECT)
         raw_params.extend(model_params)
         raw_params.extend(['--' + constants.MODEL_IDS_DIR, test_dataset_path])
@@ -84,7 +84,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
                           execution_context=training_context, schema_params=schema_params)
 
         # Cycle through model AVRO output and assert each record is a dictionary
-        with open(os.path.join(avro_model_output_dir, "part-{0:05d}.avro".format(0)), 'rb') as fo:
+        with open(os.path.join(avro_model_output_dir, f"part-{0:05d}.avro"), 'rb') as fo:
             for record in reader(fo):
                 self.assertTrue(isinstance(record, dict))
 

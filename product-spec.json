@@ -85,7 +85,7 @@
     "commonsCli": "commons-cli:commons-cli:1.2",
     "commonsIo": "commons-io:commons-io:2.6",
     "decorator": "pypi:decorator:4.4.2",
-    "smartArg": "pypi:smart-arg:0.1.1",
+    "smartArg": "pypi:smart-arg:0.2.12",
     "detext": "pypi:detext-nodep:2.0.9",
     "fastavro": "pypi:fastavro:0.21.22",
     "jacksonDataBindFasterXML": "com.fasterxml.jackson.core:jackson-databind:2.6.7.1",

@@ -31,12 +31,13 @@ class Driver(abc.ABC):
 
     """
 
-    def __init__(self, base_training_params, model):
+    def __init__(self, base_training_params, model, effect_name):
         self.base_training_params = base_training_params
         self.model = model
         # Verify parameters and setup cluster
         self._validate_params()
         self.execution_context = self._setup_cluster()
+        self.effect_name = effect_name
 
     @abc.abstractmethod
     def _validate_params(self):
@@ -152,32 +153,20 @@ class Driver(abc.ABC):
                 "Commencing {} inference for partition index : {}".format(self.effect_name, partition_index))
 
             self.execution_context[constants.PARTITION_INDEX] = partition_index
-            if self.model.training_data_path is not None:
-                # Resolve partitioned data path from raw path params from user
-                training_data_path = self._anchor_directory(self.model.training_data_path, partition_index)
-                inference_output_dir = os.path.join(
-                    self._anchor_directory(self.base_training_params.training_output_dir, partition_index))
+            for input_path, output_path in ((self.model.training_data_path, self.base_training_params.training_output_dir),
+                                            (self.model.validation_data_path, self.base_training_params.validation_output_dir)):
+                if input_path:
+                    # Resolve partitioned data path from raw path params from user
+                    data_path = self._anchor_directory(input_path, partition_index)
+                    output_dir = os.path.join(self._anchor_directory(output_path, partition_index))
 
-                # Run inference
-                self.model.predict(output_dir=inference_output_dir,
-                                   input_data_path=training_data_path,
-                                   metadata_file=self.model.metadata_file,
-                                   checkpoint_path=self.model.checkpoint_path,
-                                   execution_context=self.execution_context,
-                                   schema_params=schema_params)
-            if self.model.validation_data_path is not None:
-                # Resolve partitioned data path from raw path params from user
-                validation_data_path = self._anchor_directory(self.model.validation_data_path, partition_index)
-                inference_output_dir = os.path.join(
-                    self._anchor_directory(self.base_training_params.validation_output_dir, partition_index))
-
-                # Run inference
-                self.model.predict(output_dir=inference_output_dir,
-                                   input_data_path=validation_data_path,
-                                   metadata_file=self.model.metadata_file,
-                                   checkpoint_path=self.model.checkpoint_path,
-                                   execution_context=self.execution_context,
-                                   schema_params=schema_params)
+                    # Run inference
+                    self.model.predict(output_dir=output_dir,
+                                       input_data_path=data_path,
+                                       metadata_file=self.model.metadata_file,
+                                       checkpoint_path=self.model.checkpoint_path,
+                                       execution_context=self.execution_context,
+                                       schema_params=schema_params)
             logger.info(
                 "Inference for partition index : {} complete".format(partition_index))
 
@@ -209,7 +198,7 @@ class Driver(abc.ABC):
             # If passive dataset exists, add it to training context
             passive_dataset_path = self._anchor_directory(self.model.passive_training_data_path, partition_index)
             if tf.io.gfile.exists(passive_dataset_path) and len(tf.io.gfile.glob(
-                    os.path.join(passive_dataset_path, constants.TFRECORD_REGEX_PATTERN))) != 0:
+                    os.path.join(passive_dataset_path, constants.TFRECORD_GLOB_PATTERN))) != 0:
                 training_context[constants.PASSIVE_TRAINING_DATA_PATH] = passive_dataset_path
             # Add paths for inference output
             training_context[constants.ACTIVE_TRAINING_OUTPUT_FILE] = active_training_inference_output_file

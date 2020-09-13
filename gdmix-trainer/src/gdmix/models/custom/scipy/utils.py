@@ -9,8 +9,7 @@ INDICES_SUFFIX = "_indices"
 VALUES_SUFFIX = "_values"
 
 
-def convert_to_training_jobs(features_val, labels_val, conversion_params, num_features,
-                             enable_local_indexing=False):
+def convert_to_training_jobs(features_val, labels_val, conversion_params, num_features, enable_local_indexing=False):
     """
     Utility method to take a batch of TF grouped data and convert it into one or more TrainingJobs.
     Useful for running training and inference
@@ -25,7 +24,6 @@ def convert_to_training_jobs(features_val, labels_val, conversion_params, num_fe
     num_entities = features_val[conversion_params.partition_entity].shape[0]
 
     # Now, construct entity_id, X, y, offsets, uids and weights
-    training_jobs = []
     X_index = 0
     y_index = 0
     for entity in range(num_entities):
@@ -35,10 +33,8 @@ def convert_to_training_jobs(features_val, labels_val, conversion_params, num_fe
         # Construct data matrix X. Slice portion of arrays from X_index through the number of rows for the entity
         indices = features_val[conversion_params.feature_bags[0] + INDICES_SUFFIX].indices
         rows = indices[np.where(indices[:, 0] == entity)][:, 1]
-        values = features_val[conversion_params.feature_bags[0] + VALUES_SUFFIX].values[
-                 X_index: X_index + len(rows)]
-        cols = features_val[conversion_params.feature_bags[0] + INDICES_SUFFIX].values[
-               X_index: X_index + len(rows)]
+        values = features_val[conversion_params.feature_bags[0] + VALUES_SUFFIX].values[X_index: X_index + len(rows)]
+        cols = features_val[conversion_params.feature_bags[0] + INDICES_SUFFIX].values[X_index: X_index + len(rows)]
 
         # Get sample count
         sample_count = np.amax(rows) + 1
@@ -53,20 +49,14 @@ def convert_to_training_jobs(features_val, labels_val, conversion_params, num_fe
 
         # Construct y, offsets, weights and ids. Slice portion of arrays from y_index through sample_count
         y = labels_val[conversion_params.label].values[y_index: y_index + sample_count]
-        offsets = features_val[conversion_params.offset].values[
-                  y_index: y_index + sample_count]
-        if conversion_params.sample_weight in features_val:
-            weights = features_val[conversion_params.sample_weight].values[
-                      y_index: y_index + sample_count]
-        else:
-            weights = np.ones(sample_count)
+        offsets = features_val[conversion_params.offset].values[y_index: y_index + sample_count]
+        weights = (features_val[conversion_params.sample_weight].values[y_index: y_index + sample_count] if conversion_params.sample_weight in features_val else
+                   np.ones(sample_count))
 
         ids = features_val[conversion_params.sample_id].values[y_index: y_index + sample_count]
 
-        training_jobs.append(TrainingJob(entity_id=entity_id, X=X, y=y, offsets=offsets, weights=weights, ids=ids,
-                                         unique_global_indices=unique_global_indices))
+        yield TrainingJob(entity_id=entity_id, X=X, y=y, offsets=offsets, weights=weights, ids=ids, unique_global_indices=unique_global_indices)
 
         # Update X_index and y_index
         y_index += sample_count
         X_index += len(rows)
-    return training_jobs

@@ -15,15 +15,7 @@ class DatasetMetadata:
         'string': tf.string
     }
 
-    TF_INT_DTYPES = set([
-        tf.int8,
-        tf.uint8,
-        tf.uint16,
-        tf.uint32,
-        tf.uint64,
-        tf.int16,
-        tf.int32,
-        tf.int64])
+    TF_INT_DTYPES = {tf.int8, tf.uint8, tf.uint16, tf.uint32, tf.uint64, tf.int16, tf.int32, tf.int64}
 
     FEATURES = "features"
     LABELS = "labels"

@@ -1,7 +1,7 @@
 import logging
 import os
 from dataclasses import dataclass, asdict, replace
-from multiprocessing import Queue, Manager
+from multiprocessing import Manager
 from typing import Optional
 
 import fastavro
@@ -20,7 +20,8 @@ from gdmix.models.custom.scipy.utils import convert_to_training_jobs
 from gdmix.models.photon_ml_writer import PhotonMLWriter
 from gdmix.params import SchemaParams
 from gdmix.util import constants
-from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, name_term_to_string
+from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, name_term_to_string, batched_write_avro, dataset_reader, \
+    get_inference_output_avro_schema
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,6 +40,9 @@ class REParams(LRParams):
     max_training_queue_size: int = 10  # Maximum size of training job queue
     training_queue_timeout_in_seconds: int = 300  # Training queue put timeout in seconds.
     num_of_consumers: int = 2  # Number of consumer processes that will train RE models in parallel.
+
+    def __post_init__(self):
+        assert self.max_training_queue_size > self.num_of_consumers, "queue size limit must be larger than the number of consumers"
 
 
 @dataclass
@@ -61,29 +65,27 @@ class RandomEffectLRLBFGSModel(Model):
         # If TRAIN_DATA_PATH is set, initialize active/passive training data path, else set to None
         if self.model_params.train_data_path is not None:
             self.training_data_path = os.path.join(self.model_params.train_data_path, constants.ACTIVE)
-            self.passive_training_data_path = os.path.join(self.model_params.train_data_path,
-                                                           constants.PASSIVE)
+            self.passive_training_data_path = os.path.join(self.model_params.train_data_path, constants.PASSIVE)
         else:
             self.training_data_path = None
             self.passive_training_data_path = None
         self.validation_data_path = self.model_params.validation_data_path
         self.partition_index = None
 
-    def train(self, training_data_path, validation_data_path, metadata_file, checkpoint_path, execution_context,
-              schema_params):
+    def train(self, training_data_path, validation_data_path, metadata_file, checkpoint_path, execution_context, schema_params):
         logger.info("Kicking off random effect custom LR training")
         self.partition_index = execution_context[constants.PARTITION_INDEX]
 
         # Create training and validation datasets
         train_data = per_entity_grouped_input_fn(
-            input_path=os.path.join(training_data_path, constants.TFRECORD_REGEX_PATTERN),
+            input_path=os.path.join(training_data_path, constants.TFRECORD_GLOB_PATTERN),
             metadata_file=metadata_file,
             num_shards=1, shard_index=0,
             batch_size=self.model_params.batch_size,
             data_format=self.model_params.data_format,
             entity_name=self.model_params.partition_entity)
         validation_data = per_entity_grouped_input_fn(
-            input_path=os.path.join(validation_data_path, constants.TFRECORD_REGEX_PATTERN),
+            input_path=os.path.join(validation_data_path, constants.TFRECORD_GLOB_PATTERN),
             metadata_file=metadata_file,
             num_shards=1, shard_index=0,
             batch_size=self.model_params.batch_size,
@@ -91,54 +93,59 @@ class RandomEffectLRLBFGSModel(Model):
             entity_name=self.model_params.partition_entity)
         logger.info("Training and validation datasets created")
 
-        # Assert that the queue size limit is larger than the number of consumers
-        assert (self.model_params.max_training_queue_size > self.model_params.num_of_consumers)
-
-        # Queue 1 - Training Job Queue
-        training_job_queue = Queue(self.model_params.max_training_queue_size)
-
-        # Create a bunch of consumers
-        training_job_consumers = [
-            TrainingJobConsumer(consumer_id=i,
-                                regularize_bias=self.model_params.regularize_bias,
-                                tolerance=self.model_params.lbfgs_tolerance,
-                                lambda_l2=self.model_params.l2_reg_weight,
-                                num_of_curvature_pairs=self.model_params.num_of_lbfgs_curvature_pairs,
-                                num_iterations=self.model_params.num_of_lbfgs_iterations) for i in
-            range(self.model_params.num_of_consumers)]
-
         # Read tensor metadata
         metadata = read_json_file(metadata_file)
         tensor_metadata = DatasetMetadata(metadata)
 
         # Extract number of features. NOTE - only one feature bag is supported
-        num_features = next(filter(lambda x: x.name == self.model_params.feature_bags[0],
-                                   tensor_metadata.get_features())).shape[0]
+        num_features = next(filter(lambda x: x.name == self.model_params.feature_bags[0], tensor_metadata.get_features())).shape[0]
         assert num_features > 0, "number of features must > 0"
 
         # load initial model if available
-        initial_model_weights = self._load_weights(self.model_params.model_output_dir,
-                                                   self.partition_index, True)
-        if len(initial_model_weights) > 0:
+        initial_model_weights = self._load_weights(self.model_params.model_output_dir, self.partition_index, True)
+        if initial_model_weights:
             logger.info("Found a previous model, loaded as an initial point for training.")
         else:
             logger.info("No previous models found, use all zeros as the model initial point")
+
         # Train using a bounded buffer solution
         with Manager() as manager:
-            managed_results_dictionary = manager.dict()
-            managed_results_dictionary.update(initial_model_weights)
+            managed_results_dictionary = manager.dict(initial_model_weights)
+
+            # Training Job Queue
+            training_job_queue = manager.Queue(self.model_params.max_training_queue_size)
 
             # Create and kick-off one or more consumer jobs
-            consumer_processes = [
-                GDMixProcess(target=training_job_consumer, args=(training_job_queue, managed_results_dictionary,
-                                                                 self.model_params.training_queue_timeout_in_seconds,))
-                for training_job_consumer in training_job_consumers]
+            consumer_processes = tuple(
+                GDMixProcess(target=TrainingJobConsumer(consumer_id=i,
+                                                        training_results=managed_results_dictionary,
+                                                        regularize_bias=self.model_params.regularize_bias,
+                                                        tolerance=self.model_params.lbfgs_tolerance,
+                                                        lambda_l2=self.model_params.l2_reg_weight,
+                                                        num_of_curvature_pairs=self.model_params.num_of_lbfgs_curvature_pairs,
+                                                        num_iterations=self.model_params.num_of_lbfgs_iterations,
+                                                        timeout_in_seconds=self.model_params.training_queue_timeout_in_seconds,
+                                                        ),
+                             args=(training_job_queue,))
+                for i in range(self.model_params.num_of_consumers))
             for consumer_process in consumer_processes:
                 consumer_process.start()
 
             try:
                 # Start producing training jobs
-                self._produce_training_jobs(train_data, training_job_queue, schema_params, num_features)
+                processed_counter = 0
+                conversion_params = PredictionParams(**asdict(self.model_params), **asdict(schema_params))
+                for training_job in self._produce_training_jobs(train_data, conversion_params, num_features):
+                    # Add training jobs to shared queue
+                    training_job_queue.put(training_job, True, self.model_params.training_queue_timeout_in_seconds)
+                    processed_counter += 1
+
+                    if processed_counter % 1000 == 0:
+                        logger.info(f"Submitted {processed_counter} training job(s) so far")
+
+                # Add a dummy payload to allow each consumer to terminate
+                for _ in range(self.model_params.num_of_consumers):
+                    training_job_queue.put(None)
 
                 # Wait for the consumer(s) to finish
                 for consumer_process in consumer_processes:
@@ -146,11 +153,13 @@ class RandomEffectLRLBFGSModel(Model):
 
                 # Convert managed dictionary to regular dictionary
                 results_dictionary = dict(managed_results_dictionary)
+                exceptions = tuple((idx, p.exception) for idx, p in enumerate(consumer_processes) if p.exception)
+                if exceptions:
+                    logger.info(''.join(f"Consumer process with ID: {idx} failed with exception: {exception}\n" for idx, exception in exceptions))
+                    # re-raise the first child exception
+                    raise RuntimeError from exceptions[0][1][0]
             except Exception as e:
-                for idx, consumer_process in enumerate(consumer_processes):
-                    if consumer_process.exception:
-                        logger.info("Consumer process with ID: {} failed with exception: {}".format(idx, consumer_process.exception))
-                raise Exception("Random effect custom LR training failed. Exception: {}".format(e))
+                raise Exception("Random effect custom LR training failed.") from e
 
         # Dump results to model output directory.
         if self.model_params.feature_file and self.model_params.model_output_dir:
@@ -159,25 +168,21 @@ class RandomEffectLRLBFGSModel(Model):
                              feature_file=self.model_params.feature_file,
                              output_dir=self.model_params.model_output_dir)
         else:
-            logger.info(
-                "Both feature file and avro model output directory required to export model. Skipping export")
+            logger.info("Both feature file and avro model output directory required to export model. Skipping export")
 
         # Run inference on active training set
-        prediction_params = PredictionParams(**asdict(self.model_params), **asdict(schema_params))
         if constants.ACTIVE_TRAINING_OUTPUT_FILE in execution_context:
             logger.info("Running inference on the active training dataset")
             self._predict(inference_dataset=train_data, model_coefficients=results_dictionary, metadata=metadata,
                           tensor_metadata=tensor_metadata,
                           output_file=execution_context[constants.ACTIVE_TRAINING_OUTPUT_FILE],
-                          prediction_params=prediction_params)
+                          prediction_params=conversion_params)
             logger.info("Inference on active training dataset complete")
 
         # Run inference on passive training set
-        if all(key in execution_context for key in
-               (constants.PASSIVE_TRAINING_DATA_PATH, constants.PASSIVE_TRAINING_OUTPUT_FILE)):
+        if constants.PASSIVE_TRAINING_DATA_PATH in execution_context and constants.PASSIVE_TRAINING_OUTPUT_FILE in execution_context:
             passive_train_data = per_entity_grouped_input_fn(
-                input_path=os.path.join(execution_context[constants.PASSIVE_TRAINING_DATA_PATH],
-                                        constants.TFRECORD_REGEX_PATTERN),
+                input_path=os.path.join(execution_context[constants.PASSIVE_TRAINING_DATA_PATH], constants.TFRECORD_GLOB_PATTERN),
                 metadata_file=metadata_file,
                 num_shards=1, shard_index=0,
                 batch_size=self.model_params.batch_size,
@@ -188,7 +193,7 @@ class RandomEffectLRLBFGSModel(Model):
                           metadata=metadata,
                           tensor_metadata=tensor_metadata,
                           output_file=execution_context[constants.PASSIVE_TRAINING_OUTPUT_FILE],
-                          prediction_params=prediction_params)
+                          prediction_params=conversion_params)
             logger.info("Inference on passive training dataset complete")
 
         # Run inference on validation set
@@ -197,46 +202,16 @@ class RandomEffectLRLBFGSModel(Model):
             self._predict(inference_dataset=validation_data, model_coefficients=results_dictionary, metadata=metadata,
                           tensor_metadata=tensor_metadata,
                           output_file=execution_context[constants.VALIDATION_OUTPUT_FILE],
-                          prediction_params=prediction_params)
+                          prediction_params=conversion_params)
             logger.info("Inference on validation dataset complete")
 
-    def _produce_training_jobs(self, train_data, training_job_queue, schema_params, num_features):
+    def _produce_training_jobs(self, train_data, conversion_params, num_features):
         logger.info("Kicking off training job producer")
-        # Create TF iterator
-        iterator = tf.compat.v1.data.make_initializable_iterator(train_data)
-        features, labels = iterator.get_next()
-        logger.info("Dataset initialized")
-        # Iterate through TF dataset in a throttled manner
-        # (Forking after the TensorFlow runtime creates internal threads is unsafe, use config provided in this
-        # link -
-        # https://github.com/tensorflow/tensorflow/issues/14442)
-        processed_counter = 0
-        prediction_params = PredictionParams(**asdict(self.model_params), **asdict(schema_params))
-        with tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(use_per_session_threads=True)) as sess:
-            sess.run(iterator.initializer)
-            while True:
-                try:
-                    # Extract and process raw entity data
-                    features_val, labels_val = sess.run([features, labels])
-                    training_jobs = convert_to_training_jobs(features_val, labels_val,
-                                                             prediction_params,
-                                                             num_features=num_features,
-                                                             enable_local_indexing=self.model_params.enable_local_indexing)
-
-                    # Add training jobs to shared queue
-                    [training_job_queue.put(training_job, True,
-                                            self.model_params.training_queue_timeout_in_seconds) for
-                     training_job in training_jobs]
-                    processed_counter += len(training_jobs)
-
-                    if processed_counter % 1000 == 0:
-                        logger.info(f"Submitted {processed_counter} training job(s) so far")
-
-                except tf.errors.OutOfRangeError:
-                    break
-        # Add a dummy payload to allow each consumer to terminate
-        for i in range(self.model_params.num_of_consumers):
-            training_job_queue.put(None)
+        for features_val, labels_val in dataset_reader(train_data):
+            yield from convert_to_training_jobs(features_val, labels_val,
+                                                conversion_params,
+                                                num_features=num_features,
+                                                enable_local_indexing=self.model_params.enable_local_indexing)
 
     def _save_model(self, model_index, model_coefficients, feature_file, output_dir):
 
@@ -256,12 +231,11 @@ class RandomEffectLRLBFGSModel(Model):
                 list_of_weight_indices.append(np.arange(model_coefficients[entity_id].training_result[1:].shape[0]))
 
         # Create output file
-        output_file = os.path.join(output_dir, "part-{0:05d}.avro".format(model_index))
+        output_file = os.path.join(output_dir, f"part-{model_index:05d}.avro")
         if not tf.io.gfile.exists(output_dir):
             tf.io.gfile.makedirs(output_dir)
         # Delegate to export function
-        export_linear_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values, biases, feature_file,
-                                    output_file)
+        export_linear_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values, biases, feature_file, output_file)
 
     def _load_weights(self, model_dir, model_index, catch_exception=False):
         model_file = os.path.join(model_dir, "part-{0:05d}.avro".format(model_index))
@@ -301,20 +275,18 @@ class RandomEffectLRLBFGSModel(Model):
             if idx != 0:
                 name_term_string = name_term_to_string(ntv["name"], ntv["term"])
                 unique_global_indices.append(feature2global_id[name_term_string])
-        return model_id, TrainingResult(training_result=np.array(model_coefficients),
-                                        unique_global_indices=np.array(unique_global_indices))
+        return model_id, TrainingResult(training_result=np.array(model_coefficients), unique_global_indices=np.array(unique_global_indices))
 
     def predict(self, output_dir, input_data_path, metadata_file, checkpoint_path, execution_context, schema_params):
-        logger.info("Running inference on dataset : {}, results to be written to path : {}".format(
-            input_data_path, output_dir))
+        logger.info(f"Running inference on dataset : {input_data_path}, results to be written to path : {output_dir}")
 
         # Create output file path
         self.partition_index = execution_context[constants.PARTITION_INDEX]
-        output_file = os.path.join(output_dir, "part-{0:05d}.avro".format(self.partition_index))
+        output_file = os.path.join(output_dir, f"part-{self.partition_index:05d}.avro")
 
         # Create training and validation datasets
         inference_dataset = per_entity_grouped_input_fn(
-            input_path=os.path.join(input_data_path, constants.TFRECORD_REGEX_PATTERN),
+            input_path=os.path.join(input_data_path, constants.TFRECORD_GLOB_PATTERN),
             metadata_file=metadata_file,
             num_shards=1, shard_index=0,
             batch_size=self.model_params.batch_size,
@@ -336,27 +308,35 @@ class RandomEffectLRLBFGSModel(Model):
                       tensor_metadata=tensor_metadata, output_file=output_file,
                       prediction_params=PredictionParams(**asdict(self.model_params), **asdict(schema_params)))
 
-    def _predict(self, inference_dataset, model_coefficients, metadata, tensor_metadata, output_file,
-                 prediction_params):
+    def _predict(self, inference_dataset, model_coefficients, metadata, tensor_metadata, output_file, prediction_params):
+        # Delegate inference to PhotonMLWriter object
+        # Create dataset iterator
+        iterator = tf.compat.v1.data.make_initializable_iterator(inference_dataset)
+        validation_schema = self.__infer_schema(iterator, metadata, prediction_params, tensor_metadata)
+        num_features = next(filter(lambda x: x.name == prediction_params.feature_bags[0], tensor_metadata.get_features())).shape[0]
 
         # Create LR trainer object for inference
-        lr_trainer = BinaryLogisticRegressionTrainer(regularize_bias=True,
-                                                     lambda_l2=self.model_params.l2_reg_weight)
+        lr_trainer = BinaryLogisticRegressionTrainer(regularize_bias=True, lambda_l2=self.model_params.l2_reg_weight)
 
         # Create PhotonMLWriter object
-        inference_runner = PhotonMLWriter(schema_params=prediction_params)
+        inference_runner = PhotonMLWriter(lr_trainer, model_coefficients, num_features, prediction_params)
+        batched_write_avro(inference_runner.get_batch_iterator(iterator), output_file, validation_schema, inference_runner.INFERENCE_LOG_FREQUENCY)
 
-        # Delegate inference to PhotonMLWriter object
-        inference_runner.run_custom_scipy_re_inference(inference_dataset=inference_dataset,
-                                                       model_coefficients=model_coefficients,
-                                                       lr_model=lr_trainer,
-                                                       metadata=metadata,
-                                                       tensor_metadata=tensor_metadata,
-                                                       output_file=output_file)
+    def __infer_schema(self, iterator, metadata, prediction_params, tensor_metadata):
+        features, labels = iterator.get_next()
+        # Set up output schema
+        has_label = prediction_params.label in labels
+        has_logits_per_coordinate = True  # Always true for custom scipy-based LR
+        has_weight = prediction_params.sample_weight in (feature.name for feature in tensor_metadata.get_features())
+        validation_schema = fastavro.parse_schema(get_inference_output_avro_schema(metadata,
+                                                                                   has_label,
+                                                                                   has_logits_per_coordinate,
+                                                                                   prediction_params,
+                                                                                   has_weight=has_weight))
+        return validation_schema
 
     def export(self, output_model_dir):
-        logger.info(
-            "Model export is done as part of the training() API for random effect LR LBFGS training. Skipping.")
+        logger.info("Model export is done as part of the training() API for random effect LR LBFGS training. Skipping.")
 
     def _parse_parameters(self, raw_model_parameters):
         return REParams.__from_argv__(raw_model_parameters, error_on_unknown=False)

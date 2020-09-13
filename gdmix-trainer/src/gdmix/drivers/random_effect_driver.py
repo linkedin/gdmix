@@ -17,8 +17,7 @@ class RandomEffectDriver(Driver):
     _RANDOM_EFFECT_PARTITION_DIR_PREFIX = "partitionId="
 
     def __init__(self, base_training_params, model):
-        self.effect_name = constants.RANDOM_EFFECT
-        super().__init__(base_training_params, model)
+        super().__init__(base_training_params, model, constants.RANDOM_EFFECT)
 
     def _validate_params(self):
         assert self.base_training_params.model_type == constants.LOGISTIC_REGRESSION, \

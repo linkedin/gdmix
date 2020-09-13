@@ -15,12 +15,11 @@ from gdmix.io.dataset_metadata import DatasetMetadata
 from gdmix.io.input_data_pipeline import per_record_input_fn
 from gdmix.models.api import Model
 from gdmix.models.custom.base_lr_params import LRParams
-from gdmix.models.photon_ml_writer import PhotonMLWriter
 from gdmix.params import SchemaParams, Params
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
 from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, export_linear_model_to_avro, \
-    load_linear_models_from_avro, copy_files
+    load_linear_models_from_avro, copy_files, get_inference_output_avro_schema
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -294,11 +293,11 @@ class FixedEffectLRModelLBFGS(Model):
     def _write_inference_result(self, sample_ids, labels, weights, prediction_score,
                                 prediction_score_per_coordinate, task_index, schema_params: SchemaParams, output_dir):
         """ Write inference results. """
-        photon_ml_writer = PhotonMLWriter(schema_params=schema_params)
-        output_avro_schema = photon_ml_writer.get_inference_output_avro_schema(
+        output_avro_schema = get_inference_output_avro_schema(
             self.metadata,
             self._has_label(schema_params.label),
             True,
+            schema_params,
             has_weight=self._has_feature(schema_params.sample_weight))
         parsed_schema = parse_schema(output_avro_schema)
 
@@ -315,14 +314,14 @@ class FixedEffectLRModelLBFGS(Model):
                 rec[schema_params.sample_weight] = int(rec_weight)
             records.append(rec)
 
-        output_file = os.path.join(output_dir, "part-{0:05d}.avro".format(task_index))
-        error_msg = "worker {} encountered error in writing inference results".format(task_index)
+        output_file = os.path.join(output_dir, f"part-{task_index:05d}.avro")
+        error_msg = f"worker {task_index} encountered error in writing inference results"
         with tf1.gfile.GFile(output_file, 'wb') as f:
             try_write_avro_blocks(f, parsed_schema, records, None, error_msg)
-        logging("Worker {} saved inference result to {}".format(task_index, output_file))
+        logging(f"Worker {task_index} saved inference result to {output_file}")
 
     # TODO(mizhou): All inference results are saved to memory and then write once, give the observation
-    # of samll inference result size (each sample size is only 24 bytes), may need revisiting.
+    # of small inference result size (each sample size is only 24 bytes), may need revisiting.
     def _run_inference(self, x, tf_session, x_placeholder, ops, task_index, schema_params, output_dir):
         """ Run inference on training or validation dataset. """
         start_time = time.time()
@@ -334,7 +333,7 @@ class FixedEffectLRModelLBFGS(Model):
         self._write_inference_result(sample_ids, labels, weights, prediction_score,
                                      prediction_score_per_coordinate, task_index,
                                      schema_params, output_dir)
-        logging("Inference --- {} seconds ---".format(time.time()-start_time))
+        logging(f"Inference --- {time.time() - start_time} seconds ---")
 
     def _check_memory(self):
         """ Check memory usage. """
