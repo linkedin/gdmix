@@ -1,7 +1,7 @@
 {
   "name": "gdmix",
   "group": "com.linkedin.@spec.name@",
-  "version": "0.8.*",
+  "version": "0.9.*",
   "scmUrl": "ssh://git.corp.linkedin.com:29418/multiproducts/gdmix.git",
   "comment": "",
   "description": "Generalized Deep Mixed Models",

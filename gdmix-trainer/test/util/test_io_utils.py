@@ -66,8 +66,8 @@ class TestIoUtils(tf.test.TestCase):
 
     def testLoadModel(self):
         models = load_linear_models_from_avro(self.model_file, self.feature_file)
-        for i in range(len(models)):
-            self.assertAllEqual(models[i], self.expected_models[i])
+        for model, expected in zip(models, self.expected_models):
+            self.assertAllEqual(model, expected)
         short_models = load_linear_models_from_avro(self.model_file, self.short_feature_file)
         for i in range(len(short_models)):
             self.assertAllEqual(short_models[i], self.expected_short_models[i])

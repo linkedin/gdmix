@@ -295,7 +295,6 @@ class FixedEffectLRModelLBFGS(Model):
         """ Write inference results. """
         output_avro_schema = get_inference_output_avro_schema(
             self.metadata,
-            self._has_label(schema_params.label),
             True,
             schema_params,
             has_weight=self._has_feature(schema_params.sample_weight))
@@ -306,8 +305,7 @@ class FixedEffectLRModelLBFGS(Model):
                 zip(sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate):
             rec = {schema_params.sample_id: int(rec_id),
                    schema_params.prediction_score: float(rec_prediction_score),
-                   schema_params.prediction_score_per_coordinate: float(rec_prediction_score_per_coordinate)
-                   }
+                   schema_params.prediction_score_per_coordinate: float(rec_prediction_score_per_coordinate)}
             if self._has_label(schema_params.label):
                 rec[schema_params.label] = int(rec_label)
             if self._has_feature(schema_params.sample_weight):

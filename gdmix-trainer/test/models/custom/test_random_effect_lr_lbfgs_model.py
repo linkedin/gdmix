@@ -65,6 +65,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         base_training_params, raw_params = self.get_raw_params()
         avro_model_output_dir = tempfile.mkdtemp()
         raw_params.extend(['--' + constants.MODEL_OUTPUT_DIR, avro_model_output_dir])
+        raw_params.extend(['--' + constants.ENABLE_LOCAL_INDEXING, 'True'])
 
         # Create random effect LR LBFGS Model
         re_lr_model = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
@@ -147,8 +148,9 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
                           metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
 
+        avro_model_output_file = os.path.join(avro_model_output_dir, f"part-{0:05d}.avro")
         # Read back the model as the warm start initial point.
-        initial_model = re_lr_model._load_weights(avro_model_output_dir, 0)
+        initial_model = re_lr_model._load_weights(avro_model_output_file, 0)
 
         # Step 2: Train for 1 l-bfgs step with warm start
         base_training_params, raw_params = self.get_raw_params('memberId', 1)
@@ -161,13 +163,13 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
                           metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
-        final_model = re_lr_model._load_weights(avro_model_output_dir, 0)
+        final_model = re_lr_model._load_weights(avro_model_output_file, 0)
 
         # Check the model has already converged.
         self.assertEqual(len(initial_model), len(final_model))
         for model_id in initial_model:
-            self.assertAllClose(initial_model[model_id].training_result,
-                                final_model[model_id].training_result,
+            self.assertAllClose(initial_model[model_id].theta,
+                                final_model[model_id].theta,
                                 msg='models mismatch')
 
         # Step 3: Train for 1 l-bfgs step with cold start
@@ -179,13 +181,13 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
                           metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
-        cold_model = re_lr_model._load_weights(avro_model_output_dir, 0)
+        cold_model = re_lr_model._load_weights(avro_model_output_file, 0)
 
         # Check the model has already converged.
         self.assertEqual(len(cold_model), len(final_model))
         for model_id in cold_model:
-            self.assertNotAllClose(cold_model[model_id].training_result,
-                                   final_model[model_id].training_result,
+            self.assertNotAllClose(cold_model[model_id].theta,
+                                   final_model[model_id].theta,
                                    msg='models should not be close')
 
         # remove the temp dir(s) and file(s).

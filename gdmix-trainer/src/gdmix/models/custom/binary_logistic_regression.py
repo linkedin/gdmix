@@ -54,8 +54,7 @@ class BinaryLogisticRegressionTrainer:
         elif scipy.sparse.issparse(theta):
             z = np.array(X.dot(theta).todense()).squeeze() + offsets
         else:
-            raise Exception(
-                "Unknown type for model weights. Accepted types are Numpy ndarray and Scipy sparse matrices")
+            raise Exception(f"Unknown type: {type(theta)!r} for model weights. Accepted types are Numpy ndarray and Scipy sparse matrices")
         return z if return_logits else self._sigmoid(z)
 
     def _get_number_of_samples(self, X):
@@ -162,8 +161,7 @@ class BinaryLogisticRegressionTrainer:
         if theta_initial is None:
             theta_initial = np.zeros(X_with_intercept.shape[1])
 
-        assert theta_initial.shape == (X_with_intercept.shape[1],), \
-            "Initial model should have the same shape as input data"
+        assert theta_initial.shape == (X_with_intercept.shape[1],), "Initial model should have the same shape as input data"
         # Run minimization
         result = fmin_l_bfgs_b(func=self._loss,
                                x0=theta_initial,

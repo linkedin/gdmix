@@ -122,18 +122,15 @@ object OffsetUpdater {
     uid: String): DataFrame = {
 
     val lastCoordinateOffset = dFLastCoordinateOffset
-      .select(col(uid), col(predictionScore) as offset)
-      .withColumn(offset, col(offset).cast(FLOAT))
-      .withColumn(uid, col(uid).cast(LONG))
+      .select(col(uid).cast(LONG), col(predictionScore).cast(FLOAT) as offset)
 
     val offsetUpdated = dFPerCoordinateScoreOpt match {
-      case Some(dFPerCoordinateScore) => {
+      case Some(dFPerCoordinateScore) =>
         val perCoordinateScore = dFPerCoordinateScore.select(col(uid), col(predictionScorePerCoordinate))
         lastCoordinateOffset
           .join(perCoordinateScore, uid)
           .withColumn(offset, col(offset) - col(predictionScorePerCoordinate))
           .drop(predictionScorePerCoordinate)
-      }
 
       case None =>
         lastCoordinateOffset

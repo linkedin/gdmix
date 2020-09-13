@@ -1,15 +1,14 @@
-import argparse
 import collections
 import itertools
+import json
+import logging
+import os
+import time
 from typing import Iterator
 
 import fastavro
-import json
-import logging
 import numpy as np
-import os
 import tensorflow as tf
-import time
 
 from gdmix.models.schemas import BAYESIAN_LINEAR_MODEL_SCHEMA
 
@@ -19,11 +18,10 @@ logger.setLevel(logging.INFO)
 INTERCEPT = "(INTERCEPT)"
 
 
-def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None, wipe_records=False):
+def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
     """
     write a block into avro file. This is used continuously when the whole file does not fit in memory.
 
-    :param wipe_records: Wipe records after a successful write if True
     :param f: file handle.
     :param schema: avro schema used by the writer.
     :param records: a set of records to be written to the avro file.
@@ -33,8 +31,6 @@ def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None, wipe_r
     """
     try:
         fastavro.writer(f, schema, records)
-        if wipe_records:
-            records.clear()
         if suc_msg:
             logger.info(suc_msg)
     except Exception as exp:
@@ -69,19 +65,15 @@ def load_linear_models_from_avro(model_file, feature_file):
                 model_coefficients[num_features] = value  # Intercept at the end.
             else:
                 full_feature_name = name_term_to_string(name, term)
-                if full_feature_name in feature_map:  # Take only the features that in the current training dataset.
-                    feature_index = feature_map[full_feature_name]
+                feature_index = feature_map.get(full_feature_name, None)
+                if feature_index is not None:  # Take only the features that in the current training dataset.
                     model_coefficients[feature_index] = value
         return model_coefficients
 
-    models = []
     feature_map = get_feature_map(feature_file)
     with tf.io.gfile.GFile(model_file, 'rb') as fo:
         avro_reader = fastavro.reader(fo)
-        for record in avro_reader:
-            model_coefficients = get_one_model_weights(record, feature_map)
-            models.append(model_coefficients)
-    return models
+        return tuple(get_one_model_weights(record, feature_map) for record in avro_reader)
 
 
 def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bias, feature_list):
@@ -95,10 +87,8 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     :param feature_list: corresponding feature names
     :return: a model in avro format
     """
-    records = {u'modelId': model_id, u'modelClass': model_class, u'means': [],
-               u'lossFunction': ""}
     record = {u'name': INTERCEPT, u'term': '', u'value': bias}
-    records[u'means'].insert(0, record)
+    records = {u'modelId': model_id, u'modelClass': model_class, u'means': [record], u'lossFunction': ""}
     for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
         feat = feature_list[w_i]
         name, term = name_term_from_string(feat)
@@ -114,8 +104,7 @@ def export_linear_model_to_avro(model_ids,
                                 feature_file,
                                 output_file,
                                 model_log_interval=1000,
-                                model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"
-                                ):
+                                model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"):
     """
     Export random effect logistic regression model in avro format for photon-ml to consume
     :param model_ids:               a list of model ids used in generated avro file
@@ -131,24 +120,18 @@ def export_linear_model_to_avro(model_ids,
     # STEP [1] - Read feature list
     feature_list = read_feature_list(feature_file)
 
-    # STEP [2] - Read number of features and moels
-    num_features = len(feature_list)
+    # STEP [2] - Read number of features and models
     num_models = len(biases)
-    logger.info("found {} models".format(num_models))
-    logger.info("num features: {}".format(num_features))
+    logger.info(f"To save {num_models} models.\n Found {len(feature_list)} features in {feature_file}")
 
     # STEP [3]
     schema = fastavro.parse_schema(json.loads(BAYESIAN_LINEAR_MODEL_SCHEMA))
 
-    def batched_records():
-        for i in range(0, num_models):
-            records = gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i],
-                                         list_of_weight_values[i],
-                                         biases[i], feature_list)
-            yield records
-
-    batched_write_avro(batched_records(), output_file, schema, model_log_interval)
-    logger.info(f"dumped avro model file at {output_file}")
+    def gen_records():
+        for i in range(num_models):
+            yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i], list_of_weight_values[i], biases[i], feature_list)
+    batched_write_avro(gen_records(), output_file, schema, model_log_interval)
+    logger.info(f"dumped {num_models} models to avro file at {output_file}.")
 
 
 def read_feature_list(feature_file):
@@ -158,13 +141,9 @@ def read_feature_list(feature_file):
     :param feature_file: user provided feature file, each row is a "name,term" feature name
     :return: list of feature names
     """
-    feature_list = []
     with tf.io.gfile.GFile(feature_file) as f:
         f.seekable = lambda: False
-        for line in f:
-            fields = line.strip()
-            feature_list.append(fields)
-    return feature_list
+        return [line.strip() for line in f]
 
 
 def name_term_from_string(name_term_string):
@@ -185,7 +164,7 @@ def name_term_to_string(name, term):
     :param term: Term of the feature.
     :return: "name,term" string
     """
-    return ','.join([name, term])
+    return ','.join((name, term))
 
 
 def get_feature_map(feature_file):
@@ -196,9 +175,7 @@ def get_feature_map(feature_file):
     :param feature_file: The file containing a list of features.
     :return: a dict of feature_name and its index.
     """
-    feature_list = read_feature_list(feature_file)
-    n = len(feature_list)
-    return dict(zip(feature_list, range(n)))
+    return {feature: index for index, feature in enumerate(read_feature_list(feature_file))}
 
 
 def read_json_file(file_path: str):
@@ -212,25 +189,12 @@ def read_json_file(file_path: str):
     """
 
     if not tf.io.gfile.exists(file_path):
-        raise IOError(f"Path '{file_path}' does not exist.")
+        raise IOError(f"Path {file_path!r} does not exist.")
     try:
         with tf.io.gfile.GFile(file_path) as json_file:
             return json.load(json_file)
     except Exception as e:
-        raise ValueError(f"Error '{e}' while loading file '{file_path}'.")
-
-
-def str2bool(v):
-    """
-    handle argparse can't parse boolean well.
-    ref: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse/36031646
-    """
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, str):
-        return v.lower() == 'true'
-    else:
-        raise argparse.ArgumentTypeError('Boolean or string value expected.')
+        raise ValueError(f"Failed loading file {file_path!r}.") from e
 
 
 def copy_files(input_files, output_dir):
@@ -251,8 +215,8 @@ def copy_files(input_files, output_dir):
         fname = os.path.join(output_dir, os.path.basename(f))
         tf.io.gfile.copy(f, fname, overwrite=True)
         copied_files.append(fname)
-    logger.info("Files copied to Local: {}".format(copied_files))
-    logger.info("--- %s seconds ---" % (time.time() - start_time))
+    logger.info(f"Files copied to Local: {copied_files}")
+    logger.info(f"--- {time.time() - start_time} seconds ---")
     return copied_files
 
 
@@ -266,10 +230,7 @@ def namedtuple_with_defaults(typename, field_names, defaults=()):
     """
     T = collections.namedtuple(typename, field_names)
     T.__new__.__defaults__ = (None,) * len(T._fields)
-    if isinstance(defaults, collections.Mapping):
-        prototype = T(**defaults)
-    else:
-        prototype = T(*defaults)
+    prototype = T(**defaults) if isinstance(defaults, collections.Mapping) else T(*defaults)
     T.__new__.__defaults__ = tuple(prototype)
     return T
 
@@ -318,12 +279,7 @@ def create_error_message(n_batch, output_file) -> str:
     return f'An error occurred while writing batch #{n_batch} to path {output_file}'
 
 
-def dataset_reader(dataset=None, iterator=None):
-    """Create an python iterator/generator with the TF dataset or interator"""
-    assert dataset and not iterator or iterator, "Either dataset or iterator_and_fetches are needed."
-    logger.info("Dataset initialized")
-    # Create TF iterator
-    iterator = iterator or tf.compat.v1.data.make_initializable_iterator(dataset)
+def dataset_reader(iterator):
     # Iterate through TF dataset in a throttled manner
     # (Forking after the TensorFlow runtime creates internal threads is unsafe, use config provided in this
     # link -
@@ -338,10 +294,9 @@ def dataset_reader(dataset=None, iterator=None):
                 break
 
 
-def get_inference_output_avro_schema(metadata, has_label, has_logits_per_coordinate, schema_params, has_weight=False):
-    fields = [{'name': schema_params.sample_id, 'type': 'long'}, {'name': schema_params.prediction_score, 'type': 'float'}]
-    if has_label:
-        fields.append({'name': schema_params.label, 'type': 'int'})
+def get_inference_output_avro_schema(metadata, has_logits_per_coordinate, schema_params, has_weight=False):
+    fields = [{'name': schema_params.sample_id, 'type': 'long'}, {'name': schema_params.prediction_score, 'type': 'float'},
+              {'name': schema_params.label, 'type': ['null', 'int'], "default": None}]
     if has_weight or metadata.get(schema_params.sample_weight) is not None:
         fields.append({'name': schema_params.sample_weight, 'type': 'float'})
     if has_logits_per_coordinate:
