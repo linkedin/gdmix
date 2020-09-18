@@ -198,7 +198,8 @@ def _get_params(paths, max_iters):
                         '--' + constants.COPY_TO_LOCAL, 'False',
                         '--' + constants.BATCH_SIZE, '16',
                         '--' + constants.L2_REG_WEIGHT, f"{_L2_REG_WEIGHT}",
-                        "--" + constants.REGULARIZE_BIAS, 'True']
+                        "--" + constants.REGULARIZE_BIAS, 'True',
+                        "--" + constants.DELAYED_EXIT_IN_SECONDS, '1']
     return base_training_params, schema_params, raw_model_params
 
 

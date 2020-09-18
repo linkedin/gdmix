@@ -33,6 +33,20 @@ def logging(msg):
     logger.info("[FELR] {}".format(msg))
 
 
+def snooze_after_tf_session_closure(tf_session, duration_in_seconds):
+    """
+    Snooze after the tf session is closed. This is to avoid the worker exits too quickly,
+    resulting in hanging of remote workers who may contact this worker during their session closure.
+    This is a workaround to this issue:
+    https://github.com/tensorflow/tensorflow/issues/21745
+    :param tf_session: a Tensorflow session or MoninitoredTrainingSession.
+    :param duration_in_seconds: snooze duration in seconds
+    :return: None
+    """
+    tf_session.close()
+    time.sleep(duration_in_seconds)
+
+
 @arg_suite
 @dataclass
 class FixedLRParams(LRParams):
@@ -40,6 +54,7 @@ class FixedLRParams(LRParams):
     copy_to_local: bool = True  # Copying data to local or not.
     num_server_creation_retries: int = 50  # Number of retries to establish tf server.
     retry_interval: int = 2  # Number of seconds between retries.
+    delayed_exit_in_seconds: int = 60  # Number of seconds before exiting
 
 
 class FixedEffectLRModelLBFGS(Model):
@@ -81,6 +96,7 @@ class FixedEffectLRModelLBFGS(Model):
 
         self.num_server_creation_retries = self.model_params.num_server_creation_retries
         self.retry_interval = self.model_params.retry_interval
+        self.delayed_exit_in_seconds = self.model_params.delayed_exit_in_seconds
         self.server = None
 
         # validate parameters:
@@ -483,7 +499,7 @@ class FixedEffectLRModelLBFGS(Model):
         if (num_workers > 1):
             tf_session.run([all_reduce_sync_op])
 
-        tf_session.close()
+        snooze_after_tf_session_closure(tf_session, self.delayed_exit_in_seconds)
 
         if is_chief:
             self._save_model()
@@ -573,7 +589,8 @@ class FixedEffectLRModelLBFGS(Model):
                             task_index,
                             schema_params,
                             output_dir)
-        tf_session.close()
+
+        snooze_after_tf_session_closure(tf_session, self.delayed_exit_in_seconds)
 
     def _parse_parameters(self, raw_model_parameters):
         return FixedLRParams.__from_argv__(raw_model_parameters, error_on_unknown=False)

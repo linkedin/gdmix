@@ -20,15 +20,16 @@ FEATURE_FILE = "feature_file"
 
 # Training parameters-related constants
 BATCH_SIZE = "batch_size"
-L2_REG_WEIGHT = "l2_reg_weight"
-MAX_TRAINING_QUEUE_SIZE = "max_training_queue_size"
-TRAINING_QUEUE_TIMEOUT_IN_SECONDS = "training_queue_timeout_in_seconds"
-NUM_OF_CONSUMERS = "num_of_consumers"
+DELAYED_EXIT_IN_SECONDS = "delayed_exit_in_seconds"
 ENABLE_LOCAL_INDEXING = "enable_local_indexing"
-REGULARIZE_BIAS = "regularize_bias"
+L2_REG_WEIGHT = "l2_reg_weight"
+LBFGS_TOLERANCE = "lbfgs_tolerance"
+MAX_TRAINING_QUEUE_SIZE = "max_training_queue_size"
+NUM_OF_CONSUMERS = "num_of_consumers"
 NUM_OF_LBFGS_CURVATURE_PAIRS = "num_of_lbfgs_curvature_pairs"
 NUM_OF_LBFGS_ITERATIONS = "num_of_lbfgs_iterations"
-LBFGS_TOLERANCE = "lbfgs_tolerance"
+REGULARIZE_BIAS = "regularize_bias"
+TRAINING_QUEUE_TIMEOUT_IN_SECONDS = "training_queue_timeout_in_seconds"
 
 AUC = "auc",
 ACCURACY = "accuracy"
