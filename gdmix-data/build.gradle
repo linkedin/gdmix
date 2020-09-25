@@ -13,6 +13,7 @@ dependencies {
   compile "org.json4s:json4s-ast$scalaSuffix:3.2.11"
   compile "com.databricks:spark-avro$scalaSuffix:3.2.0"
   compile "org.apache.spark:spark-avro$scalaSuffix:2.4.4"
+  compile "com.github.scopt:scopt$scalaSuffix:3.2.0"
   compile "com.linkedin.sparktfrecord:spark-tfrecord$scalaSuffix:0.2.1"
 
   compileOnly "org.apache.spark:spark-core$scalaSuffix:$sparkVersion"

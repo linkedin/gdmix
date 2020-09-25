@@ -100,6 +100,7 @@
     "scalaLibrary_2.11": "org.scala-lang:scala-library:2.11.12",
     "scalaTest_2.11": "org.scalatest:scalatest_2.11:3.0.3",
     "scalaXml_2_11": "org.scala-lang.modules:scala-xml_2.11:1.2.0",
+    "scopt_2_11": "com.github.scopt:scopt_2.11:4.0.0-RC2",
     "scipy": "pypi:scipy:1.3.2",
     "sklearn": "pypi:scikit-learn:0.21.2",
     "sparkTfrecord_2_11": "com.linkedin.sparktfrecord:spark-tfrecord_2.11:0.1.1",

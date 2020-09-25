@@ -1,7 +1,6 @@
 package com.linkedin.gdmix.data
 
 import com.databricks.spark.avro._
-import org.apache.commons.cli.{BasicParser, CommandLine, CommandLineParser, Options}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -10,6 +9,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.json4s.DefaultFormats
 
+import com.linkedin.gdmix.parsers.DataPartitionerParser
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.{IoUtils, PartitionUtils}
 
@@ -20,82 +20,30 @@ object DataPartitioner {
 
   def main(args: Array[String]): Unit = {
 
-    // Define options.
-    val options = new Options()
-    options.addOption("trainInputDataPath", true, "training input dataset path")
-    options.addOption("trainInputScorePath", true, "training input score path")
-    options.addOption("trainPerCoordinateScorePath", true,
-      "path to the per-coordinate training score of the previous iteration")
-    options.addOption("trainOutputPartitionDataPath", true,
-      "output partition data path for training")
-    options.addOption("validationInputDataPath", true, "validation input dataset path")
-    options.addOption("validationInputScorePath", true, "validation input score path")
-    options.addOption("validationPerCoordinateScorePath", true,
-      "path to the per-coordinate validation score of the previous iteration")
-    options.addOption("validationOutputPartitionDataPath", true,
-      "output partition data path for validation")
-    options.addOption("inputMetadataFile", true,
-      "input metadata used for random effect data processing")
-    options.addOption("outputPartitionListFile", true, "output partition list file")
-    options.addOption("outputMetadataFile", true,
-      "output metadata file matches processed dataset")
-    options.addOption("partitionEntity", true, "entity partitioned by")
-    options.addOption("numPartitions", true, "number of partitions")
-    options.addOption("dataFormat", true, "either avro or tfrecord")
-    options.addOption("predictionScore", true, "column name of prediction score")
-    options.addOption("predictionScorePerCoordinate", true,
-      "column name of prediction score per-coordinate")
-    options.addOption("offset", true, "column name of offset")
-    options.addOption("uid", true, "column name of unique id")
-    options.addOption("featureBag", true, "feature bag names")
-    options.addOption("maxNumOfSamplesPerModel", true,
-      "maximal number of samples a model can take")
-    options.addOption("minNumOfSamplesPerModel", true,
-      "minimal number of samples needed to train a model")
-
-    // Get the parser.
-    val parser: CommandLineParser = new BasicParser()
-    val cmd: CommandLine = parser.parse(options, args)
+    val params = DataPartitionerParser.parse(args)
 
     // Parse the commandline option.
-    val trainInputDataPath = cmd.getOptionValue("trainInputDataPath")
-    val trainInputScorePath = cmd.getOptionValue("trainInputScorePath")
-    val trainPerCoordinateScorePath = cmd.getOptionValue("trainPerCoordinateScorePath")
-    val trainOutputPartitionDataPath = cmd.getOptionValue("trainOutputPartitionDataPath")
-    val validationInputDataPath = cmd.getOptionValue("validationInputDataPath")
-    val validationInputScorePath = cmd.getOptionValue("validationInputScorePath")
-    val validationPerCoordinateScorePath = cmd.getOptionValue("validationPerCoordinateScorePath")
-    val validationOutputPartitionDataPath = cmd.getOptionValue("validationOutputPartitionDataPath")
-    val inputMetadataFile = cmd.getOptionValue("inputMetadataFile")
-    val outputMetadataFile = cmd.getOptionValue("outputMetadataFile")
-    val outputPartitionListFile = cmd.getOptionValue("outputPartitionListFile")
-    val partitionEntity = cmd.getOptionValue("partitionEntity")
-    val numPartitions = cmd.getOptionValue("numPartitions", "10").toInt
-    val dataFormat = cmd.getOptionValue("dataFormat", TFRECORD)
-    val predictionScore = cmd.getOptionValue("predictionScore", "predictionScore")
-    val predictionScorePerCoordinate = cmd.getOptionValue("predictionScorePerCoordinate",
-      "predictionScorePerCoordinate")
-    val offset = cmd.getOptionValue("offset", "offset")
-    val uid = cmd.getOptionValue("uid", "uid")
-    val featureBag = cmd.getOptionValue("featureBag", null)
-    val maxNumOfSamplesPerModel = cmd.getOptionValue("maxNumOfSamplesPerModel", "-1").toInt
-    val minNumOfSamplesPerModel = cmd.getOptionValue("minNumOfSamplesPerModel", "-1").toInt
-
-    // Sanity check.
-    require(inputMetadataFile != null, "Missing input metadata file.")
-    require(outputMetadataFile != null, "Missing path to the output metadata file.")
-    require(partitionEntity != null, "Missing partition entity.")
-    require(featureBag != null, "Missing feature bag.")
-    require(maxNumOfSamplesPerModel >= minNumOfSamplesPerModel, "Invalid max/min number of samples per model.")
-    require(trainInputDataPath != null || validationInputDataPath != null,
-      "Neither training nor validation data path is provided.")
-    if (trainInputDataPath != null) {
-      require(trainOutputPartitionDataPath != null, "Missing training output partition data path.")
-      require(outputPartitionListFile != null, "Missing output partition list file for training jobs.")
-    }
-    if (validationInputDataPath != null) {
-      require(validationOutputPartitionDataPath != null, "Missing validation output partition data path.")
-    }
+    val trainInputDataPath = params.trainInputDataPath
+    val trainInputScorePath = params.trainInputScorePath
+    val trainPerCoordinateScorePath = params.trainPerCoordinateScorePath
+    val trainOutputPartitionDataPath = params.trainOutputPartitionDataPath
+    val validationInputDataPath = params.validationInputDataPath
+    val validationInputScorePath = params.validationInputScorePath
+    val validationPerCoordinateScorePath = params.validationPerCoordinateScorePath
+    val validationOutputPartitionDataPath = params.validationOutputPartitionDataPath
+    val inputMetadataFile = params.inputMetadataFile
+    val outputMetadataFile = params.outputMetadataFile
+    val outputPartitionListFile = params.outputPartitionListFile
+    val partitionEntity = params.partitionEntity
+    val numPartitions = params.numPartitions
+    val dataFormat = params.dataFormat
+    val predictionScore = params.predictionScore
+    val predictionScorePerCoordinate = params.predictionScorePerCoordinate
+    val offset = params.offset
+    val uid = params.uid
+    val featureBag = params.featureBag
+    val maxNumOfSamplesPerModel = params.maxNumOfSamplesPerModel
+    val minNumOfSamplesPerModel = params.minNumOfSamplesPerModel
 
     implicit val jsonFormat: DefaultFormats.type = DefaultFormats
 
@@ -109,16 +57,15 @@ object DataPartitioner {
     val fs = FileSystem.get(hadoopJobConf)
 
     // Partition training dataset if the training input data is provided.
-    val trainOutputOpt = if (trainInputDataPath != null) {
-      val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath, dataFormat)
-      val trainInputScoreOpt = if (trainInputScorePath != null && !trainInputScorePath.isEmpty) {
-        Some(spark.read.avro(trainInputScorePath))
+    val trainOutputOpt = if (!IoUtils.isEmptyStr(trainInputDataPath)) {
+      val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath.get, dataFormat)
+      val trainInputScoreOpt = if (!IoUtils.isEmptyStr(trainInputScorePath)) {
+        Some(spark.read.avro(trainInputScorePath.get))
       } else {
         None
       }
-      val trainPerCoordinateScoreOpt = if (trainPerCoordinateScorePath != null
-        && !trainPerCoordinateScorePath.isEmpty) {
-        Some(spark.read.avro(trainPerCoordinateScorePath))
+      val trainPerCoordinateScoreOpt = if (!IoUtils.isEmptyStr(trainPerCoordinateScorePath)) {
+        Some(spark.read.avro(trainPerCoordinateScorePath.get))
       } else {
         None
       }
@@ -127,7 +74,7 @@ object DataPartitioner {
         trainInputData,
         trainInputScoreOpt,
         trainPerCoordinateScoreOpt,
-        trainOutputPartitionDataPath,
+        trainOutputPartitionDataPath.get,
         partitionEntity,
         numPartitions,
         dataFormat,
@@ -149,7 +96,7 @@ object DataPartitioner {
         .distinct()
         .map(row => row.getAs[Int](PARTITION_ID))
         .collect()
-      IoUtils.writeFile(fs, new Path(outputPartitionListFile), partitionIds.sorted.mkString(","))
+      IoUtils.writeFile(fs, new Path(outputPartitionListFile.get), partitionIds.sorted.mkString(","))
 
       Some(outputDf)
     } else {
@@ -157,16 +104,15 @@ object DataPartitioner {
     }
 
     // Partition validation dataset if the validation input data is provided.
-    val validationOutputOpt = if (validationInputDataPath != null) {
-      val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath, dataFormat)
-      val validationInputScoreOpt = if (validationInputScorePath != null && !validationInputScorePath.isEmpty) {
-        Some(spark.read.avro(validationInputScorePath))
+    val validationOutputOpt = if (!IoUtils.isEmptyStr(validationInputDataPath)) {
+      val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath.get, dataFormat)
+      val validationInputScoreOpt = if (!IoUtils.isEmptyStr(validationInputScorePath)) {
+        Some(spark.read.avro(validationInputScorePath.get))
       } else {
         None
       }
-      val validPerCoordinateScoreOpt = if (validationPerCoordinateScorePath != null
-        && !validationPerCoordinateScorePath.isEmpty) {
-        Some(spark.read.avro(validationPerCoordinateScorePath))
+      val validPerCoordinateScoreOpt = if (!IoUtils.isEmptyStr(validationPerCoordinateScorePath)) {
+        Some(spark.read.avro(validationPerCoordinateScorePath.get))
       } else {
         None
       }
@@ -175,7 +121,7 @@ object DataPartitioner {
         validationInputData,
         validationInputScoreOpt,
         validPerCoordinateScoreOpt,
-        validationOutputPartitionDataPath,
+        validationOutputPartitionDataPath.get,
         partitionEntity,
         numPartitions,
         dataFormat,

@@ -173,4 +173,15 @@ object IoUtils {
           s"use avro or tfrecord only")
     }
   }
+  /**
+   * Check if a Option[string] is a non-empty string.
+   *
+   * @param str Option string
+   * @return Boolean, true if it's a non-empty string
+   */
+  def isEmptyStr(str: Option[String]): Boolean =
+    str match {
+      case Some(s) => s.trim.isEmpty
+      case _ => true
+    }
 }
