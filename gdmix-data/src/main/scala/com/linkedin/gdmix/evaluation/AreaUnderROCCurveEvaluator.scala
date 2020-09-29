@@ -8,6 +8,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
 
 import com.linkedin.gdmix.parsers.AreaUnderROCCurveEvaluatorParser
+import com.linkedin.gdmix.parsers.AreaUnderROCCurveEvaluatorParams
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.{IoUtils, JsonUtils}
 
@@ -16,18 +17,6 @@ import com.linkedin.gdmix.utils.{IoUtils, JsonUtils}
  * Evaluator for area under the ROC curve (AUROC).
  */
 object AreaUnderROCCurveEvaluator {
-
-
-  // Create a Spark session.
-  val spark: SparkSession = SparkSession
-    .builder()
-    .appName(getClass.getName)
-    .getOrCreate()
-
-  // Set up Hadoop file system.
-  val hadoopJobConf = new JobConf()
-  val fs: FileSystem = FileSystem.get(hadoopJobConf)
-
   /**
    * Compute area under ROC curve.
    *
@@ -53,11 +42,30 @@ object AreaUnderROCCurveEvaluator {
 
     val params = AreaUnderROCCurveEvaluatorParser.parse(args)
 
+    // Create a Spark session.
+    val spark: SparkSession = SparkSession
+      .builder()
+      .appName(getClass.getName)
+      .getOrCreate()
+
+    try {
+      run(spark, params)
+    } finally {
+      spark.stop()
+    }
+  }
+
+  def run(spark: SparkSession, params: AreaUnderROCCurveEvaluatorParams): Unit = {
+
     // Read file and cast the label and score to double.
     val df = spark.read.avro(params.inputPath)
 
     // Compute auc.
     val auc = calculateAreaUnderROCCurve(df, params.labelName, params.scoreName)
+
+    // Set up Hadoop file system.
+    val hadoopJobConf = new JobConf()
+    val fs: FileSystem = FileSystem.get(hadoopJobConf)
 
     // Convert to json and save to HDFS.
     val jsonResult = JsonUtils.toJsonString(Map("auc" -> auc))

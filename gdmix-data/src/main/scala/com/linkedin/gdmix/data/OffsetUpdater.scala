@@ -4,6 +4,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
 
 import com.linkedin.gdmix.parsers.OffsetUpdaterParser
+import com.linkedin.gdmix.parsers.OffsetUpdaterParams
 import com.linkedin.gdmix.utils.Constants.{AVRO, FLOAT, LONG}
 import com.linkedin.gdmix.utils.IoUtils
 
@@ -15,6 +16,16 @@ object OffsetUpdater {
   def main(args: Array[String]): Unit = {
 
     val params = OffsetUpdaterParser.parse(args)
+    // Create a Spark session.
+    val spark = SparkSession.builder().appName(getClass.getName).getOrCreate()
+    try {
+      run(spark, params)
+    } finally {
+      spark.stop()
+    }
+  }
+
+  def run(spark: SparkSession, params: OffsetUpdaterParams): Unit = {
 
     // Parse the commandline option.
     val trainInputDataPath = params.trainInputDataPath
@@ -66,8 +77,6 @@ object OffsetUpdater {
         uid)
       IoUtils.saveDataFrame(validationOutputData, validationOutputDataPath.get, dataFormat)
     }
-    // Terminate Spark session
-    spark.stop()
   }
 
   /**

@@ -8,6 +8,7 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.sql.SparkSession
 
 import com.linkedin.gdmix.parsers.BestModelSelectorParser
+import com.linkedin.gdmix.parsers.BestModelSelectorParams
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.{IoUtils, JsonUtils}
 
@@ -19,6 +20,16 @@ object BestModelSelector {
   def main(args: Array[String]): Unit = {
 
     val params = BestModelSelectorParser.parse(args)
+    // Create a Spark session.
+    val spark = SparkSession.builder().appName(getClass.getName).getOrCreate()
+    try {
+      run(spark, params)
+    } finally {
+      spark.stop()
+    }
+  }
+
+  def run(spark: SparkSession, params: BestModelSelectorParams): Unit = {
 
     // Read the input parameters.
     // Update input parameters to match with the cloudflow implementation.
@@ -86,9 +97,6 @@ object BestModelSelector {
       val srcModel = inputModelPaths(bestModelId)
       IoUtils.copyDirectory(fs, hadoopJobConf, srcModel, outputBestModelPath)
     }
-
-    // Terminate Spark session.
-    spark.stop()
   }
 
   /**

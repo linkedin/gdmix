@@ -10,6 +10,7 @@ import org.apache.spark.storage.StorageLevel
 import org.json4s.DefaultFormats
 
 import com.linkedin.gdmix.parsers.DataPartitionerParser
+import com.linkedin.gdmix.parsers.DataPartitionerParams
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.{IoUtils, PartitionUtils}
 
@@ -21,6 +22,17 @@ object DataPartitioner {
   def main(args: Array[String]): Unit = {
 
     val params = DataPartitionerParser.parse(args)
+
+    // Create a Spark session.
+    val spark = SparkSession.builder().appName(getClass.getName).getOrCreate()
+    try {
+      run(spark, params)
+    } finally {
+      spark.stop()
+    }
+  }
+
+  def run(spark: SparkSession, params: DataPartitionerParams): Unit = {
 
     // Parse the commandline option.
     val trainInputDataPath = params.trainInputDataPath
@@ -155,9 +167,6 @@ object DataPartitioner {
       inputMetadataFile,
       outputMetadataFile,
       dataFormat)
-
-    // Terminate Spark session
-    spark.stop()
   }
 
   /**
