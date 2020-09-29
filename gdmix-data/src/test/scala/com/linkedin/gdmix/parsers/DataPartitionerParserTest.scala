@@ -13,11 +13,11 @@ class DataPartitionerParserTest {
     Array(
       Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--trainOutputPartitionDataPath", "per-member/partition/trainingData",
           "--outputPartitionListFile", "per-member/partition/partitionList.txt")))
@@ -33,83 +33,83 @@ class DataPartitionerParserTest {
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--trainOutputPartitionDataPath", "per-member/partition/trainingData",
           "--outputPartitionListFile", "per-member/partition/partitionList.txt")),
       // missing fetureBag
-      Array (
+      Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--trainOutputPartitionDataPath", "per-member/partition/trainingData",
           "--outputPartitionListFile", "per-member/partition/partitionList.txt")),
       // missing inputMetadataFile
-      Array (
+      Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--trainOutputPartitionDataPath", "per-member/partition/trainingData",
           "--outputPartitionListFile", "per-member/partition/partitionList.txt")),
       // missing outputMetadataFile
-      Array (
+      Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--trainOutputPartitionDataPath", "per-member/partition/trainingData",
           "--outputPartitionListFile", "per-member/partition/partitionList.txt")),
       // missing both trainInputDataPath and validationInputDataPath
-      Array (
+      Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json")),
       // provide trainInputDataPath but no trainOutputPartitionDataPath
       Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--outputPartitionListFile", "per-member/partition/partitionList.txt")),
       // provide trainInputDataPath but no outputPartitionListFile
       Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--trainOutputPartitionDataPath", "per-member/partition/trainingData")),
       // provide validationInputDataPath but no validationOutputPartitionDataPath
       Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--validationInputDataPath",  "per-member/validationData")),
+          "--validationInputDataPath", "per-member/validationData")),
       // maxNumOfSamplesPerModel < minNumOfSamplesPerModel
       Array(
         Seq(
-          "--partitionEntity",  "memberId",
+          "--partitionEntity", "memberId",
           "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath",  "per-member/trainingData",
+          "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
           "--trainOutputPartitionDataPath", "per-member/partition/trainingData",
           "--outputPartitionListFile", "per-member/partition/partitionList.txt",
@@ -127,7 +127,7 @@ class DataPartitionerParserTest {
       featureBag = "per_member",
       inputMetadataFile = "per-member/metadata/tensor_metadata.json",
       outputMetadataFile = "per-member/partition/metadata/tensor_metadata.json",
-      trainInputDataPath =  Option("per-member/trainingData"),
+      trainInputDataPath = Option("per-member/trainingData"),
       trainInputScorePath = Option("global/trainingScore"),
       trainOutputPartitionDataPath = Option("per-member/partition/trainingData"),
       outputPartitionListFile = Option("per-member/partition/partitionList.txt")
@@ -136,7 +136,7 @@ class DataPartitionerParserTest {
   }
 
   @Test(dataProvider = "dataIncompleteArgs", expectedExceptions = Array(classOf[IllegalArgumentException]))
-    def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
-      DataPartitionerParser.parse(inCompleteArgs)
+  def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
+    DataPartitionerParser.parse(inCompleteArgs)
   }
 }

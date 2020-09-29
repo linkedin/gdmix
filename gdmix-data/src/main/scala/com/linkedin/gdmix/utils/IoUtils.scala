@@ -1,7 +1,9 @@
 package com.linkedin.gdmix.utils
 
-import java.io.{BufferedWriter, File,
-  FileInputStream, OutputStreamWriter, PrintWriter}
+import java.io.{
+  BufferedWriter, File,
+  FileInputStream, OutputStreamWriter, PrintWriter
+}
 
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.mapred.JobConf
@@ -10,8 +12,10 @@ import org.apache.spark.sql.functions.col
 
 import com.databricks.spark.avro._
 
-import com.linkedin.gdmix.utils.Constants.{AVRO, AVRO_FORMAT,
-  TFRECORD, TF_EXAMPLE, TF_SEQUENCE_EXAMPLE}
+import com.linkedin.gdmix.utils.Constants.{
+  AVRO, AVRO_FORMAT,
+  TFRECORD, TF_EXAMPLE, TF_SEQUENCE_EXAMPLE
+}
 
 /**
  * Helper routines for reading and writing files on HDFS.
@@ -24,7 +28,7 @@ object IoUtils {
    * @param filePath The relative path of the resource file
    * @return The absolution path of the input
    */
-   def getResourceFilePath(filePath: String): String = {
+  def getResourceFilePath(filePath: String): String = {
     new File(
       getClass.getClassLoader.getResource(filePath).getFile
     ).getAbsolutePath
@@ -37,7 +41,7 @@ object IoUtils {
    * @param inputPath The HDFS input path from which to read the file
    * @return The contents of the file as text
    */
-  def readFile(fs: FileSystem, inputPath: String, fromResource: Boolean=false): String = {
+  def readFile(fs: FileSystem, inputPath: String, fromResource: Boolean = false): String = {
 
     val stream = if (fromResource)
       getClass.getClassLoader.getResourceAsStream(inputPath)
@@ -106,6 +110,7 @@ object IoUtils {
 
   /**
    * Save data frame to HDFS, partition if requested.
+   *
    * @param dataFrame The output dataframe
    * @param outputDir The output directory
    * @param outputFormat The saved file format
@@ -129,7 +134,7 @@ object IoUtils {
         .write
         .mode(SaveMode.Overwrite)
         .partitionBy(partitionColumn)
-    } else  {
+    } else {
       dataFrame.write.mode(SaveMode.Overwrite)
     }
     outputFormat match {
@@ -152,7 +157,7 @@ object IoUtils {
    * Read dataframe by Spark, support AVRO and TFRECORD formats.
    *
    * @param spark Spark session
-   * @param inputPath   Path for the input files
+   * @param inputPath Path for the input files
    * @param inputFormat Input format, either AVRO or TFRECORD
    * @param recordType The TFRecord type, Example or SequenceExample,
    *                   used in TFRecord only.
@@ -173,6 +178,7 @@ object IoUtils {
           s"use avro or tfrecord only")
     }
   }
+
   /**
    * Check if a Option[string] is a non-empty string.
    *

@@ -64,7 +64,7 @@ class AreaUnderROCCurveEvaluatorParserTest {
   }
 
   @Test(dataProvider = "dataIncompleteArgs", expectedExceptions = Array(classOf[IllegalArgumentException]))
-    def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
-      AreaUnderROCCurveEvaluatorParser.parse(inCompleteArgs)
+  def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
+    AreaUnderROCCurveEvaluatorParser.parse(inCompleteArgs)
   }
 }

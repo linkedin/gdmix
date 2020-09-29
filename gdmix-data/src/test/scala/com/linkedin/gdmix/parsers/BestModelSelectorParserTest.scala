@@ -88,7 +88,7 @@ class BestModelSelectorParserTest {
   }
 
   @Test(dataProvider = "dataIncompleteArgs", expectedExceptions = Array(classOf[IllegalArgumentException]))
-    def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
-      BestModelSelectorParser.parse(inCompleteArgs)
+  def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
+    BestModelSelectorParser.parse(inCompleteArgs)
   }
 }

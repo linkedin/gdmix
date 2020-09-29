@@ -118,7 +118,7 @@ object BestModelSelector {
    * @param evalMetric Metric to be chosen
    * @return Metric value
    */
-  def getMetric(evalSummary: String, evalMetric:String): Float = {
+  def getMetric(evalSummary: String, evalMetric: String): Float = {
 
     val metricsMap: Map[String, Float] = JsonUtils.toMap[Float](evalSummary)
     val metricOption = metricsMap.get(evalMetric)
