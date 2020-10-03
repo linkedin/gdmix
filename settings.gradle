@@ -25,3 +25,4 @@ gradle.ext.scalaSuffix = scalaSuffix
 scalaProjects.forEach {
   project(new File(rootProject.projectDir, it)).name += scalaSuffix
 }
+

@@ -33,8 +33,6 @@
 /ligradle/
 TEST-*.xml
 .DS_Store
-tensorflow-plugin-generated/
-photon-plugin-generated
 venv/
 .vscode/
 .project
