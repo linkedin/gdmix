@@ -1,32 +1,22 @@
 package com.linkedin.gdmix.evaluation
 
 import com.databricks.spark.avro._
-import org.apache.commons.cli.{BasicParser, CommandLine, CommandLineParser, Options}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
 
+import com.linkedin.gdmix.parsers.AreaUnderROCCurveEvaluatorParser
+import com.linkedin.gdmix.parsers.AreaUnderROCCurveEvaluatorParams
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.{IoUtils, JsonUtils}
+
 
 /**
  * Evaluator for area under the ROC curve (AUROC).
  */
 object AreaUnderROCCurveEvaluator {
-
-
-  // Create a Spark session.
-  val spark: SparkSession = SparkSession
-    .builder()
-    .appName(getClass.getName)
-    .getOrCreate()
-
-  // Set up Hadoop file system.
-  val hadoopJobConf = new JobConf()
-  val fs: FileSystem = FileSystem.get(hadoopJobConf)
-
   /**
    * Compute area under ROC curve.
    *
@@ -50,38 +40,35 @@ object AreaUnderROCCurveEvaluator {
 
   def main(args: Array[String]): Unit = {
 
-    // Define options.
-    val options = new Options()
-    options.addOption("inputPath", true, "input score path")
-    options.addOption("outputPath", true, "output path")
-    options.addOption("labelName", true, "ground truth label name")
-    options.addOption("scoreName", true, "predicted score name")
+    val params = AreaUnderROCCurveEvaluatorParser.parse(args)
 
-    // Get the parser.
-    val parser: CommandLineParser = new BasicParser()
-    val cmd: CommandLine = parser.parse(options, args)
+    // Create a Spark session.
+    val spark: SparkSession = SparkSession
+      .builder()
+      .appName(getClass.getName)
+      .getOrCreate()
 
-    // Parse the commandline option.
-    val inputPath = cmd.getOptionValue("inputPath")
-    val outputPath = cmd.getOptionValue("outputPath")
-    val labelName = cmd.getOptionValue("labelName")
-    val scoreName = cmd.getOptionValue("scoreName")
+    try {
+      run(spark, params)
+    } finally {
+      spark.stop()
+    }
+  }
 
-    // Sanity check.
-    require(inputPath != null
-      && outputPath != null
-      && labelName != null
-      && scoreName != null,
-      "Incorrect number of input parameters")
+  def run(spark: SparkSession, params: AreaUnderROCCurveEvaluatorParams): Unit = {
 
     // Read file and cast the label and score to double.
-    val df = spark.read.avro(inputPath)
+    val df = spark.read.avro(params.inputPath)
 
     // Compute auc.
-    val auc = calculateAreaUnderROCCurve(df, labelName, scoreName)
+    val auc = calculateAreaUnderROCCurve(df, params.labelName, params.scoreName)
+
+    // Set up Hadoop file system.
+    val hadoopJobConf = new JobConf()
+    val fs: FileSystem = FileSystem.get(hadoopJobConf)
 
     // Convert to json and save to HDFS.
     val jsonResult = JsonUtils.toJsonString(Map("auc" -> auc))
-    IoUtils.writeFile(fs, new Path(outputPath, EVAL_SUMMARY_JSON), jsonResult)
+    IoUtils.writeFile(fs, new Path(params.outputPath, EVAL_SUMMARY_JSON), jsonResult)
   }
 }

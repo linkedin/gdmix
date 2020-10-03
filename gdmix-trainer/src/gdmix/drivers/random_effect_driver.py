@@ -17,13 +17,12 @@ class RandomEffectDriver(Driver):
     _RANDOM_EFFECT_PARTITION_DIR_PREFIX = "partitionId="
 
     def __init__(self, base_training_params, model):
-        self.effect_name = constants.RANDOM_EFFECT
-        super().__init__(base_training_params, model)
+        super().__init__(base_training_params, model, constants.RANDOM_EFFECT)
 
     def _validate_params(self):
-        assert self.base_training_params[constants.MODEL_TYPE] == constants.LOGISTIC_REGRESSION, \
+        assert self.base_training_params.model_type == constants.LOGISTIC_REGRESSION, \
             "Random effect supports logistic_regression only"
-        assert self.base_training_params[constants.PARTITION_LIST_FILE] is not None, \
+        assert self.base_training_params.partition_list_file is not None, \
             "Random effect requires partition list file"
 
     def _setup_cluster(self):
@@ -59,7 +58,7 @@ class RandomEffectDriver(Driver):
         return execution_context
 
     def _get_partition_list(self):
-        with tf.io.gfile.GFile(self.base_training_params[constants.PARTITION_LIST_FILE]) as f:
+        with tf.io.gfile.GFile(self.base_training_params.partition_list_file) as f:
             line = f.readline()
         all_partitions = [int(l) for l in line.split(',')]
         num_partitions = len(all_partitions)

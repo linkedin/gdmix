@@ -123,7 +123,7 @@ def per_record_input_fn(input_path, metadata_file, num_shards, shard_index,
 
         # Get shard input files
         input_filename_pattern = _convert_dir_to_filename_pattern(input_path,
-                                                                  constants.TFRECORD_REGEX_PATTERN)
+                                                                  constants.TFRECORD_GLOB_PATTERN)
         input_files, _ = shard_input_files(input_filename_pattern, num_shards, shard_index)
 
         # Get metadata
@@ -166,7 +166,7 @@ def per_entity_grouped_input_fn(input_path, metadata_file, num_shards, shard_ind
     """
 
     if data_format == constants.TFRECORD:
-        logger.info("using {} dataset".format(constants.TFRECORD))
+        logger.info(f"using {constants.TFRECORD} dataset")
 
         # Build features
         def build_features(tensors, entity_name):
@@ -225,8 +225,7 @@ def per_entity_grouped_input_fn(input_path, metadata_file, num_shards, shard_ind
             return _splits_label_and_features(sequence, label_tensors)
 
         # Get shard input files
-        input_filename_pattern = _convert_dir_to_filename_pattern(input_path,
-                                                                  constants.TFRECORD_REGEX_PATTERN)
+        input_filename_pattern = _convert_dir_to_filename_pattern(input_path, constants.TFRECORD_GLOB_PATTERN)
         input_files, _ = shard_input_files(input_filename_pattern, num_shards, shard_index)
 
         # Get metadata
@@ -246,8 +245,8 @@ def per_entity_grouped_input_fn(input_path, metadata_file, num_shards, shard_ind
                                       entity_name=entity_name),
                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-    elif custom_input_fn is not None:
-        logger.info("loading {} dataset by {}".format(data_format, custom_input_fn))
+    elif custom_input_fn:
+        logger.info(f"loading {data_format} dataset by {custom_input_fn}")
         import importlib
         module_name, fn_name = custom_input_fn.rsplit('.', 1)
         dataset_module = importlib.import_module(module_name)
@@ -255,5 +254,5 @@ def per_entity_grouped_input_fn(input_path, metadata_file, num_shards, shard_ind
                                                    shard_index, batch_size, entity_name,
                                                    data_format)
     else:
-        raise Exception("Unknown data format :{}".format(data_format))
+        raise Exception(f"Unknown data format : {data_format}")
     return dataset

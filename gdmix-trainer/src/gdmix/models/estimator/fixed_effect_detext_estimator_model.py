@@ -1,16 +1,18 @@
-import tensorflow as tf
-import os
 import logging
+import os
+
 import detext.run_detext as detext_driver
 import detext.train.train as detext_train
 import detext.utils.misc_utils as detext_utils
+import tensorflow as tf
+from detext.run_detext import DetextArg
 from detext.train.data_fn import input_fn
 from detext.utils import vocab_utils
-
 from gdmix.models.api import Model
 from gdmix.models.detext_writer import DetextWriter
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
+from tensorflow.contrib.training import HParams
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,7 +41,7 @@ class FixedEffectDetextEstimatorModel(Model):
               execution_context,
               schema_params):
         # Delegate to super class
-        detext_driver.main(None)
+        detext_driver.run_detext(self.model_params)
 
     def predict(self,
                 output_dir,
@@ -78,13 +80,13 @@ class FixedEffectDetextEstimatorModel(Model):
                                                  self.model_params.filter_window_sizes)
                                              if self.model_params.ftr_ext == 'cnn' else 0)
 
-        self.estimator_based_model = detext_train.get_estimator(self.model_params,
+        self.estimator_based_model = detext_train.get_estimator(detext_utils.extend_hparams(HParams(**self.model_params._asdict())),
                                                                 strategy=None,  # local mode
                                                                 best_checkpoint=self.best_checkpoint)
         output = self.estimator_based_model.predict(inference_dataset, yield_single_examples=False)
         detext_writer = DetextWriter(schema_params=schema_params)
         shard_index = execution_context[constants.SHARD_INDEX]
-        output_file = os.path.join(output_dir, "part-{0:05d}.avro".format(shard_index))
+        output_file = os.path.join(output_dir, f"part-{shard_index:05d}.avro")
         for batch_score in output:
             if n_batch == 0:
                 with tf.io.gfile.GFile(output_file, 'wb') as f:
@@ -98,10 +100,10 @@ class FixedEffectDetextEstimatorModel(Model):
                     f.readable = lambda: True
                     n_records, n_batch = detext_writer.save_batch(f, batch_score, output_file,
                                                                   n_records, n_batch)
-        logger.info("{} batches, e.g. {} records inferenced".format(n_batch, n_records))
+        logger.info(f"{n_batch} records, e.g. {n_records} records inferenced")
 
     def export(self, output_model_dir):
         logger.info("Detext has built-in export operations during training")
 
     def _parse_parameters(self, raw_model_parameters):
-        return detext_utils.extend_hparams(detext_driver.get_hparams())
+        return DetextArg.__from_argv__(raw_model_parameters, error_on_unknown=False)

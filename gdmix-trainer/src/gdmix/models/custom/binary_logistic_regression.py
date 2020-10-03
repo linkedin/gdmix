@@ -20,10 +20,9 @@ class BinaryLogisticRegressionTrainer:
     intercept term or not.
     """
 
-    def __init__(self, lambda_l2=1.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10, max_iter=100,
-                 regularize_bias=False):
+    def __init__(self, lambda_l2=1.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10, max_iter=100, regularize_bias=False):
         self.lambda_l2 = lambda_l2
-        assert solver in ["lbfgs"]
+        assert solver in ("lbfgs",)
         self.solver = solver
 
         # Iterations stop when (f^k - f^{k+1})/max{|f^k|,|f^{k+1}|,1} <= precision * eps
@@ -55,8 +54,7 @@ class BinaryLogisticRegressionTrainer:
         elif scipy.sparse.issparse(theta):
             z = np.array(X.dot(theta).todense()).squeeze() + offsets
         else:
-            raise Exception(
-                "Unknown type for model weights. Accepted types are Numpy ndarray and Scipy sparse matrices")
+            raise Exception(f"Unknown type: {type(theta)!r} for model weights. Accepted types are Numpy ndarray and Scipy sparse matrices")
         return z if return_logits else self._sigmoid(z)
 
     def _get_number_of_samples(self, X):
@@ -135,7 +133,7 @@ class BinaryLogisticRegressionTrainer:
             X_with_intercept = scipy.sparse.hstack((np.ones((X.shape[0], 1)), X))
         return X_with_intercept
 
-    def fit(self, X, y, weights=None, offsets=None):
+    def fit(self, X, y, weights=None, offsets=None, theta_initial=None):
         """
         Fit a binary logistic regression model
         :param X:               a dense or sparse matrix of dimensions (n x d), where n is the number of samples,
@@ -143,6 +141,7 @@ class BinaryLogisticRegressionTrainer:
         :param y:               vector of binary sample labels; of dimensions (n x 1)  where n is the number of samples
         :param weights:         vector of sample weights; of dimensions (n x 1)  where n is the number of samples
         :param offsets:         vector of sample offsets; of dimensions (n x 1)  where n is the number of samples
+        :param theta_initial:   initial value for the coefficients, useful in warm start.
         :return:    training results dictionary, including learned parameters
         """
 
@@ -159,8 +158,10 @@ class BinaryLogisticRegressionTrainer:
         assert (X.shape[0] == y.shape[0] == weights.shape[0] == offsets.shape[0])
 
         X_with_intercept = self._add_column_of_ones(X)
-        theta_initial = np.random.rand(X_with_intercept.shape[1])
+        if theta_initial is None:
+            theta_initial = np.zeros(X_with_intercept.shape[1])
 
+        assert theta_initial.shape == (X_with_intercept.shape[1],), "Initial model should have the same shape as input data"
         # Run minimization
         result = fmin_l_bfgs_b(func=self._loss,
                                x0=theta_initial,
@@ -171,7 +172,6 @@ class BinaryLogisticRegressionTrainer:
                                maxiter=self.max_iter,
                                args=(X_with_intercept, y, weights, offsets),
                                disp=0)
-
         # Extract learned parameters from result
         self.theta = result[0]
 
@@ -197,9 +197,6 @@ class BinaryLogisticRegressionTrainer:
         if custom_theta is None:
             raise Exception("Custom weights must be provided if attempting inference on untrained model")
 
-        n_samples = self._get_number_of_samples(X)
-        if offsets is None:
-            offsets = np.zeros(n_samples)
         X_with_intercept = self._add_column_of_ones(X)
 
         return self._predict(custom_theta, X_with_intercept, offsets, return_logits)

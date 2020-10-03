@@ -28,13 +28,14 @@ object EffectConfigParser {
   /**
    * Sanity check the list of EffectConfig.
    * Throw an exception when there are more than 1 fixed effect.
+   *
    * @param EffectConfig A sequence of EffectConfig to be checked
    * @return A sequence of EffectConfig
    */
   private def sanityCheck(configList: Seq[EffectConfig]): Seq[EffectConfig] = {
 
     // A sequence of EffectConfig that represent a dataset should only have one fixed-effect.
-    val numFixedEffect = configList.foldLeft(0)((accum, config) => accum + (if(config.isRandomEffect) 0 else 1))
+    val numFixedEffect = configList.foldLeft(0)((accum, config) => accum + (if (config.isRandomEffect) 0 else 1))
     if (numFixedEffect > 1) {
       throw new IllegalArgumentException(s"There should be only 1 fixed effect, but $numFixedEffect are present")
     }
@@ -59,9 +60,10 @@ object EffectConfigParser {
     // Check if the labels are in columnConfig
     if (config.labels != None) {
       config.labels.get.map {
-        label => if (!columnNames.contains(label)) {
-          throw new IllegalArgumentException(s"Label $label is not in column names")
-        }
+        label =>
+          if (!columnNames.contains(label)) {
+            throw new IllegalArgumentException(s"Label $label is not in column names")
+          }
       }
     }
 
@@ -90,17 +92,18 @@ object EffectConfigParser {
     val sharedFeatureSpace = setDefaultBoolean(columnConfig.sharedFeatureSpace, true)
 
     if ((isInputNTV.get) && (columnConfig.dtype != DataType.float)) {
-        throw new IllegalArgumentException(s"Name-Term-Value format output datatype must be float")
+      throw new IllegalArgumentException(s"Name-Term-Value format output datatype must be float")
     }
 
     columnConfig.copy(
-      isInputNTV=isInputNTV,
-      isOutputSparse=isOutputSparse,
-      sharedFeatureSpace=sharedFeatureSpace)
+      isInputNTV = isInputNTV,
+      isOutputSparse = isOutputSparse,
+      sharedFeatureSpace = sharedFeatureSpace)
   }
 
   /**
    * A utility function that fill a Boolean value if missing from an option
+   *
    * @param some an option value.
    * @param value a boolean value used as the default.
    * @return A Some with the default value when the input is None.

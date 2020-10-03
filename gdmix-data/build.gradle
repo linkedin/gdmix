@@ -5,25 +5,24 @@ configurations {
 }
 
 dependencies {
-  compile "commons-cli:commons-cli:1.2"
-  compile "commons-io:commons-io:2.6"
+  compile "com.databricks:spark-avro$scalaSuffix:3.2.0"
+  compile "com.github.scopt:scopt$scalaSuffix:4.0.0-RC2"
+  compile "com.linkedin.sparktfrecord:spark-tfrecord$scalaSuffix:0.2.1"
+  compile "org.apache.spark:spark-avro$scalaSuffix:2.4.4"
   compile "org.json4s:json4s-core$scalaSuffix:3.2.11"
   compile "org.json4s:json4s-jackson$scalaSuffix:3.2.11"
   compile "org.json4s:json4s-ext$scalaSuffix:3.2.11"
   compile "org.json4s:json4s-ast$scalaSuffix:3.2.11"
-  compile "com.databricks:spark-avro$scalaSuffix:3.2.0"
-  compile "org.apache.spark:spark-avro$scalaSuffix:2.4.4"
-  compile "com.linkedin.sparktfrecord:spark-tfrecord$scalaSuffix:0.2.1"
 
+  compileOnly "com.fasterxml.jackson.core:jackson-databind:2.6.7.1"
   compileOnly "org.apache.spark:spark-core$scalaSuffix:$sparkVersion"
   compileOnly "org.apache.spark:spark-sql$scalaSuffix:$sparkVersion"
   compileOnly "org.apache.spark:spark-mllib$scalaSuffix:$sparkVersion"
-  compileOnly "com.fasterxml.jackson.core:jackson-databind:2.6.7.1"
 
-  testCompile "org.apache.avro:avro-mapred:1.7.7:hadoop2"
   testCompile "com.fasterxml.jackson.module:jackson-module-paranamer:2.6.7"
-  testCompile "org.apache.spark:spark-sql$scalaSuffix:$sparkVersion"
+  testCompile "org.apache.avro:avro-mapred:1.7.7:hadoop2"
   testCompile "org.apache.spark:spark-mllib$scalaSuffix:$sparkVersion"
+  testCompile "org.apache.spark:spark-sql$scalaSuffix:$sparkVersion"
 }
 
 test {

@@ -30,14 +30,9 @@ class DriverFactory:
         :return:            Fixed or Random effect driver
         """
 
-        driver_type = base_training_params[constants.STAGE]
+        driver = DriverFactory.drivers[base_training_params.stage]
         model = ModelFactory.get_model(base_training_params, raw_model_params)
-        if driver_type == constants.FIXED_EFFECT:
-            logger.info("Instantiating fixed effect model and driver")
-            driver = FixedEffectDriver(base_training_params=base_training_params, model=model)
-        elif driver_type == constants.RANDOM_EFFECT:
-            logger.info("Instantiating random effect model and driver")
-            driver = RandomEffectDriver(base_training_params=base_training_params, model=model)
-        else:
-            raise Exception("Unknown training stage")
-        return driver
+        logger.info(f"Instantiating model {model} and driver {driver}")
+        return driver(base_training_params=base_training_params, model=model)
+
+    drivers = {constants.FIXED_EFFECT: FixedEffectDriver, constants.RANDOM_EFFECT: RandomEffectDriver}

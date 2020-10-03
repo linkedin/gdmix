@@ -3,10 +3,12 @@ package com.linkedin.gdmix.data
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 
-import org.apache.commons.cli.{BasicParser, CommandLine, CommandLineParser, Options}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.sql.SparkSession
+
+import com.linkedin.gdmix.parsers.BestModelSelectorParser
+import com.linkedin.gdmix.parsers.BestModelSelectorParams
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.{IoUtils, JsonUtils}
 
@@ -17,44 +19,31 @@ object BestModelSelector {
 
   def main(args: Array[String]): Unit = {
 
-    // Define options.
-    val options = new Options()
-    options.addOption("inputMetricsPaths", true, "Input model metric paths, separated by semicolon.")
-    options.addOption("inputModelPaths", true, "Input model paths, separated by semicolons.")
-    options.addOption("outputBestMetricsPath", true, "Output best model metric path.")
-    options.addOption("outputBestModelPath", true, "Output best model path.")
-    options.addOption("evalMetric", true, "Evaluation metric.")
-    options.addOption("hyperparameters", true, "Hyper-parameters of each model encoded in base64")
-    options.addOption("copyBestOutput", true, "Boolean whether to copy the best output.")
+    val params = BestModelSelectorParser.parse(args)
+    // Create a Spark session.
+    val spark = SparkSession.builder().appName(getClass.getName).getOrCreate()
+    try {
+      run(spark, params)
+    } finally {
+      spark.stop()
+    }
+  }
 
-    // Get the parser.
-    val parser: CommandLineParser = new BasicParser()
-    val cmd: CommandLine = parser.parse(options, args)
+  def run(spark: SparkSession, params: BestModelSelectorParams): Unit = {
 
     // Read the input parameters.
     // Update input parameters to match with the cloudflow implementation.
     // The paths `inputMetricsPaths` and `inputModelPaths` are joined together separated by semicolon
     // i.e. path0;path1;path2;path3 with respect to model index from 0 to 3.
-    val inputMetricsPaths = cmd.getOptionValue("inputMetricsPaths").split(CONFIG_SPLITTER)
-    val inputModelPaths = cmd.getOptionValue("inputModelPaths").split(CONFIG_SPLITTER)
-    val outputBestMetricsPath = cmd.getOptionValue("outputBestMetricsPath")
-    val outputBestModelPath = cmd.getOptionValue("outputBestModelPath")
-    val evalMetric = cmd.getOptionValue("evalMetric")
+    val inputMetricsPaths = params.inputMetricsPaths
+    val evalMetric = params.evalMetric
+    val outputBestModelPath = params.outputBestModelPath
+    val inputModelPaths = params.inputModelPaths.getOrElse("").split(CONFIG_SPLITTER).map(_.trim)
+    val outputBestMetricsPath = params.outputBestMetricsPath
     // hyperparameters is a encoded base64 string to avoid the parsing error in spark due to nested
     // fields coming from PDLs.
-    val hyperparameters = cmd.getOptionValue("hyperparameters")
-    val copyBestOutput = cmd.getOptionValue("copyBestOutput", "false").toBoolean
-
-    require(
-      inputMetricsPaths != null
-        && outputBestMetricsPath != null
-        && evalMetric != null
-        && hyperparameters != null,
-      "Incorrect number of input parameters")
-
-    if (copyBestOutput) {
-      require(inputModelPaths != null && outputBestModelPath != null)
-    }
+    val hyperparameters = params.hyperparameters
+    val copyBestOutput = params.copyBestOutput
 
     // Create a Spark session.
     val spark = SparkSession.builder().appName(getClass.getName).getOrCreate()
@@ -64,9 +53,10 @@ object BestModelSelector {
     val hparamMap = deserialize(hyperparameters)
 
     val modelSize = inputMetricsPaths.size
-    require(modelSize == inputModelPaths.size, s"inputModelPaths does not have desired $modelSize paths.")
     require(modelSize == hparamMap.size, s"hyperparameters does not have desired $modelSize values.")
-
+    if (copyBestOutput) {
+      require(modelSize == inputModelPaths.size, s"inputModelPaths does not have desired $modelSize paths.")
+    }
 
     var maxMetric: Float = -1.0F
     var bestModelId: Int = -1
@@ -97,18 +87,16 @@ object BestModelSelector {
     val outputJsonFile = s"$outputBestModelPath/evals.json"
     IoUtils.writeFile(fs, new Path(outputJsonFile), configsJsonString)
 
+
     if (copyBestOutput) {
       // Copy the best metrics log.
       val srcMetric = inputMetricsPaths(bestModelId)
-      IoUtils.copyDirectory(fs, hadoopJobConf, srcMetric, outputBestMetricsPath)
+      IoUtils.copyDirectory(fs, hadoopJobConf, srcMetric, outputBestMetricsPath.get)
 
       // Copy the best model.
       val srcModel = inputModelPaths(bestModelId)
       IoUtils.copyDirectory(fs, hadoopJobConf, srcModel, outputBestModelPath)
     }
-
-    // Terminate Spark session.
-    spark.stop()
   }
 
   /**
@@ -130,7 +118,7 @@ object BestModelSelector {
    * @param evalMetric Metric to be chosen
    * @return Metric value
    */
-  def getMetric(evalSummary: String, evalMetric:String): Float = {
+  def getMetric(evalSummary: String, evalMetric: String): Float = {
 
     val metricsMap: Map[String, Float] = JsonUtils.toMap[Float](evalSummary)
     val metricOption = metricsMap.get(evalMetric)

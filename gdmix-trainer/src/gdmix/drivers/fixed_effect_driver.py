@@ -16,8 +16,7 @@ class FixedEffectDriver(Driver):
     """
 
     def __init__(self, base_training_params, model):
-        self.effect_name = constants.FIXED_EFFECT
-        super().__init__(base_training_params, model)
+        super().__init__(base_training_params, model, constants.FIXED_EFFECT)
 
     def _validate_params(self):
         pass
@@ -37,7 +36,7 @@ class FixedEffectDriver(Driver):
             return execution_context
         tf_config_json = json.loads(tf_config)
         cluster = tf_config_json.get('cluster')
-        if self.base_training_params[constants.ACTION] == constants.ACTION_INFERENCE:
+        if self.base_training_params.action == constants.ACTION_INFERENCE:
             # Inference / prediction / validation runs in local mode.
             cluster_spec = None
         else:
