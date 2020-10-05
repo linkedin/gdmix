@@ -1,18 +1,21 @@
-import argparse
 import collections
-import fastavro
+import itertools
 import json
 import logging
-import numpy as np
 import os
-import tensorflow as tf
 import time
+from typing import Iterator
 
-from gdmix.data import BAYESIAN_LINEAR_MODEL_SCHEMA
-from tensorflow.python import pywrap_tensorflow
+import fastavro
+import numpy as np
+import tensorflow as tf
+
+from gdmix.models.schemas import BAYESIAN_LINEAR_MODEL_SCHEMA
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+INTERCEPT = "(INTERCEPT)"
 
 
 def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
@@ -28,7 +31,6 @@ def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
     """
     try:
         fastavro.writer(f, schema, records)
-        records[:] = []
         if suc_msg:
             logger.info(suc_msg)
     except Exception as exp:
@@ -38,25 +40,40 @@ def try_write_avro_blocks(f, schema, records, suc_msg=None, err_msg=None):
         raise
 
 
-def load_scipy_models_from_avro(model_file):
-    """ load model(s) from avro file. """
+def load_linear_models_from_avro(model_file, feature_file):
+    """
+    Load linear models from avro files.
+    The models are in photon-ml format.
+    Intercept is moved to the end of the coefficient array.
+    :param model_file: Model avro file, photon-ml format
+    :param feature_file: A file containing all features of the model (intercept excluded)
+    :return:
+    """
 
-    def get_one_model_weights(model_record):
-        """ load one model weights. """
-        model_coefficients = []
+    def get_one_model_weights(model_record, feature_map):
+        """
+        Load a single model from avro record
+        :param model_record: photon-ml LR model in avro record format
+        :param feature_map: feature name to index map
+        :return: a numpy array of the model coefficients, intercept is at the end. Elements are in np.float64.
+        """
+        num_features = len(feature_map)
+        model_coefficients = np.zeros(num_features+1, dtype=np.float64)
         for ntv in model_record["means"]:
-            model_coefficients.append(np.float64(ntv['value']))
-        bias = model_coefficients[0]
-        weights = model_coefficients[1:]
-        return np.array(weights + [bias])
+            name, term, value = ntv['name'], ntv['term'], np.float64(ntv['value'])
+            if name == INTERCEPT and term == '':
+                model_coefficients[num_features] = value  # Intercept at the end.
+            else:
+                full_feature_name = name_term_to_string(name, term)
+                feature_index = feature_map.get(full_feature_name, None)
+                if feature_index is not None:  # Take only the features that in the current training dataset.
+                    model_coefficients[feature_index] = value
+        return model_coefficients
 
-    models = []
+    feature_map = get_feature_map(feature_file)
     with tf.io.gfile.GFile(model_file, 'rb') as fo:
         avro_reader = fastavro.reader(fo)
-        for record in avro_reader:
-            model_coefficients = get_one_model_weights(record)
-            models.append(model_coefficients)
-    return models
+        return tuple(get_one_model_weights(record, feature_map) for record in avro_reader)
 
 
 def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bias, feature_list):
@@ -70,28 +87,26 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     :param feature_list: corresponding feature names
     :return: a model in avro format
     """
-    records = {u'modelId': model_id, u'modelClass': model_class, u'means': [],
-               u'lossFunction': ""}
-    record = {u'name': '(INTERCEPT)', u'term': '', u'value': bias}
-    records[u'means'].insert(0, record)
+    record = {u'name': INTERCEPT, u'term': '', u'value': bias}
+    records = {u'modelId': model_id, u'modelClass': model_class, u'means': [record], u'lossFunction': ""}
     for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
         feat = feature_list[w_i]
-        record = {u'name': feat[0], u'term': feat[1], u'value': w_v}
+        name, term = name_term_from_string(feat)
+        record = {u'name': name, u'term': term, u'value': w_v}
         records[u'means'].append(record)
     return records
 
 
-def export_scipy_lr_model_to_avro(model_ids,
-                                  list_of_weight_indices,
-                                  list_of_weight_values,
-                                  biases,
-                                  feature_file,
-                                  output_file,
-                                  model_log_interval=1000,
-                                  model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"
-                                  ):
+def export_linear_model_to_avro(model_ids,
+                                list_of_weight_indices,
+                                list_of_weight_values,
+                                biases,
+                                feature_file,
+                                output_file,
+                                model_log_interval=1000,
+                                model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"):
     """
-    Export scipy-based random effect logistic regression model in avro format for photon-ml to consume
+    Export random effect logistic regression model in avro format for photon-ml to consume
     :param model_ids:               a list of model ids used in generated avro file
     :param list_of_weight_indices:  list of indices for entity-specific model weights
     :param list_of_weight_values:   list of values for entity-specific model weights
@@ -105,120 +120,62 @@ def export_scipy_lr_model_to_avro(model_ids,
     # STEP [1] - Read feature list
     feature_list = read_feature_list(feature_file)
 
-    # STEP [2] - Read number of features and moels
-    num_features = len(feature_list)
+    # STEP [2] - Read number of features and models
     num_models = len(biases)
-    logger.info("found {} models".format(num_models))
-    logger.info("num features: {}".format(num_features))
+    logger.info(f"To save {num_models} models.\n Found {len(feature_list)} features in {feature_file}")
 
     # STEP [3]
-    model_avro_records = []
-    schema = fastavro.parse_schema(json.loads(BAYESIAN_LINEAR_MODEL_SCHEMA))
-    with tf.io.gfile.GFile(output_file, 'wb') as f:
-        f.seekable = lambda: False
-        records = gen_one_avro_model(str(model_ids[0]), model_class, list_of_weight_indices[0],
-                                     list_of_weight_values[0],
-                                     biases[0], feature_list)
-        model_avro_records.append(records)
-        err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[0], output_file)
-        try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-
-    # write the remaining models
-    with tf.io.gfile.GFile(output_file, 'ab+') as f:
-        f.seek(0, 2)  # seek to the end of the file, 0 is offset, 2 means the end of file
-        f.seekable = lambda: True
-        f.readable = lambda: True
-        for i in range(1, num_models):
-            records = gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i],
-                                         list_of_weight_values[i],
-                                         biases[i], feature_list)
-            model_avro_records.append(records)
-            if i % model_log_interval == 0:
-                err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[i], output_file)
-                try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-        if len(model_avro_records):
-            err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[-1], output_file)
-            try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-    logger.info("dumped avro model file at {}".format(output_file))
-
-
-def export_lr_model_to_avro(checkpoint_dir, feature_file, output_file,
-                            weight_variable_list=["global_weights"],
-                            bias="bias",
-                            model_ids=["global model"],
-                            model_log_interval=1000,
-                            model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"):
-    """
-    read from checkpoint dir and export the logistic regression model in avro format for photon-ml to consume.
-
-    :param checkpoint_dir: directory where checkpoint files are saved by tensorflow.
-    :param feature_file: a file containing all the features, typically generated by avro2tf.
-    :param output_file: full file path for the generated avro file.
-    :param weight_variable_list: a list of LR weights in the tensorflow graph.
-    :param bias: the bias variable in the tensorflow graph.
-    :param model_ids: a list of model ids used in generated avro file.
-    :param model_log_interval: write model every model_log_interval models.
-    :param model_class: the model class defined by photon-ml.
-    :return: none
-    """
-    reader = pywrap_tensorflow.NewCheckpointReader(tf.train.latest_checkpoint(checkpoint_dir))
-    assert (len(weight_variable_list) == 1)  # only one feature bag is supported.
-    weights = reader.get_tensor(weight_variable_list[0])
-    bias = reader.get_tensor(bias)
-    logger.info("{} shape: {}".format(weight_variable_list[0], weights.shape))
-    model_ids = [str(x) for x in model_ids]  # convert model ids to string.
-
-    # read feature list
-    feature_list = read_feature_list(feature_file)
-    num_features = len(feature_list)
-    num_models = weights.shape[0]
-    weights_shape = weights.shape[1]
-    logger.info("found {} models".format(num_models))
-    logger.info("weight shape: {}".format(weights_shape))
-    logger.info("num features: {}".format(num_features))
-    assert (weights.shape[1] == num_features)
-    assert (num_models == len(model_ids))
-    weight_indices = np.arange(weights.shape[1])
-
-    # write avro records
-    model_avro_records = []
     schema = fastavro.parse_schema(json.loads(BAYESIAN_LINEAR_MODEL_SCHEMA))
 
-    with tf.io.gfile.Gfile(output_file, 'wb') as f:
-        f.seekable = lambda: False
-        records = gen_one_avro_model(model_ids[0], model_class, weight_indices, weights[0, :], bias[0], feature_list)
-        model_avro_records.append(records)
-        err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[0], output_file)
-        try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-
-    # write the remaining models
-    with tf.io.gfile.GFile(output_file, 'ab+') as f:
-        f.seek(0, 2)  # seek to the end of the file, 0 is offset, 2 means the end of file
-        f.seekable = lambda: True
-        f.readable = lambda: True
-        for i in range(1, num_models):
-            records = gen_one_avro_model(model_ids[i], model_class, weight_indices, weights[i, :], bias[i],
-                                         feature_list)
-            model_avro_records.append(records)
-            if i % model_log_interval == 0:
-                err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[i], output_file)
-                try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-        if len(model_avro_records):
-            err_msg = 'An error occurred while writing model id {} to path {}'.format(model_ids[-1], output_file)
-            try_write_avro_blocks(f, schema, model_avro_records, None, err_msg)
-    logger.info("dumped avro model file at {}".format(output_file))
+    def gen_records():
+        for i in range(num_models):
+            yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i], list_of_weight_values[i], biases[i], feature_list)
+    batched_write_avro(gen_records(), output_file, schema, model_log_interval)
+    logger.info(f"dumped {num_models} models to avro file at {output_file}.")
 
 
 def read_feature_list(feature_file):
-    feature_list = []
+    """
+    Get feature names from the feature file.
+    Note: intercept is not included here since it is not part of the raw data.
+    :param feature_file: user provided feature file, each row is a "name,term" feature name
+    :return: list of feature names
+    """
     with tf.io.gfile.GFile(feature_file) as f:
         f.seekable = lambda: False
-        for line in f:
-            fields = line.strip().split(',')
-            if len(fields) == 1:
-                fields.append('')
-            feature_list.append(fields)
-    return feature_list
+        return [line.strip() for line in f]
+
+
+def name_term_from_string(name_term_string):
+    """
+    Convert "name,term" string to (name, term)
+    :param name_term_string: A string where name and term joined by ","
+    :return: (name, term) tuple
+    """
+    name, *term = name_term_string.split(',')
+    assert len(term) <= 1, f"One ',' expected, but found more in {name_term_string!r}."
+    return name, term[0] if term else ''
+
+
+def name_term_to_string(name, term):
+    """
+    Convert (name, term) to "name,term" string.
+    :param name: Name of the feature.
+    :param term: Term of the feature.
+    :return: "name,term" string
+    """
+    return ','.join((name, term))
+
+
+def get_feature_map(feature_file):
+    """
+    Get feature -> index map.
+    The index of a feature is the position of the feature in the file.
+    The index starts from zero.
+    :param feature_file: The file containing a list of features.
+    :return: a dict of feature_name and its index.
+    """
+    return {feature: index for index, feature in enumerate(read_feature_list(feature_file))}
 
 
 def read_json_file(file_path: str):
@@ -232,26 +189,12 @@ def read_json_file(file_path: str):
     """
 
     if not tf.io.gfile.exists(file_path):
-        raise IOError("Path '{}' does not exist.".format(file_path))
+        raise IOError(f"Path {file_path!r} does not exist.")
     try:
         with tf.io.gfile.GFile(file_path) as json_file:
             return json.load(json_file)
     except Exception as e:
-        raise ValueError("Error '{}' while loading file '{}'."
-                         .format(e, file_path))
-
-
-def str2bool(v):
-    """
-    handle argparse can't parse boolean well.
-    ref: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse/36031646
-    """
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, str):
-        return v.lower() == 'true'
-    else:
-        raise argparse.ArgumentTypeError('Boolean or string value expected.')
+        raise ValueError(f"Failed loading file {file_path!r}.") from e
 
 
 def copy_files(input_files, output_dir):
@@ -272,8 +215,8 @@ def copy_files(input_files, output_dir):
         fname = os.path.join(output_dir, os.path.basename(f))
         tf.io.gfile.copy(f, fname, overwrite=True)
         copied_files.append(fname)
-    logger.info("Files copied to Local: {}".format(copied_files))
-    logger.info("--- %s seconds ---" % (time.time() - start_time))
+    logger.info(f"Files copied to Local: {copied_files}")
+    logger.info(f"--- {time.time() - start_time} seconds ---")
     return copied_files
 
 
@@ -287,9 +230,75 @@ def namedtuple_with_defaults(typename, field_names, defaults=()):
     """
     T = collections.namedtuple(typename, field_names)
     T.__new__.__defaults__ = (None,) * len(T._fields)
-    if isinstance(defaults, collections.Mapping):
-        prototype = T(**defaults)
-    else:
-        prototype = T(*defaults)
+    prototype = T(**defaults) if isinstance(defaults, collections.Mapping) else T(*defaults)
     T.__new__.__defaults__ = tuple(prototype)
     return T
+
+
+def batched_write_avro(records: Iterator, output_file, schema, write_frequency=1000, batch_size=1024):
+    """ For the first block, the file needs to be open in âwâ mode, while the
+        rest of the blocks needs the âaâ mode. This restriction makes it
+        necessary to open the files at least twice, one for the first block,
+        one for the remaining. So itâs not possible to put them into the
+        while loop within a file context.  """
+    f = None
+    t0 = time.time()
+    n_batch = 0
+    logger.info(f"Writing to {output_file} with batch size of {batch_size}.")
+    try:
+        for batch in _chunked_iterator(records, batch_size):
+            if n_batch == 0:
+                with tf.io.gfile.GFile(output_file, 'wb') as f0:  # Create the file in 'w' mode
+                    f0.seekable = lambda: False
+                    try_write_avro_blocks(f0, schema, batch, None, create_error_message(n_batch, output_file))
+                f = tf.io.gfile.GFile(output_file, 'ab+')  # reopen the file in 'a' mode for later writes
+                f.seekable = f.readable = lambda: True
+                f.seek(0, 2)  # seek to the end of the file, 0 is offset, 2 means the end of file
+            else:
+                try_write_avro_blocks(f, schema, batch, None, create_error_message(n_batch, output_file))
+            n_batch += 1
+            if n_batch % write_frequency == 0:
+                delta_time = time.time() - t0
+                logger.info(f"nbatch = {n_batch}, deltaT = {delta_time:0.2f} seconds, speed = {n_batch / delta_time :0.2f} batches/sec")
+        logger.info(f"Finished writing to {output_file}.")
+    finally:
+        f and f.close()
+
+
+def _chunked_iterator(iterator: Iterator, chuck_size):
+    while True:
+        chunk_it = itertools.islice(iterator, chuck_size)
+        try:
+            first_el = next(chunk_it)
+            yield itertools.chain((first_el,), chunk_it)
+        except StopIteration:
+            return
+
+
+def create_error_message(n_batch, output_file) -> str:
+    return f'An error occurred while writing batch #{n_batch} to path {output_file}'
+
+
+def dataset_reader(iterator):
+    # Iterate through TF dataset in a throttled manner
+    # (Forking after the TensorFlow runtime creates internal threads is unsafe, use config provided in this
+    # link -
+    # https://github.com/tensorflow/tensorflow/issues/14442)
+    with tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(use_per_session_threads=True)) as sess:
+        sess.run(iterator.initializer)
+        while True:
+            try:
+                # Extract and process raw entity data
+                yield sess.run(iterator.get_next())
+            except tf.errors.OutOfRangeError:
+                break
+
+
+def get_inference_output_avro_schema(metadata, has_logits_per_coordinate, schema_params, has_weight=False):
+    fields = [{'name': schema_params.sample_id, 'type': 'long'}, {'name': schema_params.prediction_score, 'type': 'float'},
+              {'name': schema_params.label, 'type': ['null', 'int'], "default": None}]
+    if has_weight or metadata.get(schema_params.sample_weight) is not None:
+        fields.append({'name': schema_params.sample_weight, 'type': 'float'})
+    if has_logits_per_coordinate:
+        fields.append({'name': schema_params.prediction_score_per_coordinate, 'type': 'float'})
+    return {'name': 'validation_result', 'type': 'record', 'fields': fields}

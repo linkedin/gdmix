@@ -8,6 +8,8 @@ from gdmix.models.custom.binary_logistic_regression import BinaryLogisticRegress
 sample_dataset_path = os.path.join(os.getcwd(), "test/resources/custom")
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
+_TOLERANCE = 1.0e-5
+
 
 class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
     """
@@ -23,7 +25,7 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
                                                                                 test_size=0.25,
                                                                                 random_state=0)
 
-        self.binary_lr_trainer = BinaryLogisticRegressionTrainer()
+        self.binary_lr_trainer = BinaryLogisticRegressionTrainer(max_iter=500)
         self.custom_weights = self.binary_lr_trainer.fit(X=self.x_train,
                                                          y=self.y_train,
                                                          weights=None,
@@ -145,3 +147,30 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
                                                                     offsets=None,
                                                                     custom_theta=self.custom_weights)
         assert (0.0 <= validation_metrics['auc'] <= 1.0)
+
+    def test_training_with_warm_start(self):
+        """
+        Training with a user provided model for warm start.
+        """
+        # Get trainer object, but only train 1 L-BFGS step.
+        binary_lr_trainer = BinaryLogisticRegressionTrainer(lambda_l2=0.0, max_iter=1)
+        coefficients_warm_start = binary_lr_trainer.fit(X=self.x_train,
+                                                        y=self.y_train,
+                                                        weights=None,
+                                                        offsets=None,
+                                                        theta_initial=self.custom_weights)[0]
+        # Warm start.
+        # The trained model should be close to initial value
+        # since the solution should have already converged.
+        self.assertAllClose(coefficients_warm_start, self.custom_weights,
+                            rtol=_TOLERANCE, atol=_TOLERANCE, msg='models mismatch')
+
+        coefficients_code_start = binary_lr_trainer.fit(X=self.x_train,
+                                                        y=self.y_train,
+                                                        weights=None,
+                                                        offsets=None,
+                                                        theta_initial=None)[0]
+        # Code start
+        # The trained model should be far from initial value since we only train 1 step,
+        # while the initial model was trained for 100 steps.
+        self.assertNotAllClose(coefficients_code_start, self.custom_weights, msg='models are too close')

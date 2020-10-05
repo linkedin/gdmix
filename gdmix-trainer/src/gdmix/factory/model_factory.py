@@ -1,4 +1,7 @@
 import logging
+
+from gdmix.params import Params
+
 from gdmix.models.estimator.fixed_effect_detext_estimator_model import FixedEffectDetextEstimatorModel
 from gdmix.models.custom.random_effect_lr_lbfgs_model import RandomEffectLRLBFGSModel
 from gdmix.models.custom.fixed_effect_lr_lbfgs_model import FixedEffectLRModelLBFGS
@@ -17,7 +20,7 @@ class ModelFactory:
     """
 
     @staticmethod
-    def get_model(base_training_params, raw_model_params):
+    def get_model(base_training_params: Params, raw_model_params):
         """
         Create driver and associated dependencies, based on type. Only linear, estimator-based models supported
         for now
@@ -28,9 +31,9 @@ class ModelFactory:
         as a parameter
         :return:                Model instances
         """
-        model_type = base_training_params[constants.MODEL_TYPE]
-        driver_type = base_training_params[constants.STAGE]
-        logger.info("Instantiating %s model and driver" % model_type)
+        model_type = base_training_params.model_type
+        driver_type = base_training_params.stage
+        logger.info(f"Instantiating {model_type} model and driver")
         if model_type == constants.LOGISTIC_REGRESSION:
             if driver_type == constants.FIXED_EFFECT:
                 logger.info("Choosing Scipy-LBFGS FE model")
@@ -42,5 +45,5 @@ class ModelFactory:
         elif model_type == constants.DETEXT:
             model = FixedEffectDetextEstimatorModel(raw_model_params=raw_model_params)
         else:
-            raise Exception("Unknown training models")
+            raise Exception(f"Unknown training models {model_type}")
         return model

@@ -37,10 +37,11 @@ setup(
         "tensorflow_ranking==0.1.4",
         "fastavro==0.21.22",
         "decorator==4.4.2",
-        "detext==2.0.5",
+        "detext-nodep==2.0.9",
+        "psutil==5.7.0",
         "scipy==1.3.2",
         "scikit-learn==0.21.2",
-        "psutil==5.7.0"
+        "smart-arg==0.2.12"
     ],
     tests_require=['pytest'],
 )

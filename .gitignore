@@ -32,7 +32,11 @@
 /dist/
 /ligradle/
 TEST-*.xml
-__pycache__/
-/*/build
 .DS_Store
+venv/
+.vscode/
+.project
+.settings/
+__pycache__
+.cache
 

@@ -1,24 +1,25 @@
-import argparse
+import logging
 import numpy as np
 import os
 import psutil
-import time
-import logging
 import tensorflow.compat.v1 as tf1
+import time
 
+from dataclasses import dataclass
 from fastavro import parse_schema
-from gdmix.io.dataset_metadata import DatasetMetadata
-from gdmix.io.input_data_pipeline import per_record_input_fn
-from gdmix.models.api import Model
-from gdmix.models.custom.base_lr_argparser import parser as lr_parser
-from gdmix.models.photon_ml_writer import PhotonMLWriter
-from gdmix.util import constants
-from gdmix.util.distribution_utils import shard_input_files
-from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, str2bool, export_scipy_lr_model_to_avro,\
-    load_scipy_models_from_avro, copy_files
+from smart_arg import arg_suite
 from scipy.optimize import fmin_l_bfgs_b
 from tensorflow.python.ops import collective_ops
 
+from gdmix.io.dataset_metadata import DatasetMetadata
+from gdmix.io.input_data_pipeline import per_record_input_fn
+from gdmix.models.api import Model
+from gdmix.models.custom.base_lr_params import LRParams
+from gdmix.params import SchemaParams, Params
+from gdmix.util import constants
+from gdmix.util.distribution_utils import shard_input_files
+from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, export_linear_model_to_avro, \
+    load_linear_models_from_avro, copy_files, get_inference_output_avro_schema
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -28,40 +29,63 @@ tf1.disable_eager_execution()
 
 def logging(msg):
     """ logging util. """
-    logger.info("[LBFGS] {}".format(msg))
+    logger.info("[FELR] {}".format(msg))
+
+
+def snooze_after_tf_session_closure(tf_session, duration_in_seconds):
+    """
+    Snooze after the tf session is closed. This is to avoid the worker exits too quickly,
+    resulting in hanging of remote workers who may contact this worker during their session closure.
+    This is a workaround to this issue:
+    https://github.com/tensorflow/tensorflow/issues/21745
+    :param tf_session: a Tensorflow session or MoninitoredTrainingSession.
+    :param duration_in_seconds: snooze duration in seconds
+    :return: None
+    """
+    tf_session.close()
+    time.sleep(duration_in_seconds)
+
+
+@arg_suite
+@dataclass
+class FixedLRParams(LRParams):
+    """Logistic regression model with scipy LBFGS + TF."""
+    copy_to_local: bool = True  # Copying data to local or not.
+    num_server_creation_retries: int = 50  # Number of retries to establish tf server.
+    retry_interval: int = 2  # Number of seconds between retries.
+    delayed_exit_in_seconds: int = 60  # Number of seconds before exiting
 
 
 class FixedEffectLRModelLBFGS(Model):
     """
-    Logstic regression model with scipy LBFGS + TF.
+    Logistic regression model with scipy LBFGS + TF.
     """
     # TF all reduce op group identifier
     TF_ALL_REDUCE_GROUP_KEY = 0
 
-    def __init__(self, raw_model_params, base_training_params):
-        self.model_params = self._parse_parameters(raw_model_params)
-        self.training_output_dir = base_training_params[constants.TRAINING_OUTPUT_DIR]
-        self.validation_output_dir = base_training_params[constants.VALIDATION_OUTPUT_DIR]
+    def __init__(self, raw_model_params, base_training_params: Params):
+        self.model_params: FixedLRParams = self._parse_parameters(raw_model_params)
+        self.training_output_dir = base_training_params.training_output_dir
+        self.validation_output_dir = base_training_params.validation_output_dir
         self.local_training_input_dir = "local_training_input_dir"
-        self.model_params[constants.FEATURE_BAGS] = list(self.model_params[constants.FEATURE_BAGS].split(','))
         self.lbfgs_iteration = 0
-        self.training_data_path = self.model_params[constants.TRAIN_DATA_PATH]
-        self.validation_data_path = self.model_params[constants.VALIDATION_DATA_PATH]
-        self.metadata_file = self.model_params[constants.METADATA_FILE]
-        self.feature_file = self.model_params[constants.FEATURE_FILE]
-        self.checkpoint_path = self.model_params[constants.MODEL_OUTPUT_DIR]
-        self.data_format = self.model_params[constants.DATA_FORMAT]
+        self.training_data_path = self.model_params.train_data_path
+        self.validation_data_path = self.model_params.validation_data_path
+        self.metadata_file = self.model_params.metadata_file
+        self.feature_file = self.model_params.feature_file
+        self.checkpoint_path = self.model_params.model_output_dir
+        self.data_format = self.model_params.data_format
 
-        self.feature_bag_name = self.model_params[constants.FEATURE_BAGS][0]
-        self.offset_column_name = self.model_params[constants.OFFSET]
+        self.feature_bag_name = self.model_params.feature_bags[0]
+        self.offset_column_name = self.model_params.offset
 
-        self.batch_size = int(self.model_params[constants.BATCH_SIZE])
-        self.copy_to_local = self.model_params[constants.COPY_TO_LOCAL]
-        self.num_correction_pairs = self.model_params[constants.NUM_OF_LBFGS_CURVATURE_PAIRS]
-        self.factor = self.model_params[constants.LBFGS_TOLERANCE] / np.finfo(float).eps
-        self.is_regularize_bias = self.model_params[constants.REGULARIZE_BIAS]
-        self.max_iteration = self.model_params[constants.NUM_OF_LBFGS_ITERATIONS]
-        self.l2_reg_weight = self.model_params[constants.L2_REG_WEIGHT]
+        self.batch_size = int(self.model_params.batch_size)
+        self.copy_to_local = self.model_params.copy_to_local
+        self.num_correction_pairs = self.model_params.num_of_lbfgs_curvature_pairs
+        self.factor = self.model_params.lbfgs_tolerance / np.finfo(float).eps
+        self.is_regularize_bias = self.model_params.regularize_bias
+        self.max_iteration = self.model_params.num_of_lbfgs_iterations
+        self.l2_reg_weight = self.model_params.l2_reg_weight
 
         self.metadata = self._load_metadata()
         self.tensor_metadata = DatasetMetadata(self.metadata_file)
@@ -69,10 +93,13 @@ class FixedEffectLRModelLBFGS(Model):
         self.num_features = self._get_num_features()
         self.model_coefficients = None
 
+        self.num_server_creation_retries = self.model_params.num_server_creation_retries
+        self.retry_interval = self.model_params.retry_interval
+        self.delayed_exit_in_seconds = self.model_params.delayed_exit_in_seconds
         self.server = None
 
         # validate parameters:
-        assert len(self.model_params[constants.FEATURE_BAGS]) == 1, "Only support one feature bag"
+        assert len(self.model_params.feature_bags) == 1, "Only support one feature bag"
         assert self.global_num_samples > 0,\
             "Number of training samples must be set in the metadata and be positive"
         assert self.feature_file and tf1.io.gfile.exists(self.feature_file), \
@@ -117,12 +144,23 @@ class FixedEffectLRModelLBFGS(Model):
         task_index = execution_context[constants.TASK_INDEX]
         config = tf1.ConfigProto()
         config.experimental.collective_group_leader = '/job:worker/replica:0/task:0'
-        self.server = tf1.distribute.Server(cluster_spec,
-                                            config=config,
-                                            job_name='worker',
-                                            task_index=task_index)
+        exception = None
+        for i in range(self.num_server_creation_retries):
+            try:
+                logging(f"No. {i+1} attempt to create a TF Server, "
+                        f"max {self.num_server_creation_retries} attempts")
+                self.server = tf1.distribute.Server(cluster_spec,
+                                                    config=config,
+                                                    job_name='worker',
+                                                    task_index=task_index)
+                return
+            except Exception as e:
+                exception = e
+                # sleep for retry_interval seconds before next retry
+                time.sleep(self.retry_interval)
+        raise exception
 
-    def _inference_model_fn(self, diter, x_placeholder, num_iterations, schema_params):
+    def _inference_model_fn(self, diter, x_placeholder, num_iterations, schema_params: SchemaParams):
         """ Implement the forward pass to get logit. """
         sample_id_list = tf1.constant([], tf1.int64)
         label_list = tf1.constant([], tf1.int64)
@@ -131,9 +169,9 @@ class FixedEffectLRModelLBFGS(Model):
         prediction_score_per_coordinate_list = tf1.constant([], tf1.float64)
 
         feature_bag_name = self.feature_bag_name
-        sample_id_column_name = schema_params[constants.SAMPLE_ID]
-        label_column_name = schema_params[constants.LABEL]
-        sample_weight_column_name = schema_params[constants.SAMPLE_WEIGHT]
+        sample_id_column_name = schema_params.sample_id
+        label_column_name = schema_params.label
+        sample_weight_column_name = schema_params.sample_weight
         offset_column_name = self.offset_column_name
         has_offset = self._has_feature(offset_column_name)
         has_label = self._has_label(label_column_name)
@@ -169,25 +207,25 @@ class FixedEffectLRModelLBFGS(Model):
             logits_with_offsets = logits + tf1.expand_dims(tf1.cast(offsets, tf1.float64), 1)
             prediction_score_list = tf1.concat([prediction_score_list, tf1.reshape(logits_with_offsets, [-1])], axis=0)
 
-            return i, sample_id_list, label_list, weight_list, prediction_score_per_coordinate_list, prediction_score_list
+            return i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
 
-        _, sample_id_list, label_list, weight_list, prediction_score_per_coordinate_list, prediction_score_list \
+        _, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list \
             = tf1.while_loop(cond, body,
                              loop_vars=[i, sample_id_list, label_list, weight_list,
-                                        prediction_score_per_coordinate_list, prediction_score_list],
+                                        prediction_score_list, prediction_score_per_coordinate_list],
                              shape_invariants=[i.get_shape()] + [tf1.TensorShape([None])] * 5)
 
-        return sample_id_list, label_list, weight_list, prediction_score_per_coordinate_list, prediction_score_list
+        return sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
 
     def _train_model_fn(self, diter, x_placeholder, num_workers, num_features, global_num_samples, num_iterations,
-                        schema_params):
+                        schema_params: SchemaParams):
         """ The training objective function and the gradients. """
         value = tf1.constant(0.0, tf1.float64)
         # Add bias
         gradients = tf1.constant(np.zeros(num_features + 1))
         feature_bag_name = self.feature_bag_name
-        label_column_name = schema_params[constants.LABEL]
-        sample_weight_column_name = schema_params[constants.SAMPLE_WEIGHT]
+        label_column_name = schema_params.label
+        sample_weight_column_name = schema_params.sample_weight
         offset_column_name = self.offset_column_name
         is_regularize_bias = self.is_regularize_bias
         has_weight = self._has_feature(sample_weight_column_name)
@@ -248,54 +286,52 @@ class FixedEffectLRModelLBFGS(Model):
         init_dataset_op, value_op, gradients_op = ops
         tf_session.run(init_dataset_op)
         value, gradients = tf_session.run([value_op, gradients_op], feed_dict={x_placeholder: x})
-        logging("Iteration {}: value = {}".format(self.lbfgs_iteration, value))
-        logging("Iteration {}: memory used: {} GB".format(self.lbfgs_iteration, self._check_memory()))
-        logging("Iteration {}: --- {} seconds ---".format(self.lbfgs_iteration, time.time() - start_time))
+        logging(f"Funcall #{self.lbfgs_iteration:4}, total lose = {value}, "
+                f"memory used: {self._check_memory()} GB, took {time.time() - start_time} seconds")
         return value, gradients
 
-    def _write_inference_result(self, sample_ids, labels, weights, scores,
-                                scores_and_offsets, task_index, schema_params, output_dir):
+    def _write_inference_result(self, sample_ids, labels, weights, prediction_score,
+                                prediction_score_per_coordinate, task_index, schema_params: SchemaParams, output_dir):
         """ Write inference results. """
-        photon_ml_writer = PhotonMLWriter(schema_params=schema_params)
-        output_avro_schema = photon_ml_writer.get_inference_output_avro_schema(
+        output_avro_schema = get_inference_output_avro_schema(
             self.metadata,
-            self._has_label(schema_params[constants.LABEL]),
             True,
-            has_weight=self._has_feature(schema_params[constants.SAMPLE_WEIGHT]))
+            schema_params,
+            has_weight=self._has_feature(schema_params.sample_weight))
         parsed_schema = parse_schema(output_avro_schema)
 
         records = []
-        for rec_id, rec_label, rec_weight, rec_score, rec_score_and_offset in \
-                zip(sample_ids, labels, weights, scores, scores_and_offsets):
-            rec = {schema_params[constants.SAMPLE_ID]: int(rec_id),
-                   schema_params[constants.PREDICTION_SCORE]: float(rec_score),
-                   schema_params[constants.PREDICTION_SCORE_PER_COORDINATE]: float(rec_score_and_offset)
-                   }
-            if self._has_label(schema_params[constants.LABEL]):
-                rec[schema_params[constants.LABEL]] = int(rec_label)
-            if self._has_feature(schema_params[constants.SAMPLE_WEIGHT]):
-                rec[schema_params[constants.SAMPLE_WEIGHT]] = int(rec_weight)
+        for rec_id, rec_label, rec_weight, rec_prediction_score, rec_prediction_score_per_coordinate in \
+                zip(sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate):
+            rec = {schema_params.sample_id: int(rec_id),
+                   schema_params.prediction_score: float(rec_prediction_score),
+                   schema_params.prediction_score_per_coordinate: float(rec_prediction_score_per_coordinate)}
+            if self._has_label(schema_params.label):
+                rec[schema_params.label] = int(rec_label)
+            if self._has_feature(schema_params.sample_weight):
+                rec[schema_params.sample_weight] = int(rec_weight)
             records.append(rec)
 
-        output_file = os.path.join(output_dir, "part-{0:05d}.avro".format(task_index))
-        error_msg = "worker {} encountered error in writing inference results".format(task_index)
+        output_file = os.path.join(output_dir, f"part-{task_index:05d}.avro")
+        error_msg = f"worker {task_index} encountered error in writing inference results"
         with tf1.gfile.GFile(output_file, 'wb') as f:
             try_write_avro_blocks(f, parsed_schema, records, None, error_msg)
-        logging("Worker {} saved inference result to {}".format(task_index, output_file))
+        logging(f"Worker {task_index} saved inference result to {output_file}")
 
     # TODO(mizhou): All inference results are saved to memory and then write once, give the observation
-    # of samll inference result size (each sample size is only 24 bytes), may need revisiting.
+    # of small inference result size (each sample size is only 24 bytes), may need revisiting.
     def _run_inference(self, x, tf_session, x_placeholder, ops, task_index, schema_params, output_dir):
         """ Run inference on training or validation dataset. """
         start_time = time.time()
-        sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op = ops
-        sample_ids, labels, weights, scores, scores_and_offsets = tf_session.run(
-            [sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op],
+        sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op = ops
+        sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate = tf_session.run(
+            [sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op],
             feed_dict={x_placeholder: x})
 
-        self._write_inference_result(sample_ids, labels, weights, scores, scores_and_offsets, task_index,
+        self._write_inference_result(sample_ids, labels, weights, prediction_score,
+                                     prediction_score_per_coordinate, task_index,
                                      schema_params, output_dir)
-        logging("Inference --- {} seconds ---".format(time.time()-start_time))
+        logging(f"Inference --- {time.time() - start_time} seconds ---")
 
     def _check_memory(self):
         """ Check memory usage. """
@@ -369,20 +405,22 @@ class FixedEffectLRModelLBFGS(Model):
             inference_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
 
             inference_train_data_diter = tf1.data.make_one_shot_iterator(train_dataset)
-            train_sample_ids_op, train_labels_op, train_weights_op, train_scores_op, train_scores_and_offsets_op = self._inference_model_fn(
-                inference_train_data_diter,
-                inference_x_placeholder,
-                train_num_iterations,
-                schema_params)
+            train_sample_ids_op, train_labels_op, train_weights_op, train_prediction_score_op, \
+                train_prediction_score_per_coordinate_op = self._inference_model_fn(
+                    inference_train_data_diter,
+                    inference_x_placeholder,
+                    train_num_iterations,
+                    schema_params)
 
             inference_validation_data_diter = tf1.data.make_one_shot_iterator(valid_dataset)
             assigned_validation_files = self._get_assigned_files(validation_data_path, num_workers, task_index)
             validation_data_num_iterations = self._get_num_iterations(assigned_validation_files)
-            valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_scores_op, valid_scores_and_offsets_op = self._inference_model_fn(
-                inference_validation_data_diter,
-                inference_x_placeholder,
-                validation_data_num_iterations,
-                schema_params)
+            valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
+                valid_prediction_score_per_coordinate_op = self._inference_model_fn(
+                    inference_validation_data_diter,
+                    inference_x_placeholder,
+                    validation_data_num_iterations,
+                    schema_params)
 
             if num_workers > 1:
                 all_reduce_sync_op = collective_ops.all_reduce(
@@ -399,6 +437,16 @@ class FixedEffectLRModelLBFGS(Model):
         tf_session = tf1.train.MonitoredSession(session_creator=session_creator)
         tf_session.run(init_variables_op)
 
+        # load existing model if available
+        logging("Try to load initial model coefficients...")
+        prev_model = self._load_model(catch_exception=True)
+        if prev_model is None or len(prev_model) != self.num_features + 1:
+            logging("No initial model found, use all zeros instead.")
+            x0 = np.zeros(self.num_features + 1)
+        else:
+            logging("Found a previous model,  loaded as the initial point for training")
+            x0 = prev_model
+
         # Run all reduce warm up
         logging("All-reduce-warmup starts...")
         if num_workers > 1:
@@ -411,7 +459,7 @@ class FixedEffectLRModelLBFGS(Model):
         start_time = time.time()
         self.model_coefficients, f_min, info = fmin_l_bfgs_b(
             func=self._compute_loss_and_gradients,
-            x0=np.zeros(self.num_features + 1),
+            x0=x0,
             approx_grad=False,
             m=self.num_correction_pairs,  # number of variable metrics corrections. default is 10.
             factr=self.factor,            # control precision, smaller the better.
@@ -423,7 +471,8 @@ class FixedEffectLRModelLBFGS(Model):
                 "{}\n------------------------------".format(f_min, info['funcalls'], info['task']))
 
         logging("Inference training data starts...")
-        inference_training_data_ops = (train_sample_ids_op, train_labels_op, train_weights_op, train_scores_op, train_scores_and_offsets_op)
+        inference_training_data_ops = (train_sample_ids_op, train_labels_op, train_weights_op,
+                                       train_prediction_score_op, train_prediction_score_per_coordinate_op)
         self._run_inference(self.model_coefficients,
                             tf_session,
                             inference_x_placeholder,
@@ -433,7 +482,8 @@ class FixedEffectLRModelLBFGS(Model):
                             self.training_output_dir)
 
         logging("Inference validation data starts...")
-        inference_validation_data_ops = (valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_scores_op, valid_scores_and_offsets_op)
+        inference_validation_data_ops = (valid_sample_ids_op, valid_labels_op, valid_weights_op,
+                                         valid_prediction_score_op, valid_prediction_score_per_coordinate_op)
         self._run_inference(self.model_coefficients,
                             tf_session,
                             inference_x_placeholder,
@@ -446,7 +496,7 @@ class FixedEffectLRModelLBFGS(Model):
         if (num_workers > 1):
             tf_session.run([all_reduce_sync_op])
 
-        tf_session.close()
+        snooze_after_tf_session_closure(tf_session, self.delayed_exit_in_seconds)
 
         if is_chief:
             self._save_model()
@@ -460,22 +510,29 @@ class FixedEffectLRModelLBFGS(Model):
         weights = self.model_coefficients[:-1]
         bias = self.model_coefficients[-1]
         list_of_weight_indices = np.arange(weights.shape[0])
-        output_file = os.path.join(self.checkpoint_path, "global_model.avro")
-        export_scipy_lr_model_to_avro(model_ids=["global model"],
-                                      list_of_weight_indices=np.expand_dims(list_of_weight_indices, axis=0),
-                                      list_of_weight_values=np.expand_dims(weights, axis=0),
-                                      biases=np.expand_dims(bias, axis=0),
-                                      feature_file=self.feature_file,
-                                      output_file=output_file)
+        output_file = os.path.join(self.checkpoint_path, "part-00000.avro")
+        export_linear_model_to_avro(model_ids=["global model"],
+                                    list_of_weight_indices=np.expand_dims(list_of_weight_indices, axis=0),
+                                    list_of_weight_values=np.expand_dims(weights, axis=0),
+                                    biases=np.expand_dims(bias, axis=0),
+                                    feature_file=self.feature_file,
+                                    output_file=output_file)
 
-    def _load_model(self):
+    def _load_model(self, catch_exception=False):
         """ Load model from avro file. """
+        model = None
         logging("Loading model from {}".format(self.checkpoint_path))
-        assert self.checkpoint_path and tf1.io.gfile.exists(self.checkpoint_path), "checkpoint path {} doesn't exist".format(self.checkpoint_path)
-        model_file = tf1.io.gfile.glob("{}/*.avro".format(self.checkpoint_path))
-        assert len(model_file) == 1, "Load model failed, no model file or multiple model files found in the model diretory {}".format(self.checkpoint)
-        models = load_scipy_models_from_avro(model_file[0])
-        return models[0]
+        model_exist = self.checkpoint_path and tf1.io.gfile.exists(self.checkpoint_path)
+        if model_exist:
+            model_file = tf1.io.gfile.glob("{}/*.avro".format(self.checkpoint_path))
+            if len(model_file) == 1:
+                model = load_linear_models_from_avro(model_file[0], self.feature_file)[0]
+            elif not catch_exception:
+                raise ValueError("Load model failed, no model file or multiple model"
+                                 " files found in the model diretory {}".format(self.checkpoint))
+        elif not catch_exception:
+            raise FileNotFoundError("checkpoint path {} doesn't exist".format(self.checkpoint_path))
+        return model
 
     def export(self, output_model_dir):
         logging("No need model export for LR model. ")
@@ -529,16 +586,8 @@ class FixedEffectLRModelLBFGS(Model):
                             task_index,
                             schema_params,
                             output_dir)
-        tf_session.close()
+
+        snooze_after_tf_session_closure(tf_session, self.delayed_exit_in_seconds)
 
     def _parse_parameters(self, raw_model_parameters):
-        parser = argparse.ArgumentParser(parents=[lr_parser])
-
-        # Training parameters
-        parser.add_argument("--" + constants.COPY_TO_LOCAL, type=str2bool, nargs='?', const=True, required=False, default=True,
-                            help="Boolean for copying data to local or not.")
-        model_params, other_args = parser.parse_known_args(raw_model_parameters)
-        model_params_dict = vars(model_params)
-        """validate the parameters"""
-        assert int(model_params_dict[constants.BATCH_SIZE]) > 0, "Batch size must be positive number"
-        return model_params_dict
+        return FixedLRParams.__from_argv__(raw_model_parameters, error_on_unknown=False)

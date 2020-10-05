@@ -179,7 +179,7 @@ class TestPerRecordInputFn(tf.test.TestCase):
                     i += 1
             except tf.errors.OutOfRangeError:
                 pass
-        self.assertEquals(i, num_records // self.batch_size)
+        self.assertEqual(i, num_records // self.batch_size)
 
 
 if __name__ == '__main__':

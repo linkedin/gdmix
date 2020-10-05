@@ -30,11 +30,11 @@ class DataTypeRef extends TypeReference[DataType.type]
  * @param labels A sequence of label column names.
  * @param columnConfigList A sequence of column configs.
  */
-case class EffectConfig (
+case class EffectConfig(
   isRandomEffect: Boolean,
   coordinateName: String,
-  perEntityName: Option[String]=None,
-  labels: Option[Seq[String]]=None,
+  perEntityName: Option[String] = None,
+  labels: Option[Seq[String]] = None,
   columnConfigList: Seq[ColumnConfig]
 ) extends Ordered[EffectConfig] {
   require(
@@ -49,7 +49,7 @@ case class EffectConfig (
 
   // We want the configs to be sorted such that the fixed effect precedes random effects.
   // This property is used in name-term-value to sparse/dense tensor conversion function.
-  def compare (that: EffectConfig) = this.isRandomEffect.compare(that.isRandomEffect)
+  def compare(that: EffectConfig) = this.isRandomEffect.compare(that.isRandomEffect)
 }
 
 /**
