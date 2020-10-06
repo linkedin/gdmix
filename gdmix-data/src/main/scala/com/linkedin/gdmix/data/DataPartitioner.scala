@@ -53,7 +53,6 @@ object DataPartitioner {
     val predictionScorePerCoordinate = params.predictionScorePerCoordinate
     val offset = params.offset
     val uid = params.uid
-    val featureBag = params.featureBag
     val maxNumOfSamplesPerModel = params.maxNumOfSamplesPerModel
     val minNumOfSamplesPerModel = params.minNumOfSamplesPerModel
 
@@ -96,7 +95,6 @@ object DataPartitioner {
         uid,
         minNumOfSamplesPerModel,
         maxNumOfSamplesPerModel,
-        featureBag,
         inputMetadataFile,
         ifSplitData = true)
 
@@ -143,7 +141,6 @@ object DataPartitioner {
         uid,
         minNumOfSamplesPerModel,
         maxNumOfSamplesPerModel,
-        featureBag,
         inputMetadataFile,
         ifSplitData = false)
 
@@ -186,7 +183,6 @@ object DataPartitioner {
    * @param uid Column name for the unique id
    * @param lowerBound The minimal samples per entity
    * @param upperBound The maximal samples per entity
-   * @param featureName The feature bag that may be sparse
    * @param inputMetadataFile The input metadata file path
    * @param ifSplitData Whether to split the data into active and passive folders for the output
    * @return The grouped data frame with partition id.
@@ -205,7 +201,6 @@ object DataPartitioner {
     uid: String,
     lowerBound: Int,
     upperBound: Int,
-    featureName: String,
     inputMetadataFile: String,
     ifSplitData: Boolean): DataFrame = {
 

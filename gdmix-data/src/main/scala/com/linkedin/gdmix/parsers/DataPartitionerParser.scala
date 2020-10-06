@@ -8,7 +8,6 @@ import com.linkedin.gdmix.utils.IoUtils
  */
 case class DataPartitionerParams(
   partitionEntity: String,
-  featureBag: String,
   inputMetadataFile: String,
   outputMetadataFile: String,
   trainInputDataPath: Option[String] = None,
@@ -42,12 +41,6 @@ object DataPartitionerParser {
       .text(
         """Required.
           |The entity name used to partition.""".stripMargin)
-
-    opt[String]("featureBag").action((x, p) => p.copy(featureBag = x.trim))
-      .required
-      .text(
-        """Required.
-          |Feature bag names.""".stripMargin)
 
     opt[String]("inputMetadataFile").action((x, p) => p.copy(inputMetadataFile = x.trim))
       .required
@@ -206,7 +199,6 @@ object DataPartitionerParser {
   def parse(args: Seq[String]): DataPartitionerParams = {
     val emptyDataPartitionerParams = DataPartitionerParams(
       partitionEntity = "",
-      featureBag = "",
       inputMetadataFile = "",
       outputMetadataFile = "",
       trainInputDataPath = Some(""),
