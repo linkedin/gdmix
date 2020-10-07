@@ -14,7 +14,6 @@ class DataPartitionerParserTest {
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
           "--trainInputDataPath", "per-member/trainingData",
@@ -30,17 +29,6 @@ class DataPartitionerParserTest {
       // missing partitionEntity
       Array(
         Seq(
-          "--featureBag", "per_member",
-          "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
-          "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
-          "--trainInputDataPath", "per-member/trainingData",
-          "--trainInputScorePath", "global/trainingScore",
-          "--trainOutputPartitionDataPath", "per-member/partition/trainingData",
-          "--outputPartitionListFile", "per-member/partition/partitionList.txt")),
-      // missing fetureBag
-      Array(
-        Seq(
-          "--partitionEntity", "memberId",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
           "--trainInputDataPath", "per-member/trainingData",
@@ -51,7 +39,6 @@ class DataPartitionerParserTest {
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
           "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
@@ -61,7 +48,6 @@ class DataPartitionerParserTest {
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--trainInputDataPath", "per-member/trainingData",
           "--trainInputScorePath", "global/trainingScore",
@@ -71,14 +57,12 @@ class DataPartitionerParserTest {
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json")),
       // provide trainInputDataPath but no trainOutputPartitionDataPath
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
           "--trainInputDataPath", "per-member/trainingData",
@@ -88,7 +72,6 @@ class DataPartitionerParserTest {
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
           "--trainInputDataPath", "per-member/trainingData",
@@ -98,7 +81,6 @@ class DataPartitionerParserTest {
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
           "--validationInputDataPath", "per-member/validationData")),
@@ -106,7 +88,6 @@ class DataPartitionerParserTest {
       Array(
         Seq(
           "--partitionEntity", "memberId",
-          "--featureBag", "per_member",
           "--inputMetadataFile", "per-member/metadata/tensor_metadata.json",
           "--outputMetadataFile", "per-member/partition/metadata/tensor_metadata.json",
           "--trainInputDataPath", "per-member/trainingData",
@@ -124,7 +105,6 @@ class DataPartitionerParserTest {
     val params = DataPartitionerParser.parse(completeArgs)
     val expectedParams = DataPartitionerParams(
       partitionEntity = "memberId",
-      featureBag = "per_member",
       inputMetadataFile = "per-member/metadata/tensor_metadata.json",
       outputMetadataFile = "per-member/partition/metadata/tensor_metadata.json",
       trainInputDataPath = Option("per-member/trainingData"),
