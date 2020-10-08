@@ -5,7 +5,7 @@ rsync -arvp src/ ./launcher/
 rsync -arvp ../common/ ./launcher/
 
 # TODO: change to LinkedIn dockerhub endpoint and push
-REGISTROY=linkedin/gdmix
+REGISTROY=linkedin
 IMAGE_NAME=sparkapplication-launcher
 VERSION_TAG=0.1
 VERSIONED_IMAGE_NAME=${IMAGE_NAME}:${VERSION_TAG}

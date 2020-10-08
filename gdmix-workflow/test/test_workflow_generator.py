@@ -67,10 +67,10 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
             'gdmix_sparkjob',
             'global-compute-metric',
             'com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator',
-            {'\\-inputPath': 'lr-training/global/validation_scores',
-             '-outputPath': 'lr-training/global/metric',
-             '-labelName': 'response',
-             '-scoreName': 'predictionScore'})
+            {'\\--inputPath': 'lr-training/global/validation_scores',
+             '--outputPath': 'lr-training/global/metric',
+             '--labelName': 'response',
+             '--scoreName': 'predictionScore'})
         self.assertEqual(actual_train_job, expected_train_job)
         self.assertEqual(actual_compute_metric_job, expected_compute_metric_job)
 
@@ -151,10 +151,10 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
             'gdmix_sparkjob',
             'global-compute-metric',
             'com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator',
-            {'\\-inputPath': 'detext-training/global/validation_scores',
-             '-outputPath': 'detext-training/global/metric',
-             '-labelName': 'response',
-             '-scoreName': 'predictionScore'})
+            {'\\--inputPath': 'detext-training/global/validation_scores',
+             '--outputPath': 'detext-training/global/metric',
+             '--labelName': 'response',
+             '--scoreName': 'predictionScore'})
         self.assertEqual(actual_compute_metric_job, expected_compute_metric_job)
 
     def test_lr_model_random_effect_workflow_generator(self):
@@ -171,22 +171,19 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
             'gdmix_sparkjob',
             'per-user-partition',
             'com.linkedin.gdmix.data.DataPartitioner',
-            {'\\-trainInputDataPath': 'movieLens/per_user/trainingData',
+            {'\\--trainInputDataPath': 'movieLens/per_user/trainingData',
              '--validationInputDataPath': 'movieLens/per_user/validationData',
-             '-inputMetadataFile': 'movieLens/per_user/metadata/tensor_metadata.json',
-             '-partitionEntity': 'user_id',
-             '-numPartitions': 1,
-             '-dataFormat': 'tfrecord',
-             '-featureBag': 'per_user',
-             '-maxNumOfSamplesPerModel': -1,
-             '-minNumOfSamplesPerModel': -1,
-             '-trainOutputPartitionDataPath': 'lr-training/per-user/partition/trainingData',
-             '-validationOutputPartitionDataPath': 'lr-training/per-user/partition/validationData',
-             '-outputMetadataFile': 'lr-training/per-user/partition/metadata/tensor_metadata.json',
-             '-outputPartitionListFile': 'lr-training/per-user/partition/partitionList.txt',
-             '-predictionScore': 'predictionScore',
-             '-trainInputScorePath': 'lr-training/global/train_scores',
-             '-validationInputScorePath': 'lr-training/global/validation_scores'})
+             '--inputMetadataFile': 'movieLens/per_user/metadata/tensor_metadata.json',
+             '--partitionEntity': 'user_id',
+             '--numPartitions': 1,
+             '--dataFormat': 'tfrecord',
+             '--trainOutputPartitionDataPath': 'lr-training/per-user/partition/trainingData',
+             '--validationOutputPartitionDataPath': 'lr-training/per-user/partition/validationData',
+             '--outputMetadataFile': 'lr-training/per-user/partition/metadata/tensor_metadata.json',
+             '--outputPartitionListFile': 'lr-training/per-user/partition/partitionList.txt',
+             '--predictionScore': 'predictionScore',
+             '--trainInputScorePath': 'lr-training/global/train_scores',
+             '--validationInputScorePath': 'lr-training/global/validation_scores'})
 
         expected_train_job = (
             'gdmix_tfjob',
@@ -224,10 +221,10 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
             'gdmix_sparkjob',
             'per-user-compute-metric',
             'com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator',
-            {'\\-inputPath': 'lr-training/per-user/validation_scores',
-             '-outputPath': 'lr-training/per-user/metric',
-             '-labelName': 'response',
-             '-scoreName': 'predictionScore'})
+            {'\\--inputPath': 'lr-training/per-user/validation_scores',
+             '--outputPath': 'lr-training/per-user/metric',
+             '--labelName': 'response',
+             '--scoreName': 'predictionScore'})
 
         self.assertEqual(expected_partition_job, actual_partition_job)
         self.assertEqual(expected_train_job, actual_train_job)

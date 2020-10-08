@@ -31,7 +31,7 @@ User will need to :
 - Download the `gdmix-data` fat jar for intermediate data processing
 - Install the `gdmix-trainer` and `gdmix-workflow` python packages
 ```
-wget https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.1.0/gdmix-data-all_2.11-0.1.0.jar
+wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.2.0/gdmix-data-all_2.11-0.2.0.jar -O gdmix-data-all_2.11.jar
 
 pip install gdmix-trainer gdmix-workflow
 ```
@@ -171,11 +171,11 @@ docker run --name gdmix -it linkedin/gdmix bash
 ```
 - Train logistic regression models for the `global`  `per-user` and `per-movie` (see the section [Train logsitic regression models](#Train-logsitic-regression-models) for details):
 ```
-python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
+python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
 ```
 - Train a deep and wide neutal network model for the `global` and two logistic regression models for the `per-user` and `per-movie` (see the section [Train neural network model plus logsitic regression models](#Train-neural-network-model-plus-logsitic-regression-models) for details):
 ```
-python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
+python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
 ```
 
 ### Run GDMix directly
@@ -211,7 +211,7 @@ python download_process_movieLens_data.py
 ```
 Download the `gdmix-data` fat jar for spark to process intermediate data:
 ```
-wget https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.1.0/gdmix-data-all_2.11-0.1.0.jar
+wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.2.0/gdmix-data-all_2.11-0.2.0.jar -O gdmix-data-all_2.11.jar
 ```
 Install python packages `gdmix-trainer` and `gdmix-workflow`:
 ```
@@ -223,7 +223,7 @@ A GDMix config [lr-single-node-movieLens.config](gdmix-workflow/examples/moviele
 ```
 wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config
 
-python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
+python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
 ```
 On a machine with 16 Intel Xeon CPU @ 2.10GHz it took 2 minutes to complete the training. The result directory(from the `output_dir` field in the GDMix config) is shown at the end of the training if it succeeds:
 ```
@@ -296,7 +296,7 @@ We use the [detext-single-node-movieLens.config](gdmix-workflow/examples/moviele
 ```
 wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config
 
-python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11-0.1.0.jar
+python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
 ```
 
 On a machine with 16 Intel Xeon CPU @ 2.10GHz it took 3 minutes to complete the training. The AUC for each model is shown in the table below. The wide-and-deep fixed effect `global` model performs much better than its logistic regression counterpart (0.7090 v.s. 0.6237), and

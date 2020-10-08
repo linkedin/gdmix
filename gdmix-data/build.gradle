@@ -1,4 +1,6 @@
 apply plugin: "scala"
+apply plugin: 'maven-publish'
+apply plugin: 'com.jfrog.bintray'
 
 configurations {
   all*.exclude group: "org.eclipse.jetty"
@@ -9,10 +11,10 @@ dependencies {
   compile "com.github.scopt:scopt$scalaSuffix:4.0.0-RC2"
   compile "com.linkedin.sparktfrecord:spark-tfrecord$scalaSuffix:0.2.1"
   compile "org.apache.spark:spark-avro$scalaSuffix:2.4.4"
-  compile "org.json4s:json4s-core$scalaSuffix:3.2.11"
-  compile "org.json4s:json4s-jackson$scalaSuffix:3.2.11"
-  compile "org.json4s:json4s-ext$scalaSuffix:3.2.11"
-  compile "org.json4s:json4s-ast$scalaSuffix:3.2.11"
+  compile "org.json4s:json4s-core$scalaSuffix:3.3.0"
+  compile "org.json4s:json4s-jackson$scalaSuffix:3.3.0"
+  compile "org.json4s:json4s-ext$scalaSuffix:3.3.0"
+  compile "org.json4s:json4s-ast$scalaSuffix:3.3.0"
 
   compileOnly "com.fasterxml.jackson.core:jackson-databind:2.6.7.1"
   compileOnly "org.apache.spark:spark-core$scalaSuffix:$sparkVersion"
@@ -27,4 +29,68 @@ dependencies {
 
 test {
   useTestNG()
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+javadoc.failOnError = false
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+artifacts {
+  archives sourcesJar
+  archives javadocJar
+  archives jar
+}
+
+publishing {
+    publications {
+        mavenPublication(MavenPublication) {
+            from components.java
+            artifact sourcesJar {
+                classifier "sources"
+            }
+            artifact javadocJar {
+                classifier "javadoc"
+            }
+            groupId 'com.linkedin.gdmix'
+            artifactId 'gdmix-data_2.11'
+            version "${gdmixDataVersion}"
+            pom.withXml {
+                def root = asNode()
+                root.appendNode('description', 'A data processing library of the deep learning personalization framework GDMix')
+                root.appendNode('name', 'gdmix-data')
+                root.appendNode('url', 'https://github.com/linkedin/gdmix')
+                root.children().last() + pomConfig
+            }
+        }
+    }
+}
+
+bintray {
+    user = System.getenv('BINTRAY_USER')
+    key = System.getenv('BINTRAY_KEY')
+    publications = ['mavenPublication']
+    publish = true
+    // dryRun = true
+
+    pkg {
+        repo = 'maven'
+        user = System.getenv('BINTRAY_USER')
+        name = 'gdmix-data'
+        userOrg = 'linkedin'
+        licenses = ['BSD 2-Clause']
+        desc = 'A data processing library of the deep learning personalization framework GDMix'
+        websiteUrl = 'https://github.com/linkedin/gdmix'
+        vcsUrl = 'https://github.com/linkedin/gdmix'
+        version {
+            name = "${gdmixDataVersion}"
+            desc = 'A data processing library of the deep learning personalization framework GDMix'
+        }
+    }
 }

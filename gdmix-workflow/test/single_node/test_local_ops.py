@@ -24,7 +24,7 @@ class TestLocalOps(unittest.TestCase):
            '--executor-memory', '1G',
            '--conf', 'spark.sql.avro.compression.codec=deflate',
            '--conf', 'spark.hadoop.mapreduce.fileoutputcommitter.marksuccessfuljobs=false',
-           'gdmix-data-all_2.11-0.1.0.jar',
+           'gdmix-data-all_2.11.jar',
            '-a', 'b']
         actual = get_sparkjob_cmd(class_name, params)
         self.assertEqual(actual, expected)

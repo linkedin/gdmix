@@ -21,7 +21,7 @@ def get_tfjob_cmd(params):
     return cmd
 
 
-def get_sparkjob_cmd(class_name, params, jar='gdmix-data-all_2.11-0.1.0.jar'):
+def get_sparkjob_cmd(class_name, params, jar='gdmix-data-all_2.11.jar'):
     """ get spark command for local execution
     """
     cmd = ['spark-submit',
