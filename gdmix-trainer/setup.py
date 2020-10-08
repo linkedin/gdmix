@@ -1,13 +1,11 @@
-# Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
-# See LICENSE in the project root for license information.
+from pathlib import Path
 from setuptools import find_namespace_packages, setup
 from sys import platform as _platform
 from sys import version_info as _py_version
-from os import path
 
 
-this_directory = path.abspath(path.dirname(__file__))
-with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+current_dir = Path(__file__).resolve().parent
+with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 if _py_version < (3, 3):
@@ -27,7 +25,7 @@ setup(
                  "Intended Audience :: Developers",
                  "License :: OSI Approved"],
     license='BSD-2-CLAUSE',
-    version='0.2.0',
+    version='0.2.1',
     package_dir={'': 'src'},
     packages=find_namespace_packages(where='src'),
     include_package_data=True,
@@ -44,5 +42,5 @@ setup(
         "dataclasses==0.7",
         "smart-arg==0.2.12"
     ],
-    tests_require=['pytest'],
+    tests_require=['pytest']
 )

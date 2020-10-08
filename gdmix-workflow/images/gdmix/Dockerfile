@@ -35,14 +35,14 @@ RUN rm -rf /usr/bin/python && \
 RUN sed -i 's/python/python2/g' /usr/bin/yum
 RUN sed -i 's/python/python2/g' /usr/libexec/urlgrabber-ext-down
 
-# Install spark 2.4.6 and its dependencies
+# Install spark 2.4.7 and its dependencies
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
     mkdir -p /opt/spark && \
     touch /opt/spark/RELEASE && \
     echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd
 
-ARG spark_version=2.4.6
+ARG spark_version=2.4.7
 ARG spark_pkg=spark-${spark_version}-bin-hadoop2.7
 ARG img_path=kubernetes/dockerfiles
 ARG k8s_tests=kubernetes/tests
