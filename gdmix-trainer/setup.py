@@ -27,7 +27,7 @@ setup(
                  "Intended Audience :: Developers",
                  "License :: OSI Approved"],
     license='BSD-2-CLAUSE',
-    version='0.1.0',
+    version='0.2.0',
     package_dir={'': 'src'},
     packages=find_namespace_packages(where='src'),
     include_package_data=True,
@@ -41,6 +41,7 @@ setup(
         "psutil==5.7.0",
         "scipy==1.3.2",
         "scikit-learn==0.21.2",
+        "dataclasses==0.7",
         "smart-arg==0.2.12"
     ],
     tests_require=['pytest'],

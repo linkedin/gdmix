@@ -79,7 +79,8 @@ RUN rm -rf ~/.gradle/caches/* ~/.cache/pip/* /var/cache/yum/* && yum clean all
 WORKDIR /workspace/notebook
 
 # Download gdmix-data jar for intermediate data processing
-RUN wget https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.1.0/gdmix-data-all_2.11-0.1.0.jar
+RUN wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.2.0/gdmix-data-all_2.11-0.2.0.jar \
+    -O gdmix-data-all_2.11.jar
 
 # Download and process movieLens data
 ADD download_process_movieLens_data.py .

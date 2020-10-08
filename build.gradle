@@ -22,6 +22,31 @@ allprojects {
 ext {
   sparkVersion = '2.4.6'
   scalaSuffix = "_2.11"
+  gdmixDataVersion = "0.2.0"
+  pomConfig = {
+      licenses {
+          license {
+              name "The 2-Clause BSD License"
+              url "https://opensource.org/licenses/BSD-2-Clause"
+              distribution "repo"
+          }
+      }
+      developers {
+          developer {
+              id "jshi"
+              name "Jun Shi"
+              email "jshi@linkedin.com"
+          }
+          developer {
+              id "mizhou-in"
+              name "Mingzhou Zhou"
+              email "mizhou@linkedin.com"
+          }
+      }
+      scm {
+          url "https://github.com/linkedin/gdmix"
+      }
+  }
 }
 
 subprojects {
@@ -29,7 +54,7 @@ subprojects {
   buildDir = "../build/$name"
 
   tasks.withType(Jar) {
-    version '0.1.0'
+    version "${gdmixDataVersion}"
   }
 
   plugins.withType(JavaPlugin) {
@@ -100,5 +125,4 @@ subprojects {
   // This task allows to get the dependencies from all the sub-project from the main directory
   // (otherwise, you have to change to each sub-project directory to get its dependencies)
   task allDeps(type: DependencyReportTask) {}
-
 }

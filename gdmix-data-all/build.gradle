@@ -1,5 +1,7 @@
 apply plugin: 'scala'
 apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'maven-publish'
+apply plugin: 'com.jfrog.bintray'
 
 configurations {
   all*.exclude group: 'org.eclipse.jetty'
@@ -19,9 +21,69 @@ shadowJar {
   mergeServiceFiles()
 
   relocate 'org.json4s', 'gdmix.shaded.org.json4s'
+}
 
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+javadoc.failOnError = false
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
 }
 
 artifacts {
   archives shadowJar
+  archives sourcesJar
+  archives javadocJar
 }
+
+publishing {
+    publications {
+        mavenPublication(MavenPublication) {
+            from components.java
+            artifact sourcesJar {
+                classifier "sources"
+            }
+            artifact javadocJar {
+                classifier "javadoc"
+            }
+            groupId 'com.linkedin.gdmix'
+            artifactId 'gdmix-data-all_2.11'
+            version "${gdmixDataVersion}"
+            pom.withXml {
+                def root = asNode()
+                root.appendNode('description', 'A data processing library of the deep learning personalization framework GDMix')
+                root.appendNode('name', 'gdmix-data-all')
+                root.appendNode('url', 'https://github.com/linkedin/gdmix')
+                root.children().last() + pomConfig
+            }
+        }
+    }
+}
+
+bintray {
+    user = System.getenv('BINTRAY_USER')
+    key = System.getenv('BINTRAY_KEY')
+    publications = ['mavenPublication']
+    publish = true
+    // dryRun = true
+
+    pkg {
+        repo = 'maven'
+        user = System.getenv('BINTRAY_USER')
+        name = 'gdmix-data-all'
+        userOrg = 'linkedin'
+        licenses = ['BSD 2-Clause']
+        desc = 'A data processing library of the deep learning personalization framework GDMix'
+        websiteUrl = 'https://github.com/linkedin/gdmix'
+        vcsUrl = 'https://github.com/linkedin/gdmix'
+        version {
+            name = "${gdmixDataVersion}"
+            desc = 'A data processing library of the deep learning personalization framework GDMix'
+        }
+    }
+}
+

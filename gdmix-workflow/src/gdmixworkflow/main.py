@@ -36,7 +36,7 @@ def get_parser():
     parser.add_argument(
         '--jar_path',
         type=str,
-        default="gdmix-data-all_2.11-0.1.0.jar",
+        default="gdmix-data-all_2.11.jar",
         help='local path to the gdmix-data jar for GDMix processing'
         'intermediate data, single_node only')
     parser.add_argument(
@@ -58,7 +58,7 @@ def get_parser():
     parser.add_argument(
         '--image',
         type=str,
-        default="linkedin/gdmix:gdmix:0.1",
+        default="linkedin/gdmix",
         help='image used to launch gdmix jobs on Kubernetes, '
         'distributed mode only')
     parser.add_argument(

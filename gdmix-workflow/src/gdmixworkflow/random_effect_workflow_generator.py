@@ -64,22 +64,19 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
         self.get_train_input_paths(random_effect_name)
 
         params = {
-            r"\-trainInputDataPath": random_effect_config_obj.train_data_path,
+            r"\--trainInputDataPath": random_effect_config_obj.train_data_path,
             "--validationInputDataPath": random_effect_config_obj.validation_data_path,
-            "-inputMetadataFile": random_effect_config_obj.metadata_file,
-            "-partitionEntity": random_effect_config_obj.partition_entity,
-            "-numPartitions": random_effect_config_obj.num_partitions,
-            "-dataFormat": TFRECORD,
-            "-featureBag": random_effect_config_obj.input_column_names.feature_bag,
-            "-maxNumOfSamplesPerModel": -1,
-            "-minNumOfSamplesPerModel": -1,
-            "-trainOutputPartitionDataPath": train_data_path,
-            "-validationOutputPartitionDataPath": validation_data_path,
-            "-outputMetadataFile": metadata_file,
-            "-outputPartitionListFile": partition_list_path,
-            "-predictionScore": random_effect_config_obj.output_column_name,
-            "-trainInputScorePath": prev_train_score_path,
-            "-validationInputScorePath": prev_validation_score_path
+            "--inputMetadataFile": random_effect_config_obj.metadata_file,
+            "--partitionEntity": random_effect_config_obj.partition_entity,
+            "--numPartitions": random_effect_config_obj.num_partitions,
+            "--dataFormat": TFRECORD,
+            "--trainOutputPartitionDataPath": train_data_path,
+            "--validationOutputPartitionDataPath": validation_data_path,
+            "--outputMetadataFile": metadata_file,
+            "--outputPartitionListFile": partition_list_path,
+            "--predictionScore": random_effect_config_obj.output_column_name,
+            "--trainInputScorePath": prev_train_score_path,
+            "--validationInputScorePath": prev_validation_score_path
         }
         return (GDMIX_SPARKJOB, "{}-partition".format(random_effect_name),
                 "com.linkedin.gdmix.data.DataPartitioner", params)
@@ -120,10 +117,10 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
         random_effect_name = random_effect_config_obj.name
         _, _, validation_score_path = self.get_train_output_paths(random_effect_name)
         params = {
-            r"\-inputPath": validation_score_path,
-            "-outputPath": self.get_metric_output_path(random_effect_name),
-            "-labelName": random_effect_config_obj.input_column_names.label,
-            "-scoreName": random_effect_config_obj.output_column_name
+            r"\--inputPath": validation_score_path,
+            "--outputPath": self.get_metric_output_path(random_effect_name),
+            "--labelName": random_effect_config_obj.input_column_names.label,
+            "--scoreName": random_effect_config_obj.output_column_name
         }
         return (GDMIX_SPARKJOB, "{}-compute-metric".format(random_effect_name),
                 "com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator",

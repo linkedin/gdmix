@@ -81,10 +81,10 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         Return: [job_type, job_name, class_name, job_params]
         """
         params = {
-            r"\-inputPath": self.validation_score_path,
-            "-outputPath": self.metric_path,
-            "-labelName": self.fixed_effect_config_obj.input_column_names.label,
-            "-scoreName": self.fixed_effect_config_obj.output_column_name
+            r"\--inputPath": self.validation_score_path,
+            "--outputPath": self.metric_path,
+            "--labelName": self.fixed_effect_config_obj.input_column_names.label,
+            "--scoreName": self.fixed_effect_config_obj.output_column_name
         }
         return (GDMIX_SPARKJOB,
                 "{}-compute-metric".format(self.fixed_effect_name),
