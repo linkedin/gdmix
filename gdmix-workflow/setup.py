@@ -3,7 +3,10 @@ from setuptools import find_namespace_packages, setup
 from sys import platform as _platform
 from sys import version_info as _py_version
 
+import sys
 
+
+VERSION="0.2.1"
 current_dir = Path(__file__).resolve().parent
 with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
@@ -25,14 +28,14 @@ setup(
                  "Intended Audience :: Developers",
                  "License :: OSI Approved"],
     license='BSD-2-CLAUSE',
-    version='0.2.1',
+    version=f'{VERSION}',
     package_dir={'': 'src'},
     packages=find_namespace_packages(where='src'),
     package_data={'': ['*.yaml']},
     include_package_data=True,
     install_requires=[
         "setuptools>=41.0.0",
-        "gdmix-trainer==0.2.1",
+        f"gdmix-trainer=={VERSION}",
         "google-auth==1.21.1",
         "kfp==0.2.5"
     ],
