@@ -2,11 +2,16 @@
 ![](figures/logo.png)
 
 ## What is it
-Generalized Deep [Mixed Model](https://en.wikipedia.org/wiki/Mixed_model) (GDMix) is a framework to train non-linear fixed effect and random effect models. This kind of models are widely used in personalization of search and recommender systems. This project is an extension of our early effort on generalized linear models [Photon ML](https://github.com/linkedin/photon-ml). It is implemented in Tensorflow, Scipy and Spark.
+Consider a job recommendation task where two LinkedIn members Alice and Annie have very similar profiles. Both of them have the same user features and respond to the same pair of companies. Their responses are exactly opposite to each other. If we use both member's data to train a machine learning model, the model won't be effective since the training samples contradict each other. A solution is to train a single model for each member based on the member's data.
+This is an example of personalization.
 
-The current version of GDMix supports logistic regression and [DeText](https://github.com/linkedin/detext) models for the fixed effect, then logistic regression for the random effects. In the future, we may support deep models for random effects if the increase complexity can be justified by improvement in relevance metrics.
+![](figures/AliceAnnie.png)
+
+A possible implementation of personalization is to include all member ID embeddings in a single model. This usually results in a very large model since the number of members can be on the order of hundred of millions. GDMix (Generalized Deep [Mixed model]((https://en.wikipedia.org/wiki/Mixed_model))) is a solution created at LinkedIn to train these kinds of models efficiently. It breaks down a large model into a global model (a.k.a. “[fixed effect](https://en.wikipedia.org/wiki/Fixed_effects_model)”) and a large number of small models (a.k.a. “[random effects](https://en.wikipedia.org/wiki/Random_effects_model)”), then solves them individually. This divide-and-conquer approach allows for efficient training of large personalization models with commodity hardware. An improvement from its predecessor, [Photon ML](https://github.com/linkedin/photon-ml), GDMix expands and supports deep learning models. Check out our [engineering blog](https://engineering.linkedin.com/blog/2020/gdmix--a-deep-ranking-personalization-framework) for more background information.
 
 ## Supported models
+The current version of GDMix supports logistic regression and [DeText](https://github.com/linkedin/detext) models for the fixed effect, then logistic regression for the random effects. In the future, we may support deep models for random effects if the increase complexity can be justified by improvement in relevance metrics.
+
 ### Logistic regression
 As a basic classification model, logistic regression finds wide usage in search and recommender systems due to its model simplicity and training efficiency. Our implementation uses Tensorflow for data reading and gradient computation, and utilizes L-BFGS solver from Scipy. This combination takes advantage of the versatility of Tensorflow and fast convergence of L-BFGS. This mode is functionally equivalent to Photon-ML but with improved efficiency. Our internal tests show about 10% to 40% training speed improvement on various datasets.
 
