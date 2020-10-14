@@ -49,20 +49,24 @@ def setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT,
 
 def setup_fake_raw_model_params(training_stage=constants.FIXED_EFFECT):
     raw_model_params = [f"--{constants.SAMPLE_ID}", "uid", f"--{constants.SAMPLE_WEIGHT}", "weight",
-                        f"--{constants.FEATURE_BAGS}", "global",
                         f"--{constants.TRAIN_DATA_PATH}", os.path.join(os.getcwd(), "test/resources/train"),
                         f"--{constants.VALIDATION_DATA_PATH}",
                         os.path.join(os.getcwd(), "test/resources/validate"),
                         f"--{constants.MODEL_OUTPUT_DIR}", "dummy_model_output_dir",
                         f"--{constants.METADATA_FILE}",
-                        os.path.join(os.getcwd(), "test/resources/fe_lbfgs/metadata/tensor_metadata.json"),
-                        f"--{constants.FEATURE_FILE}", "test/resources/fe_lbfgs/featureList/global",
+                        os.path.join(os.getcwd(), "test/resources/fe_lbfgs/metadata/tensor_metadata.json")
                         ]
     if training_stage == constants.RANDOM_EFFECT:
         raw_model_params.append(f"--{constants.FEATURE_BAGS}")
         raw_model_params.append("per_member")
         raw_model_params.append(f"--{constants.OFFSET}")
         raw_model_params.append("offset")
+    else:
+        raw_model_params.append(f"--{constants.FEATURE_BAGS}")
+        raw_model_params.append("global")
+        raw_model_params.append(f"--{constants.FEATURE_FILE}")
+        raw_model_params.append("test/resources/fe_lbfgs/featureList/global",)
+
     return raw_model_params
 
 

@@ -77,8 +77,8 @@ class RandomEffectLRLBFGSModel(Model):
         metadata = read_json_file(metadata_file)
         tensor_metadata = DatasetMetadata(metadata)
         # Extract number of features. NOTE - only one feature bag is supported
-        num_features = next(filter(lambda x: x.name == self.model_params.feature_bags[0], tensor_metadata.get_features())).shape[0]
-        logger.info(f"Found {num_features} features in feature bag {self.model_params.feature_bags[0]}")
+        num_features = next(filter(lambda x: x.name == self.model_params.feature_bag, tensor_metadata.get_features())).shape[0]
+        logger.info(f"Found {num_features} features in feature bag {self.model_params.feature_bag}")
         assert num_features > 0, "number of features must > 0"
 
         with Pool(self.model_params.num_of_consumers, initializer=lambda: logger.info(f"Process {current_process()} ready to work!")) as pool:

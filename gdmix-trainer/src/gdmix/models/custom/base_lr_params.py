@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Optional
 
 
 @dataclass
@@ -13,10 +13,10 @@ class LRParams:
     model_output_dir: str  # Model output directory.
 
     # Column names in the dataset
-    feature_bags: List[str]  # Feature bag names that used for training and scoring.
+    feature_bag: Optional[str] = None  # Feature bag name that is used for training and scoring.
 
     # Arguments for model export
-    feature_file: str  # Feature file for model exporting.
+    feature_file: Optional[str] = None  # Feature file for model exporting.
 
     # Optimizer related parameters
     regularize_bias: bool = True  # Boolean for L2 regularization of bias term.

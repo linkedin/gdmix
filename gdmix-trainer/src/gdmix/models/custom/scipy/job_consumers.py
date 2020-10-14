@@ -130,11 +130,11 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
             entity_id = features_val[model_params.partition_entity][entity]
 
             # Construct data matrix X. Slice portion of arrays from X_index through the number of rows for the entity
-            features = features_val[model_params.feature_bags[0] + INDICES_SUFFIX]
+            features = features_val[model_params.feature_bag + INDICES_SUFFIX]
             indices = features.indices
             rows = indices[np.where(indices[:, 0] == entity)][:, 1]
             cols = features.values[X_index: X_index + len(rows)]
-            values = features_val[model_params.feature_bags[0] + VALUES_SUFFIX].values[X_index: X_index + len(rows)]
+            values = features_val[model_params.feature_bag + VALUES_SUFFIX].values[X_index: X_index + len(rows)]
 
             # Get sample count
             sample_count = np.amax(rows) + 1

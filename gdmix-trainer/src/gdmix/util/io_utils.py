@@ -57,23 +57,40 @@ def load_linear_models_from_avro(model_file, feature_file):
         :param feature_map: feature name to index map
         :return: a numpy array of the model coefficients, intercept is at the end. Elements are in np.float64.
         """
-        num_features = len(feature_map)
+        num_features = 0 if feature_map is None else len(feature_map)
         model_coefficients = np.zeros(num_features+1, dtype=np.float64)
         for ntv in model_record["means"]:
             name, term, value = ntv['name'], ntv['term'], np.float64(ntv['value'])
             if name == INTERCEPT and term == '':
                 model_coefficients[num_features] = value  # Intercept at the end.
-            else:
+            elif feature_map is not None:
                 full_feature_name = name_term_to_string(name, term)
                 feature_index = feature_map.get(full_feature_name, None)
                 if feature_index is not None:  # Take only the features that in the current training dataset.
                     model_coefficients[feature_index] = value
         return model_coefficients
 
-    feature_map = get_feature_map(feature_file)
+    if feature_file is None:
+        feature_map = None
+    else:
+        feature_map = get_feature_map(feature_file)
     with tf.io.gfile.GFile(model_file, 'rb') as fo:
         avro_reader = fastavro.reader(fo)
         return tuple(get_one_model_weights(record, feature_map) for record in avro_reader)
+
+
+def add_dummy_weight(models):
+    """
+    This function adds a dummy weight 0.0 to the first element of the weight vector.
+    It should be only used for the intercept-only model where no feature is present.
+    :param models: the models with intercept only.
+    :return: models with zero prepend to the intercept.
+    """
+    def process_one_model(model):
+        model_coefficients = np.zeros(2, dtype=np.float64)
+        model_coefficients[1] = model[0]
+        return model_coefficients
+    return tuple(process_one_model(m) for m in models)
 
 
 def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bias, feature_list):
@@ -89,11 +106,12 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     """
     record = {u'name': INTERCEPT, u'term': '', u'value': bias}
     records = {u'modelId': model_id, u'modelClass': model_class, u'means': [record], u'lossFunction': ""}
-    for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
-        feat = feature_list[w_i]
-        name, term = name_term_from_string(feat)
-        record = {u'name': name, u'term': term, u'value': w_v}
-        records[u'means'].append(record)
+    if weight_indices is not None and weight_values is not None:
+        for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
+            feat = feature_list[w_i]
+            name, term = name_term_from_string(feat)
+            record = {u'name': name, u'term': term, u'value': w_v}
+            records[u'means'].append(record)
     return records
 
 
@@ -118,18 +136,25 @@ def export_linear_model_to_avro(model_ids,
     :return: None
     """
     # STEP [1] - Read feature list
-    feature_list = read_feature_list(feature_file)
+    feature_list = read_feature_list(feature_file) if feature_file else None
 
     # STEP [2] - Read number of features and models
     num_models = len(biases)
-    logger.info(f"To save {num_models} models.\n Found {len(feature_list)} features in {feature_file}")
+    logger.info(f"To save {num_models} models.")
+    if feature_file:
+        logger.info(f"Found {len(feature_list)} features in {feature_file}")
 
     # STEP [3]
     schema = fastavro.parse_schema(json.loads(BAYESIAN_LINEAR_MODEL_SCHEMA))
 
     def gen_records():
-        for i in range(num_models):
-            yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i], list_of_weight_values[i], biases[i], feature_list)
+        if list_of_weight_indices is None or list_of_weight_values is None or feature_list is None:
+            for i in range(num_models):
+                yield gen_one_avro_model(str(model_ids[i]), model_class, None, None, biases[i], feature_list)
+        else:
+            for i in range(num_models):
+                yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i],
+                                         list_of_weight_values[i], biases[i], feature_list)
     batched_write_avro(gen_records(), output_file, schema, model_log_interval)
     logger.info(f"dumped {num_models} models to avro file at {output_file}.")
 

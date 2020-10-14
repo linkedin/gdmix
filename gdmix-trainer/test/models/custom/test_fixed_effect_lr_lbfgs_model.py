@@ -1,6 +1,5 @@
 import fastavro
 import json
-import logging
 import numpy as np
 import os
 import tempfile
@@ -14,8 +13,6 @@ from scipy.optimize import fmin_l_bfgs_b
 from scipy.special import expit
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 AllPaths = namedtuple("AllPaths", "training_data_path "
                                   "validation_data_path "
@@ -45,7 +42,7 @@ _SMALL_MAX_ITERS = 1
 
 # Ports are hard-coded for now. We should verify them to be unused.
 # Packages like portpicker come in handy. (https://github.com/google/python_portpicker)
-_PORTS = [13456, 14356, 15234, 15379]
+_PORTS = [13456, 13548, 14356, 14553, 15234, 15379]
 
 
 class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
@@ -53,9 +50,10 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
     Test logistic regression model with lbfgs solver
     """
     def setUp(self):
-        self.datasets_without_offset = _create_expected_data(False, 0, False)
-        self.datasets_with_offset = _create_expected_data(True, 0, False)
-        self.datasets_with_offset_and_previous_model = _create_expected_data(True, 0, True)
+        self.datasets_without_offset = _create_expected_data(False, 0, False, False)
+        self.datasets_with_offset = _create_expected_data(True, 0, False, False)
+        self.datasets_with_offset_and_previous_model = _create_expected_data(True, 0, True, False)
+        self.datasets_with_offset_intercept_only = _create_expected_data(True, 0, False, True)
 
     def testSingleWorkerTraining(self):
         """
@@ -63,11 +61,13 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :return: None
         """
         # test single worker training without offset
-        self._run_single_worker(False, _PORTS[0], False)
+        # self._run_single_worker(False, _PORTS[0], False, False)
         # test single worker training with offset
-        self._run_single_worker(True, _PORTS[1], False)
+        # self._run_single_worker(True, _PORTS[1], False, False)
         # test single worker training with offset and previous model
-        self._run_single_worker(True, _PORTS[2], True)
+        # self._run_single_worker(True, _PORTS[2], True, False)
+        # test single worker training intercept only model with offset
+        self._run_single_worker(True, _PORTS[3], False, True)
 
     def testSingleWorkerPrediction(self):
         """
@@ -76,11 +76,11 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         """
         base_dir = tempfile.mkdtemp()
         paths = _prepare_paths(base_dir, True)
-        training_params = _get_params(paths, _LARGE_MAX_ITERS)
+        training_params = _get_params(paths, _LARGE_MAX_ITERS, False)
         datasets = self.datasets_with_offset
-        _write_model(datasets['training'].coefficients, paths.feature_file, paths.model_output_dir)
+        _write_model(datasets['training'].coefficients, paths.feature_file, paths.model_output_dir, False)
         _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True)
-        proc_func = _ProcFunc(0, [_PORTS[3]], training_params)
+        proc_func = _ProcFunc(0, [_PORTS[4]], training_params)
         proc_func.__call__(paths, False)
         self._check_scores(datasets['validation'], paths.validation_score_path)
         tf.io.gfile.rmtree(base_dir)
@@ -90,6 +90,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         Check if model coefficients are as expected
         :param coefficients: Expected coefficients
         :param model_dir: Model directory
+        :param feature_file: path to the feature file
         :return: None
         """
         model_file = os.path.join(model_dir, "part-00000.avro")
@@ -111,12 +112,14 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         self.assertAllClose(expected_total_scores, actual_total_scores,
                             msg='total score mismatch')
 
-    def _run_single_worker(self, has_offset, port, use_previous_model):
+    def _run_single_worker(self, has_offset, port, use_previous_model, intercept_only):
         """
         A test for single worker training. Dataset were pre-generated.
         The model, training scores and validation scores are checked against expected values.
         :param has_offset: Whether to include offset in the training and validation dataset.
         :param port: Port number used for gRPC communication
+        :param use_previous_model: whether to use the previous model
+        :param intercept_only: whether this is an intercept-only model (no features)
         :return: None
         """
         base_dir = tempfile.mkdtemp()
@@ -124,14 +127,20 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
             if use_previous_model:
                 datasets = self.datasets_with_offset_and_previous_model
             else:
-                datasets = self.datasets_with_offset
+                if intercept_only:
+                    datasets = self.datasets_with_offset_intercept_only
+                else:
+                    datasets = self.datasets_with_offset
         else:
             datasets = self.datasets_without_offset
-        paths = _prepare_paths(base_dir, has_offset, datasets["training"].previous_model)
+        paths = _prepare_paths(base_dir, has_offset, datasets["training"].previous_model, intercept_only)
         if use_previous_model:
-            training_params = _get_params(paths, _SMALL_MAX_ITERS)
+            training_params = _get_params(paths, _SMALL_MAX_ITERS, False)
         else:
-            training_params = _get_params(paths, _LARGE_MAX_ITERS)
+            if intercept_only:
+                training_params = _get_params(paths, _LARGE_MAX_ITERS, True)
+            else:
+                training_params = _get_params(paths, _LARGE_MAX_ITERS, False)
         _write_tfrecord_datasets(datasets, paths, 2, has_offset)
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
@@ -141,7 +150,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         tf.io.gfile.rmtree(base_dir)
 
 
-def _prepare_paths(base_dir, has_offset, previous_model=None):
+def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=False):
     """
     Get an AllPaths namedtuple containing all needed paths.
     Create the directories needed for testing.
@@ -150,36 +159,46 @@ def _prepare_paths(base_dir, has_offset, previous_model=None):
     :param base_dir: The base directory where all the subfolers will be created.
     :param has_offset: Whether to include offset in the training dataset.
     :param previous_model: Previous model coefficents for warm start training.
+    :param intercept_only: Whether the model is intercept only.
     :return: AllPaths namedtuple
     """
-    feature_dir = os.path.join(base_dir, "featureList")
+    if intercept_only:
+        feature_dir = None
+        feature_file = None
+    else:
+        feature_dir = os.path.join(base_dir, "featureList")
+        feature_file = os.path.join(feature_dir, "global")
     metadata_dir = os.path.join(base_dir, "metadata")
     all_paths = AllPaths(
         training_data_path=os.path.join(base_dir, "trainingData"),
         validation_data_path=os.path.join(base_dir, "validationData"),
         metadata_file=os.path.join(metadata_dir, "tensor_metadata.json"),
-        feature_file=os.path.join(feature_dir, "global"),
+        feature_file=feature_file,
         training_score_path=os.path.join(base_dir, "trainingScore"),
         validation_score_path=os.path.join(base_dir, "validationScore"),
         model_output_dir=os.path.join(base_dir, "modelOutput"))
-    tf.io.gfile.mkdir(feature_dir)
+    if feature_dir:
+        tf.io.gfile.mkdir(feature_dir)
     tf.io.gfile.mkdir(metadata_dir)
     tf.io.gfile.mkdir(all_paths.training_data_path)
     tf.io.gfile.mkdir(all_paths.validation_data_path)
     tf.io.gfile.mkdir(all_paths.model_output_dir)
     tf.io.gfile.mkdir(all_paths.training_score_path)
     tf.io.gfile.mkdir(all_paths.validation_score_path)
-    _create_feature_file(all_paths.feature_file)
+    if feature_file:
+        _create_feature_file(all_paths.feature_file)
     _create_metadata_file(all_paths.metadata_file, has_offset)
     if previous_model is not None:
-        _write_model(previous_model, all_paths.feature_file, all_paths.model_output_dir)
+        _write_model(previous_model, all_paths.feature_file, all_paths.model_output_dir, intercept_only)
     return all_paths
 
 
-def _get_params(paths, max_iters):
+def _get_params(paths, max_iters, intercept_only):
     """
     Get the various parameter for model initialization.
     :param paths: An AllPaths namedtuple.
+    :param max_iters: maximum l-BFGS iterations.
+    :param intercept_only: whether the model has intercept only, no other features.
     :return: Three different parameter sets.
     """
     base_training_params = setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT)
@@ -188,11 +207,9 @@ def _get_params(paths, max_iters):
 
     schema_params = setup_fake_schema_params()
 
-    raw_model_params = ['--' + constants.FEATURE_BAGS, 'global',
-                        '--' + constants.TRAIN_DATA_PATH, paths.training_data_path,
+    raw_model_params = ['--' + constants.TRAIN_DATA_PATH, paths.training_data_path,
                         '--' + constants.VALIDATION_DATA_PATH, paths.validation_data_path,
                         '--' + constants.METADATA_FILE, paths.metadata_file,
-                        '--' + constants.FEATURE_FILE, paths.feature_file,
                         '--' + constants.NUM_OF_LBFGS_ITERATIONS, f"{max_iters}",
                         '--' + constants.MODEL_OUTPUT_DIR, paths.model_output_dir,
                         '--' + constants.COPY_TO_LOCAL, 'False',
@@ -200,6 +217,9 @@ def _get_params(paths, max_iters):
                         '--' + constants.L2_REG_WEIGHT, f"{_L2_REG_WEIGHT}",
                         "--" + constants.REGULARIZE_BIAS, 'True',
                         "--" + constants.DELAYED_EXIT_IN_SECONDS, '1']
+    if not intercept_only:
+        raw_model_params.extend(['--' + constants.FEATURE_BAGS, 'global',
+                                 '--' + constants.FEATURE_FILE, paths.feature_file])
     return base_training_params, schema_params, raw_model_params
 
 
@@ -228,7 +248,7 @@ def _build_execution_context(worker_index, ports):
     return execution_context
 
 
-def _create_expected_data(has_offset, seed, use_previous_model):
+def _create_expected_data(has_offset, seed, use_previous_model, intercept_only):
     """
     Generated expected data for comparison.
     :param has_offset: Whether to use offset.
@@ -237,8 +257,12 @@ def _create_expected_data(has_offset, seed, use_previous_model):
     :return: Training and validation datasets.
     """
     np.random.seed(seed)
-    training_features = np.random.rand(_NUM_SAMPLES, _NUM_FEATURES)
-    validation_features = np.random.rand(_NUM_SAMPLES, _NUM_FEATURES)
+    if intercept_only:
+        training_features = None
+        validation_features = None
+    else:
+        training_features = np.random.rand(_NUM_SAMPLES, _NUM_FEATURES)
+        validation_features = np.random.rand(_NUM_SAMPLES, _NUM_FEATURES)
     training_labels = np.random.randint(2, size=_NUM_SAMPLES)
     validation_labels = np.random.randint(2, size=_NUM_SAMPLES)
     if has_offset:
@@ -247,8 +271,12 @@ def _create_expected_data(has_offset, seed, use_previous_model):
     else:
         training_offsets = np.zeros(_NUM_SAMPLES)
         validation_offsets = np.zeros(_NUM_SAMPLES)
-    train_features_plus_one = np.hstack((training_features, np.ones((_NUM_SAMPLES, 1))))
-    validation_features_plus_one = np.hstack((validation_features, np.ones((_NUM_SAMPLES, 1))))
+    if intercept_only:
+        train_features_plus_one = np.ones((_NUM_SAMPLES, 1))
+        validation_features_plus_one = np.ones((_NUM_SAMPLES, 1))
+    else:
+        train_features_plus_one = np.hstack((training_features, np.ones((_NUM_SAMPLES, 1))))
+        validation_features_plus_one = np.hstack((validation_features, np.ones((_NUM_SAMPLES, 1))))
     previous_model = _solve_for_coefficients(train_features_plus_one, training_labels,
                                              training_offsets, _LARGE_MAX_ITERS)
     if use_previous_model:
@@ -260,14 +288,14 @@ def _create_expected_data(has_offset, seed, use_previous_model):
                                                                      training_offsets)
     validation_per_coordinate_scores, validation_total_scores = _predict(coefficients, validation_features_plus_one,
                                                                          validation_offsets)
-    return {'training': ExpectedData(training_features.astype(np.float32),
+    return {'training': ExpectedData(training_features if intercept_only else training_features.astype(np.float32),
                                      training_labels,
                                      training_offsets.astype(np.float32),
                                      previous_model.astype(np.float32) if use_previous_model else None,
                                      coefficients.astype(np.float32),
                                      training_per_coordinate_scores.astype(np.float32),
                                      training_total_scores.astype(np.float32)),
-            'validation': ExpectedData(validation_features.astype(np.float32),
+            'validation': ExpectedData(validation_features if intercept_only else validation_features.astype(np.float32),
                                        validation_labels,
                                        validation_offsets.astype(np.float32),
                                        previous_model.astype(np.float32) if use_previous_model else None,
@@ -314,7 +342,7 @@ def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=N
         return grad
 
     if theta_initial is None:
-        theta_initial = np.zeros(_NUM_FEATURES+1)  # add the intercept
+        theta_initial = np.zeros(features.shape[1])  # including the intercept
     # Run minimization
     result = fmin_l_bfgs_b(func=_loss,
                            x0=theta_initial,
@@ -358,7 +386,10 @@ def _write_single_dataset(data, output_path, num_files, has_offset):
         filename = os.path.join(output_path, f"part-{i:05}.tfrecord")
         with tf.io.TFRecordWriter(filename) as writer:
             for index in indices:
-                feature_indices, feature_values = _get_sparse_representation(data.features[index])
+                if data.features is None:
+                    feature_indices, feature_values = None, None
+                else:
+                    feature_indices, feature_values = _get_sparse_representation(data.features[index])
                 if has_offset:
                     offsets = data.offsets[index]
                 else:
@@ -368,20 +399,27 @@ def _write_single_dataset(data, output_path, num_files, has_offset):
                 writer.write(example.SerializeToString())
 
 
-def _write_model(coefficients, feature_file, model_output_dir):
+def _write_model(coefficients, feature_file, model_output_dir, intercept_only):
     """
     Write model to an avro file per Photon-ML format.
     :param coefficients: Model coefficients, the last element is the bias/intercept.
     :param feature_file: A file with all the features.
     :param model_output_dir: Output directory for the model file.
+    :param intercept_only: Whether this is an intercept only model.
     :return: None
     """
     model_file = os.path.join(model_output_dir, "part-00000.avro")
-    weights = coefficients[:-1]
     bias = coefficients[-1]
+    if intercept_only:
+        list_of_weight_indices = None
+        list_of_weight_values = None
+    else:
+        weights = coefficients[:-1]
+        list_of_weight_indices = np.expand_dims(np.arange(weights.shape[0]), axis=0)
+        list_of_weight_values = np.expand_dims(weights, axis=0),
     export_linear_model_to_avro(model_ids=["global model"],
-                                list_of_weight_indices=np.expand_dims(np.arange(_NUM_FEATURES), axis=0),
-                                list_of_weight_values=np.expand_dims(weights, axis=0),
+                                list_of_weight_indices=list_of_weight_indices,
+                                list_of_weight_values=list_of_weight_values,
                                 biases=np.expand_dims(bias, axis=0),
                                 feature_file=feature_file,
                                 output_file=model_file)
@@ -410,10 +448,6 @@ def _get_example(index, value, label, weight, uid, offset):
     :return: A TF example.
     """
     tf_feature = {
-        'global_indices': tf.train.Feature(int64_list=tf.train.Int64List(
-            value=index)),
-        'global_values': tf.train.Feature(float_list=tf.train.FloatList(
-            value=value)),
         'response': tf.train.Feature(int64_list=tf.train.Int64List(
             value=[label])),
         'weight': tf.train.Feature(float_list=tf.train.FloatList(
@@ -421,6 +455,12 @@ def _get_example(index, value, label, weight, uid, offset):
         'uid': tf.train.Feature(int64_list=tf.train.Int64List(
             value=[uid])),
     }
+    if index is not None and value is not None:
+        tf_feature.update({
+            'global_indices': tf.train.Feature(int64_list=tf.train.Int64List(
+                value=index)),
+            'global_values': tf.train.Feature(float_list=tf.train.FloatList(
+                value=value))})
     if offset:
         tf_feature['offset'] = tf.train.Feature(float_list=tf.train.FloatList(
             value=[offset]))
