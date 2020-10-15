@@ -18,7 +18,7 @@ from gdmix.models.custom.base_lr_params import LRParams
 from gdmix.models.custom.binary_logistic_regression import BinaryLogisticRegressionTrainer
 from gdmix.models.custom.scipy.job_consumers import InferenceJobConsumer, TrainingJobConsumer, TrainingResult, prepare_jobs
 from gdmix.util import constants
-from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, name_term_to_string, batched_write_avro, \
+from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, batched_write_avro, \
     get_inference_output_avro_schema
 
 logger = logging.getLogger(__name__)
@@ -219,8 +219,7 @@ class RandomEffectLRLBFGSModel(Model):
             model_coefficients.append(np.float64(ntv["value"]))
             # Add global index if non-intercept feature
             if idx:
-                name_term_string = name_term_to_string(ntv["name"], ntv["term"])
-                unique_global_indices.append(feature2global_id[name_term_string])
+                unique_global_indices.append(feature2global_id[(ntv["name"], ntv["term"])])
         return model_id, TrainingResult(theta=np.array(model_coefficients), unique_global_indices=np.array(unique_global_indices))
 
     def export(self, output_model_dir):

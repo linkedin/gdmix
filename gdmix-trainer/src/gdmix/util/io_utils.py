@@ -1,4 +1,5 @@
 import collections
+import csv
 import itertools
 import json
 import logging
@@ -64,8 +65,7 @@ def load_linear_models_from_avro(model_file, feature_file):
             if name == INTERCEPT and term == '':
                 model_coefficients[num_features] = value  # Intercept at the end.
             elif feature_map is not None:
-                full_feature_name = name_term_to_string(name, term)
-                feature_index = feature_map.get(full_feature_name, None)
+                feature_index = feature_map.get((name, term), None)
                 if feature_index is not None:  # Take only the features that in the current training dataset.
                     model_coefficients[feature_index] = value
         return model_coefficients
@@ -109,7 +109,7 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     if weight_indices is not None and weight_values is not None:
         for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
             feat = feature_list[w_i]
-            name, term = name_term_from_string(feat)
+            name, term = feat[0], feat[1]
             record = {u'name': name, u'term': term, u'value': w_v}
             records[u'means'].append(record)
     return records
@@ -164,41 +164,24 @@ def read_feature_list(feature_file):
     Get feature names from the feature file.
     Note: intercept is not included here since it is not part of the raw data.
     :param feature_file: user provided feature file, each row is a "name,term" feature name
-    :return: list of feature names
+    :return: list of feature (name, term) tuple
     """
+    result = []
     with tf.io.gfile.GFile(feature_file) as f:
         f.seekable = lambda: False
-        return [line.strip() for line in f]
-
-
-def name_term_from_string(name_term_string):
-    """
-    Convert "name,term" string to (name, term)
-    :param name_term_string: A string where name and term joined by ","
-    :return: (name, term) tuple
-    """
-    name, *term = name_term_string.split(',')
-    assert len(term) <= 1, f"One ',' expected, but found more in {name_term_string!r}."
-    return name, term[0] if term else ''
-
-
-def name_term_to_string(name, term):
-    """
-    Convert (name, term) to "name,term" string.
-    :param name: Name of the feature.
-    :param term: Term of the feature.
-    :return: "name,term" string
-    """
-    return ','.join((name, term))
+        for row in csv.reader(f):
+            assert len(row) == 2, f"Each feature name should have exactly name and term only, but I got {row}."
+            result.append(tuple(row))
+    return result
 
 
 def get_feature_map(feature_file):
     """
-    Get feature -> index map.
+    Get feature (name, term) -> index map.
     The index of a feature is the position of the feature in the file.
     The index starts from zero.
     :param feature_file: The file containing a list of features.
-    :return: a dict of feature_name and its index.
+    :return: a dict of feature (name, term) and its index.
     """
     return {feature: index for index, feature in enumerate(read_feature_list(feature_file))}
 

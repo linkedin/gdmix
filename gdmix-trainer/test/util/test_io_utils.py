@@ -1,10 +1,11 @@
+import csv
 import numpy as np
 import os
 import tempfile
 import tensorflow as tf
 
 from gdmix.util.io_utils import export_linear_model_to_avro, get_feature_map, gen_one_avro_model,\
-    load_linear_models_from_avro, name_term_from_string, name_term_to_string, read_feature_list
+    load_linear_models_from_avro, read_feature_list
 
 
 class TestIoUtils(tf.test.TestCase):
@@ -14,9 +15,7 @@ class TestIoUtils(tf.test.TestCase):
 
     def setUp(self):
         self.base_dir = tempfile.mkdtemp()
-        self.names = ['a', 'b', 'c']
-        self.terms = ['x', '', 'z']
-        self.name_term_strings = ['a,x', 'b,', 'c,z']
+        self.name_term_tuple = [('a,a', 'x'), ('b', ''), ('c', 'z,z')]
         self.feature_file = os.path.join(self.base_dir, 'feature.txt')
         self.short_feature_file = os.path.join(self.base_dir, 'short_feature.txt')
         self.model_file = os.path.join(self.base_dir, 'model.avro')
@@ -27,12 +26,16 @@ class TestIoUtils(tf.test.TestCase):
         self.expected_short_models = [[0.1, 0, 0.5], [1.1, 0.3, -0.7]]
 
         with open(self.feature_file, 'w') as f:
-            for feature in self.name_term_strings:
-                f.write(feature + "\n")
+            csvwriter = csv.writer(f)
+            for name, term in self.name_term_tuple:
+                csvwriter.writerow([name, term])
+
         # feature list with one fewer feature.
         with open(self.short_feature_file, 'w') as f:
-            for i in range(len(self.name_term_strings)-1):
-                f.write(self.name_term_strings[i] + "\n")
+            csvwriter = csv.writer(f)
+            for i in range(len(self.name_term_tuple)-1):
+                csvwriter.writerow(list(self.name_term_tuple[i]))
+
         export_linear_model_to_avro(model_ids=["model 1", "model 2"],
                                     list_of_weight_indices=self.weight_indices,
                                     list_of_weight_values=self.weight_values,
@@ -43,25 +46,13 @@ class TestIoUtils(tf.test.TestCase):
     def tearDown(self):
         tf.io.gfile.rmtree(self.base_dir)
 
-    def testNameTermToString(self):
-        for i in range(len(self.names)):
-            expected = self.name_term_strings[i]
-            actual = name_term_to_string(self.names[i], self.terms[i])
-            self.assertEqual(expected, actual)
-
-    def testNameTermFromString(self):
-        for i in range(len(self.names)):
-            expected_name, expected_term = name_term_from_string(self.name_term_strings[i])
-            self.assertEqual(expected_name, self.names[i])
-            self.assertEqual(expected_term, self.terms[i])
-
     def testReadFeatureList(self):
         feature_list = read_feature_list(self.feature_file)
-        self.assertAllEqual(feature_list, self.name_term_strings)
+        self.assertAllEqual(feature_list, self.name_term_tuple)
 
     def testGetFeatureMap(self):
         feature_map = get_feature_map(self.feature_file)
-        for index, feature in enumerate(self.name_term_strings):
+        for index, feature in enumerate(self.name_term_tuple):
             self.assertEqual(index, feature_map[feature])
 
     def testLoadModel(self):
@@ -81,14 +72,14 @@ class TestIoUtils(tf.test.TestCase):
         model_class = 'com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel'
         weights = np.array([[1.2, 3.4, 5.6]])
         weight_indices = np.arange(3)
-        bias = np.array([7.8])
-        feature_list = ['f1,t1', 'f2,', 'f3,t3']
+        bias = 7.8
+        feature_list = [('f1,2', 't1'), ('f2', ''), ('f3', 't3,3')]
 
         records_avro = gen_one_avro_model(model_id, model_class, weight_indices, weights, bias, feature_list)
         records = {u'modelId': model_id, u'modelClass': model_class, u'means': [
             {u'name': '(INTERCEPT)', u'term': '', u'value': 7.8},
-            {u'name': 'f1', u'term': 't1', u'value': 1.2},
+            {u'name': 'f1,2', u'term': 't1', u'value': 1.2},
             {u'name': 'f2', u'term': '', u'value': 3.4},
-            {u'name': 'f3', u'term': 't3', u'value': 5.6}
+            {u'name': 'f3', u'term': 't3,3', u'value': 5.6}
         ], u'lossFunction': ""}
         self.assertDictEqual(records_avro, records)
