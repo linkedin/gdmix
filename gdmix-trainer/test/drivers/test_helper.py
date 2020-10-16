@@ -57,12 +57,12 @@ def setup_fake_raw_model_params(training_stage=constants.FIXED_EFFECT):
                         os.path.join(os.getcwd(), "test/resources/fe_lbfgs/metadata/tensor_metadata.json")
                         ]
     if training_stage == constants.RANDOM_EFFECT:
-        raw_model_params.append(f"--{constants.FEATURE_BAGS}")
+        raw_model_params.append(f"--{constants.FEATURE_BAG}")
         raw_model_params.append("per_member")
         raw_model_params.append(f"--{constants.OFFSET}")
         raw_model_params.append("offset")
     else:
-        raw_model_params.append(f"--{constants.FEATURE_BAGS}")
+        raw_model_params.append(f"--{constants.FEATURE_BAG}")
         raw_model_params.append("global")
         raw_model_params.append(f"--{constants.FEATURE_FILE}")
         raw_model_params.append("test/resources/fe_lbfgs/featureList/global",)

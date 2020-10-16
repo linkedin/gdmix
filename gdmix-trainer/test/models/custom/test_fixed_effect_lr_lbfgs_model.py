@@ -218,7 +218,7 @@ def _get_params(paths, max_iters, intercept_only):
                         "--" + constants.REGULARIZE_BIAS, 'True',
                         "--" + constants.DELAYED_EXIT_IN_SECONDS, '1']
     if not intercept_only:
-        raw_model_params.extend(['--' + constants.FEATURE_BAGS, 'global',
+        raw_model_params.extend(['--' + constants.FEATURE_BAG, 'global',
                                  '--' + constants.FEATURE_FILE, paths.feature_file])
     return base_training_params, schema_params, raw_model_params
 
