@@ -33,7 +33,7 @@ object ConversionUtils {
    * UDF to get name and term given a row of NTV
    * @return A string of "$name,$term"
    */
-  def getNameTermUdf: UserDefinedFunction = udf { r: Row => r.getAs[String](NAME) + "," + r.getAs[String](TERM) }
+  def getNameTermUdf: UserDefinedFunction = udf { r: Row => (r.getAs[String](NAME), r.getAs[String](TERM)) }
 
   /**
    * UDF to convert a Seq of indices and a Seq of values to a sparse vector
