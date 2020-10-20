@@ -126,8 +126,7 @@ class FixedEffectLRModelLBFGS(Model):
             # intercept only model, we pad one dummy feature of zero value.
             num_features = 1
         else:
-            num_features = next(filter(lambda x: x.name == self.feature_bag_name,
-                                       self.tensor_metadata.get_features())).shape[0]
+            num_features = self.tensor_metadata.get_feature_shape(self.feature_bag_name)[0]
         assert num_features > 0, "number of features must > 0"
         return num_features
 

@@ -19,7 +19,7 @@ from gdmix.models.custom.binary_logistic_regression import BinaryLogisticRegress
 from gdmix.models.custom.scipy.job_consumers import InferenceJobConsumer, TrainingJobConsumer, TrainingResult, prepare_jobs
 from gdmix.util import constants
 from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, batched_write_avro, \
-    get_inference_output_avro_schema
+    get_inference_output_avro_schema, INTERCEPT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -54,6 +54,9 @@ class RandomEffectLRLBFGSModel(Model):
         self.model_params: REParams = self._parse_parameters(raw_model_params)
         self.checkpoint_path = os.path.join(self.model_params.model_output_dir)
         self.metadata_file = self.model_params.metadata_file
+        self.feature_bag_name = self.model_params.feature_bag
+        # If no features, then make sure feature file is None. This is intercept only model.
+        self.feature_file = None if self.feature_bag_name is None else self.model_params.feature_file
         # If TRAIN_DATA_PATH is set, initialize active/passive training data path, else set to None
         if self.model_params.train_data_path is not None:
             self.training_data_path = os.path.join(self.model_params.train_data_path, constants.ACTIVE)
@@ -76,9 +79,10 @@ class RandomEffectLRLBFGSModel(Model):
         # Read tensor metadata
         metadata = read_json_file(metadata_file)
         tensor_metadata = DatasetMetadata(metadata)
-        # Extract number of features. NOTE - only one feature bag is supported
-        num_features = next(filter(lambda x: x.name == self.model_params.feature_bag, tensor_metadata.get_features())).shape[0]
-        logger.info(f"Found {num_features} features in feature bag {self.model_params.feature_bag}")
+        # if intercept only model, pad a dummy feature, otherwise, read number of features from the metadata
+        num_features = 1 if self.feature_bag_name is None \
+            else tensor_metadata.get_feature_shape(self.feature_bag_name)[0]
+        logger.info(f"Found {num_features} features in feature bag {self.feature_bag_name}")
         assert num_features > 0, "number of features must > 0"
 
         with Pool(self.model_params.num_of_consumers, initializer=lambda: logger.info(f"Process {current_process()} ready to work!")) as pool:
@@ -126,10 +130,8 @@ class RandomEffectLRLBFGSModel(Model):
         model_weights.update(results)
         logger.info(f"{len(model_weights)} models in total after training/refreshing.")
         # Dump results to model output directory.
-        if self.model_params.feature_file:
-            self._save_model(output_model_file, model_coefficients=model_weights, num_features=num_features, feature_file=self.model_params.feature_file)
-        else:
-            logger.info("Both feature file and avro model output directory required to export model. Skipping export")
+        self._save_model(output_model_file, model_coefficients=model_weights, num_features=num_features,
+                         feature_file=self.feature_file)
         return model_weights
 
     def _predict(self, pool, input_path, metadata, tensor_metadata, output_file, schema_params, num_features, metadata_file, model_weights, use_local_index):
@@ -174,20 +176,29 @@ class RandomEffectLRLBFGSModel(Model):
         model_ids = list(model_coefficients.keys())
         global_indices = None if self.model_params.enable_local_indexing else np.arange(num_features)
         biases = []
-        list_of_weight_indices = []
-        list_of_weight_values = []
+        if feature_file is None:
+            # intercept only model.
+            list_of_weight_indices = None
+            list_of_weight_values = None
+            assert(num_features == 1)
+        else:
+            list_of_weight_indices = []
+            list_of_weight_values = []
         for entity_id, (training_result, unique_global_indices) in model_coefficients.items():
             biases.append(training_result[0])
-            list_of_weight_values.append(training_result[1:])
-            # Indices map to strictly increasing sequence of global indices or range from 0 to d-1, where d is the number of features in the global space
-            indices = unique_global_indices if global_indices is None else global_indices
-            list_of_weight_indices.append(indices)
+            if list_of_weight_indices is not None and list_of_weight_values is not None:
+                list_of_weight_values.append(training_result[1:])
+                # Indices map to strictly increasing sequence of global indices or range from 0 to d-1,
+                # where d is the number of features in the global space
+                indices = unique_global_indices if global_indices is None else global_indices
+                list_of_weight_indices.append(indices)
 
         # Create output file
         output_dir = os.path.dirname(output_file)
         tf.io.gfile.exists(output_dir) or tf.io.gfile.makedirs(output_dir)
         # Delegate to export function
-        export_linear_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values, biases, feature_file, output_file)
+        export_linear_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values,
+                                    biases, feature_file, output_file)
 
     def _load_weights(self, model_file, catch_exception=False):
         logger.info(f"Loading model from {model_file}")
@@ -201,7 +212,7 @@ class RandomEffectLRLBFGSModel(Model):
                 raise FileNotFoundError(f"Model file {model_file} does not exist")
 
         # Read feature index map
-        feature2global_id = get_feature_map(self.model_params.feature_file)
+        feature2global_id = None if self.feature_file is None else get_feature_map(self.feature_file)
 
         # Get the model file and read the avro model
         with tf.io.gfile.GFile(model_file, 'rb') as fo:
@@ -217,9 +228,18 @@ class RandomEffectLRLBFGSModel(Model):
         unique_global_indices = []
         for idx, ntv in enumerate(model_record["means"]):
             model_coefficients.append(np.float64(ntv["value"]))
-            # Add global index if non-intercept feature
-            if idx:
+            # verify the first element is intercept
+            if idx == 0:
+                assert(ntv["name"] == INTERCEPT and ntv["term"] == '')
+            else:
+                # Add global index for non-intercept features
                 unique_global_indices.append(feature2global_id[(ntv["name"], ntv["term"])])
+        if feature2global_id is None:
+            # intercept-only model, add one dummy feature
+            # sanity check unique_global_indices.
+            assert(len(unique_global_indices) == 0)
+            model_coefficients.append(np.float64(0.0))
+            unique_global_indices.append(0)
         return model_id, TrainingResult(theta=np.array(model_coefficients), unique_global_indices=np.array(unique_global_indices))
 
     def export(self, output_model_dir):

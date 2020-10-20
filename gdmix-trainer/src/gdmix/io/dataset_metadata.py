@@ -108,6 +108,9 @@ class DatasetMetadata:
     def get_feature_names(self):
         return self._feature_names.copy()
 
+    def get_feature_shape(self, feature_name):
+        return next(filter(lambda x: x.name == feature_name, self.get_features())).shape
+
     def get_tensors(self):
         return self._tensors.copy()
 

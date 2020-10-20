@@ -18,7 +18,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
     Test for random effect custom LR model
     """
 
-    def get_raw_params(self, partition_entity='memberId', num_of_lbfgs_iterations=None):
+    def get_raw_params(self, partition_entity='memberId', num_of_lbfgs_iterations=None, intercept_only=False):
         base_training_params = setup_fake_base_training_params(training_stage=constants.RANDOM_EFFECT)
         base_training_params.batch_size = 2
         # flatten the params
@@ -32,6 +32,12 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         raw_params.extend(['--' + constants.L2_REG_WEIGHT, '0.1'])
         if num_of_lbfgs_iterations:
             raw_params.extend(['--' + constants.NUM_OF_LBFGS_ITERATIONS, f'{num_of_lbfgs_iterations}'])
+        if intercept_only:
+            feature_bag_index = raw_params.index(f'--{constants.FEATURE_BAG}')
+            raw_params.pop(feature_bag_index)
+            raw_params.pop(feature_bag_index)
+            assert(f'--{constants.FEATURE_BAG}' not in raw_params)
+            assert('per_member' not in raw_params)
         return base_training_params, raw_params
 
     def test_train_should_fail_if_producer_or_consumer_fails(self):
@@ -124,13 +130,33 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         tf.io.gfile.rmtree(checkpoint_dir)
         tf.io.gfile.rmtree(predict_output_dir)
 
-    def test_warm_start(self):
+    def _check_intercept_only_model(self, models):
+        """
+        Check the intercept only model.
+        The coefficients should be an exact length-2 array, the second element is 0.0.
+        The unique_global_indices is [0].
+        :param models: a dictionary of {entity: TrainingResult}.
+        :return: None
+        """
+        for model_id in models:
+            theta = models[model_id].theta
+            indices = models[model_id].unique_global_indices
+            self.assertEqual(len(theta), 2)
+            self.assertEqual(theta[1], 0.0)
+            self.assertEqual(indices, [0])
+
+    def _run_warm_start(self, intercept_only):
 
         # Step 1: train an initial model
         # Create and add AVRO model output directory to raw parameters
-        base_training_params, raw_params = self.get_raw_params()
+        base_training_params, raw_params = self.get_raw_params(intercept_only=intercept_only)
         avro_model_output_dir = tempfile.mkdtemp()
         raw_params.extend(['--' + constants.MODEL_OUTPUT_DIR, avro_model_output_dir])
+
+        if intercept_only:
+            metadata_file = os.path.join(test_dataset_path, "data_intercept_only.json")
+        else:
+            metadata_file = os.path.join(test_dataset_path, "data.json")
 
         # Create random effect LR LBFGS Model
         re_lr_model = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
@@ -145,15 +171,17 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
                             constants.PASSIVE_TRAINING_DATA_PATH: test_dataset_path}
         schema_params = setup_fake_schema_params()
         re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
-                          metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
+                          metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
 
         avro_model_output_file = os.path.join(avro_model_output_dir, f"part-{0:05d}.avro")
         # Read back the model as the warm start initial point.
         initial_model = re_lr_model._load_weights(avro_model_output_file, 0)
+        if intercept_only:
+            self._check_intercept_only_model(initial_model)
 
         # Step 2: Train for 1 l-bfgs step with warm start
-        base_training_params, raw_params = self.get_raw_params('memberId', 1)
+        base_training_params, raw_params = self.get_raw_params('memberId', 1, intercept_only)
         raw_params.extend(['--' + constants.MODEL_OUTPUT_DIR, avro_model_output_dir])
 
         # Create random effect LR LBFGS Model
@@ -161,9 +189,12 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
 
         schema_params = setup_fake_schema_params()
         re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
-                          metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
+                          metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
         final_model = re_lr_model._load_weights(avro_model_output_file, 0)
+
+        if intercept_only:
+            self._check_intercept_only_model(final_model)
 
         # Check the model has already converged.
         self.assertEqual(len(initial_model), len(final_model))
@@ -179,11 +210,14 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
             tf.io.gfile.remove(f)
         # Train for 1 l-bfgs step.
         re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
-                          metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
+                          metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
         cold_model = re_lr_model._load_weights(avro_model_output_file, 0)
 
-        # Check the model has already converged.
+        if intercept_only:
+            self._check_intercept_only_model(cold_model)
+
+        # Check the models are different.
         self.assertEqual(len(cold_model), len(final_model))
         for model_id in cold_model:
             self.assertNotAllClose(cold_model[model_id].theta,
@@ -197,3 +231,9 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         tf.io.gfile.remove(passive_train_output_file)
         tf.io.gfile.rmtree(avro_model_output_dir)
         tf.io.gfile.rmtree(checkpoint_dir)
+
+    def test_warm_start(self):
+        self._run_warm_start(intercept_only=False)
+
+    def test_warm_start_intercept_only(self):
+        self._run_warm_start(intercept_only=True)

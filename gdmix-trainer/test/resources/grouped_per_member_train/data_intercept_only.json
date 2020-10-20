@@ -1,0 +1,1 @@
+{"features":[{"name": "weight", "dtype": "float", "shape": [], "isSparse": false},{"name": "offset", "dtype": "float", "shape": [], "isSparse": false},{"name": "uid", "dtype": "int", "shape": [], "isSparse": false},{"name": "memberId", "dtype": "int", "shape": [], "isSparse": false}],"labels" :[{"name": "response", "dtype": "int", "shape": [], "isSparse": false}]}
