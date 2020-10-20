@@ -7,11 +7,10 @@ class LRParams:
     """Base logistic regression parameters"""
 
     # Input / output files or directories
-    train_data_path: str  # Path of directory holding only training data files.
-    validation_data_path: str  # "Path of directory holding only data files for in-line validation."
     metadata_file: str  # Path to metadata.
     model_output_dir: str  # Model output directory.
-
+    train_data_path: Optional[str] = None  # Path of directory holding only training data files.
+    validation_data_path: Optional[str] = None  # "Path of directory holding only data files for in-line validation."
     # Column names in the dataset
     feature_bag: Optional[str] = None  # Feature bag name that is used for training and scoring.
 
