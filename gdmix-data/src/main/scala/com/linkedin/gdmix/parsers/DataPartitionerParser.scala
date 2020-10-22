@@ -25,8 +25,8 @@ case class DataPartitionerParams(
   predictionScorePerCoordinate: String = PREDICTION_SCORE_PER_COORDINATE,
   offset: String = OFFSET,
   uid: String = UID,
-  maxNumOfSamplesPerModel: Int = -1,
-  minNumOfSamplesPerModel: Int = -1
+  maxNumOfSamplesPerModel: Option[Int] = None,
+  minNumOfSamplesPerModel: Option[Int] = None
 )
 
 /**
@@ -146,7 +146,7 @@ object DataPartitionerParser {
         """Optional.
           |Column name of unique id.""".stripMargin)
 
-    opt[Int]("maxNumOfSamplesPerModel").action((x, p) => p.copy(maxNumOfSamplesPerModel = x))
+    opt[Int]("maxNumOfSamplesPerModel").action((x, p) => p.copy(maxNumOfSamplesPerModel = Some(x)))
       .optional
       .validate(
         x => if (x > 0) success else failure("Option --maxNumOfSamplesPerModel must be > 0"))
@@ -154,7 +154,7 @@ object DataPartitionerParser {
         """Optional.
           |Maximal number of samples a model can take.""".stripMargin)
 
-    opt[Int]("minNumOfSamplesPerModel").action((x, p) => p.copy(minNumOfSamplesPerModel = x))
+    opt[Int]("minNumOfSamplesPerModel").action((x, p) => p.copy(minNumOfSamplesPerModel = Some(x)))
       .optional
       .validate(
         x => if (x > 0) success else failure("Option --minNumOfSamplesPerModel must be > 0"))
@@ -163,7 +163,8 @@ object DataPartitionerParser {
           |Minimal number of samples needed to train a model.""".stripMargin)
 
     checkConfig(p =>
-      if (p.maxNumOfSamplesPerModel < p.minNumOfSamplesPerModel) {
+      if (!p.maxNumOfSamplesPerModel.isEmpty && !p.minNumOfSamplesPerModel.isEmpty &&
+        (p.maxNumOfSamplesPerModel.get < p.minNumOfSamplesPerModel.get)) {
         failure("Invalid max/min number of samples per model, require max >= min")
       }
       else success)

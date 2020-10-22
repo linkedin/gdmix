@@ -199,8 +199,8 @@ object DataPartitioner {
     predictionScorePerCoordinate: String,
     offset: String,
     uid: String,
-    lowerBound: Int,
-    upperBound: Int,
+    lowerBound: Option[Int],
+    upperBound: Option[Int],
     inputMetadataFile: String,
     ifSplitData: Boolean): DataFrame = {
 
@@ -238,7 +238,7 @@ object DataPartitioner {
       }
 
       // Save the passive data. Passive data is generated when there is a lower bound or an upper bound.
-      if (lowerBound > 0 || upperBound > 0) {
+      if (!(lowerBound.isEmpty && upperBound.isEmpty)) {
         val passiveData = dFWithPartitionId.filter(col(GROUP_ID) =!= 0).drop(GROUP_ID)
         if (!passiveData.rdd.isEmpty()) {
           IoUtils.saveDataFrame(
@@ -279,8 +279,8 @@ object DataPartitioner {
    */
   private[data] def boundAndGroupData(
     dataFrame: DataFrame,
-    lowerBound: Int,
-    upperBound: Int,
+    lowerBound: Option[Int],
+    upperBound: Option[Int],
     partitionEntity: String): DataFrame = {
 
     // Get the group id for each entity.
@@ -311,12 +311,12 @@ object DataPartitioner {
    */
   private[data] def getGroupId(
     dataFrame: DataFrame,
-    lowerBound: Int,
-    upperBound: Int,
+    lowerBound: Option[Int],
+    upperBound: Option[Int],
     partitionEntity: String): DataFrame = {
 
     // No lower bound and upper bound. All the samples are active data.
-    if (lowerBound <= 0 && upperBound <= 0) {
+    if (lowerBound.isEmpty && upperBound.isEmpty) {
       return dataFrame.withColumn(GROUP_ID, lit(0))
     }
 
@@ -329,9 +329,9 @@ object DataPartitioner {
     val dfWithEntityCount = dataFrame.join(perEntityCounts, partitionEntity)
 
     // If there's an upper bound, calculate the number of groups needed to bound the data.
-    val dfWithGroupCounts = if (upperBound > 0) {
+    val dfWithGroupCounts = if (!upperBound.isEmpty) {
       dfWithEntityCount
-        .withColumn(PER_ENTITY_GROUP_COUNT, (col(PER_ENTITY_TOTAL_SAMPLE_COUNT) / upperBound + 1).cast(IntegerType))
+        .withColumn(PER_ENTITY_GROUP_COUNT, (col(PER_ENTITY_TOTAL_SAMPLE_COUNT) / upperBound.get + 1).cast(IntegerType))
     } else {
       dfWithEntityCount.withColumn(PER_ENTITY_GROUP_COUNT, lit(1))
     }
@@ -340,7 +340,7 @@ object DataPartitioner {
     // TODO: Explore different sampling strategy.
     dfWithGroupCounts
       .withColumn(GROUP_ID,
-        when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lowerBound, -1)
+        when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lowerBound.get, -1)
           .otherwise((col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType)))
       .drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
   }
