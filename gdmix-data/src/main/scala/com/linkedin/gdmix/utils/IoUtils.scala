@@ -9,6 +9,7 @@ import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.StructType
 
 import com.databricks.spark.avro._
 
@@ -159,6 +160,7 @@ object IoUtils {
    * @param spark Spark session
    * @param inputPath Path for the input files
    * @param inputFormat Input format, either AVRO or TFRECORD
+   * @param schemaOpt Schema for TFRecord, optional.
    * @param recordType The TFRecord type, Example or SequenceExample,
    *                   used in TFRecord only.
    * @return the read dataframe
@@ -167,12 +169,17 @@ object IoUtils {
     spark: SparkSession,
     inputPath: String,
     inputFormat: String,
+    schemaOpt: Option[StructType] = None,
     recordType: String = TF_EXAMPLE
   ): DataFrame = {
     inputFormat match {
       case AVRO => spark.read.avro(inputPath)
-      case TFRECORD => spark.read.format(TFRECORD)
-        .option("recordType", recordType).load(inputPath)
+      case TFRECORD =>
+        val reader = spark.read.format(TFRECORD).option("recordType", recordType)
+        schemaOpt match {
+          case Some(schema) => reader.schema(schema).load(inputPath)
+          case _ => reader.load(inputPath)
+        }
       case _ =>
         throw new IllegalArgumentException(s"Unknown format $inputFormat, " +
           s"use avro or tfrecord only")

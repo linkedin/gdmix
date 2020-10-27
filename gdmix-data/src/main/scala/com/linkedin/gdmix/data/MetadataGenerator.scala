@@ -6,14 +6,14 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.max
-import org.apache.spark.sql.types.{ArrayType, NumericType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.json4s.DefaultFormats
 import org.json4s.ext.EnumNameSerializer
 import org.json4s.jackson.JsonMethods.parse
 
 import com.linkedin.gdmix.configs.{DataType, DatasetMetadata, TensorMetadata}
 import com.linkedin.gdmix.utils.Constants._
-import com.linkedin.gdmix.utils.ConversionUtils.mapSparkToConfigDataType
+import com.linkedin.gdmix.utils.ConversionUtils.{ConfigDataTypeMap, mapSparkToConfigDataType}
 import com.linkedin.gdmix.utils.{IoUtils, JsonUtils}
 
 /**
@@ -197,6 +197,63 @@ object MetadataGenerator {
           throw new IllegalArgumentException(s"Can not handle complex column ${field.name}")
         }
       }
+    }
+  }
+
+  /**
+   * Create schema for TFRecord files from metadata
+   * Spark-TFRecord can infer the schema automatically, except the case where a column is a list with a single element.
+   * Spark-TFRecord requires a bit hint to distinguish a list of a single element and a scalar because
+   * TFRecord format can not separate the two cases.
+   *
+   * @param inputMetadataFile Input metadata file
+   * @return Spark dataframe schema
+   */
+  private[data] def createSchemaForTfrecord(
+    inputMetadataFile: String): StructType = {
+    // Read input metadata.
+    val metadataJson = IoUtils.readFile(fileSystem, inputMetadataFile)
+    val (inputFeatureColumns, inputLabelColumnsOpt) = getFeatureAndLabelColumns(metadataJson)
+    val schemaFields = mutable.ArrayBuffer[StructField]()
+    inputFeatureColumns.foreach { feature =>
+      appendNewFields(schemaFields, feature)
+    }
+    inputLabelColumnsOpt match {
+      case Some(labels) =>
+        labels.foreach { label =>
+          appendNewFields(schemaFields, label)
+        }
+      case None =>
+    }
+    StructType(schemaFields)
+  }
+
+  /**
+   * Append fields corresponding to a single column.
+   * For sparse column, it appends two fields, one for the indices and the other for the values.
+   *
+   * @param schemaFields An array buffer to be filled with schema fields of all the columns
+   * @param tensorMetadata A tensor metadata corresponds to a column in the dataframe.
+   */
+  private[data] def appendNewFields(
+    schemaFields: mutable.ArrayBuffer[StructField],
+    tensorMetadata: TensorMetadata): Unit = {
+    val name = tensorMetadata.name
+    val dtype = ConfigDataTypeMap(tensorMetadata.dtype)
+    tensorMetadata.shape.size match {
+      case 0 =>
+        schemaFields += StructField(name, dtype, true)
+      case 1 =>
+        if (tensorMetadata.isSparse) {
+          val index = s"${name}_${INDICES}"
+          val values = s"${name}_${VALUES}"
+          schemaFields += StructField(index, ArrayType(LongType, true), true)
+          schemaFields += StructField(values, ArrayType(dtype, true), true)
+        } else {
+          schemaFields += StructField(name, ArrayType(dtype, true), true)
+        }
+      case _ =>
+        throw new IllegalArgumentException("Do not support tensor dimension greater than 1")
     }
   }
 

@@ -67,9 +67,12 @@ object DataPartitioner {
     val hadoopJobConf = new JobConf()
     val fs = FileSystem.get(hadoopJobConf)
 
+    val schemaOpt = if (dataFormat == TFRECORD) Some(MetadataGenerator
+      .createSchemaForTfrecord(inputMetadataFile)) else None
+
     // Partition training dataset if the training input data is provided.
     val trainOutputOpt = if (!IoUtils.isEmptyStr(trainInputDataPath)) {
-      val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath.get, dataFormat)
+      val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath.get, dataFormat, schemaOpt)
       val trainInputScoreOpt = if (!IoUtils.isEmptyStr(trainInputScorePath)) {
         Some(spark.read.avro(trainInputScorePath.get))
       } else {
@@ -107,7 +110,6 @@ object DataPartitioner {
         .map(row => row.getAs[Int](PARTITION_ID))
         .collect()
       IoUtils.writeFile(fs, new Path(outputPartitionListFile.get), partitionIds.sorted.mkString(","))
-
       Some(outputDf)
     } else {
       None
@@ -115,7 +117,7 @@ object DataPartitioner {
 
     // Partition validation dataset if the validation input data is provided.
     val validationOutputOpt = if (!IoUtils.isEmptyStr(validationInputDataPath)) {
-      val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath.get, dataFormat)
+      val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath.get, dataFormat, schemaOpt)
       val validationInputScoreOpt = if (!IoUtils.isEmptyStr(validationInputScorePath)) {
         Some(spark.read.avro(validationInputScorePath.get))
       } else {
@@ -317,32 +319,32 @@ object DataPartitioner {
 
     // No lower bound and upper bound. All the samples are active data.
     if (lowerBound.isEmpty && upperBound.isEmpty) {
-      return dataFrame.withColumn(GROUP_ID, lit(0))
-    }
-
-    // If there's a bound, either lower bound or upper bound, we need to count the samples per-entity.
-    val perEntityCounts = dataFrame
-      .select(partitionEntity)
-      .groupBy(partitionEntity)
-      .count()
-      .select(col(partitionEntity), col(COUNT).alias(PER_ENTITY_TOTAL_SAMPLE_COUNT))
-    val dfWithEntityCount = dataFrame.join(perEntityCounts, partitionEntity)
-
-    // If there's an upper bound, calculate the number of groups needed to bound the data.
-    val dfWithGroupCounts = if (!upperBound.isEmpty) {
-      dfWithEntityCount
-        .withColumn(PER_ENTITY_GROUP_COUNT, (col(PER_ENTITY_TOTAL_SAMPLE_COUNT) / upperBound.get + 1).cast(IntegerType))
+      dataFrame.withColumn(GROUP_ID, lit(0))
     } else {
-      dfWithEntityCount.withColumn(PER_ENTITY_GROUP_COUNT, lit(1))
-    }
+      // If there's a bound, either lower bound or upper bound, we need to count the samples per-entity.
+      val perEntityCounts = dataFrame
+        .select(partitionEntity)
+        .groupBy(partitionEntity)
+        .count()
+        .select(col(partitionEntity), col(COUNT).alias(PER_ENTITY_TOTAL_SAMPLE_COUNT))
+      val dfWithEntityCount = dataFrame.join(perEntityCounts, partitionEntity)
 
-    // Assign the group id and drop redundant columns. The group id is uniformly random.
-    // TODO: Explore different sampling strategy.
-    dfWithGroupCounts
-      .withColumn(GROUP_ID,
-        when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lowerBound.get, -1)
-          .otherwise((col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType)))
-      .drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
+      // If there's an upper bound, calculate the number of groups needed to bound the data.
+      val dfWithGroupCounts = if (!upperBound.isEmpty) {
+        dfWithEntityCount
+          .withColumn(PER_ENTITY_GROUP_COUNT, (col(PER_ENTITY_TOTAL_SAMPLE_COUNT) / upperBound.get + 1).cast(IntegerType))
+      } else {
+        dfWithEntityCount.withColumn(PER_ENTITY_GROUP_COUNT, lit(1))
+      }
+
+      // Assign the group id and drop redundant columns. The group id is uniformly random.
+      // TODO: Explore different sampling strategy.
+      dfWithGroupCounts
+        .withColumn(GROUP_ID,
+          when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lowerBound.get, -1)
+            .otherwise((col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType)))
+        .drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
+    }
   }
 
   /**
