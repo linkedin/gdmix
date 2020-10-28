@@ -339,11 +339,17 @@ object DataPartitioner {
 
       // Assign the group id and drop redundant columns. The group id is uniformly random.
       // TODO: Explore different sampling strategy.
-      dfWithGroupCounts
-        .withColumn(GROUP_ID,
-          when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lowerBound.get, -1)
+      val dfWithGroupId = lowerBound match {
+        case Some(lb) =>
+          dfWithGroupCounts
+          .withColumn(GROUP_ID,
+          when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lb, -1)
             .otherwise((col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType)))
-        .drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
+        case _ =>
+          dfWithGroupCounts
+            .withColumn(GROUP_ID, (col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType))
+      }
+      dfWithGroupId.drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
     }
   }
 
