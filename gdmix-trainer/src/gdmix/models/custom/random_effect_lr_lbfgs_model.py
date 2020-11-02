@@ -221,7 +221,7 @@ class RandomEffectLRLBFGSModel(Model):
     @staticmethod
     def _convert_avro_model_record_to_sparse_coefficients(model_record, feature2global_id):
         # Extract model id
-        model_id = np.int64(model_record["modelId"])
+        model_id = model_record["modelId"]
 
         # Extract model coefficients and global indices
         model_coefficients = []
@@ -240,7 +240,8 @@ class RandomEffectLRLBFGSModel(Model):
             assert(len(unique_global_indices) == 0)
             model_coefficients.append(np.float64(0.0))
             unique_global_indices.append(0)
-        return model_id, TrainingResult(theta=np.array(model_coefficients), unique_global_indices=np.array(unique_global_indices))
+        return model_id, TrainingResult(theta=np.array(model_coefficients),
+                                        unique_global_indices=np.array(unique_global_indices))
 
     def export(self, output_model_dir):
         logger.info("Model export is done as part of the training() API for random effect LR LBFGS training. Skipping.")

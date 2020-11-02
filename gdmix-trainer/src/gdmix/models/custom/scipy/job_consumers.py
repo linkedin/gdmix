@@ -150,7 +150,7 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
                 assert(sample_count == sample_count_from_ids)
 
             # Construct entity ID
-            entity_id = features_val[model_params.partition_entity][entity]
+            entity_id = str(features_val[model_params.partition_entity][entity])
             result = model_weights.get(entity_id, None)
             if gen_index_map:
                 # Locally index the column values, and preserve mapping to global space
