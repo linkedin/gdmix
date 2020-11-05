@@ -50,6 +50,12 @@ class DatasetMetadata:
                             .format(type(path_or_metadata[self.LABELS])))
 
         def parseMetadata(key):
+            """
+            Parse metadata.
+
+            Args:
+                key: (str): write your description
+            """
             tensors = {}
             for entity in path_or_metadata.get(key, []):
                 name = entity["name"]
@@ -97,21 +103,57 @@ class DatasetMetadata:
         return metadata_obj
 
     def get_features(self):
+        """
+        Returns a list of the features.
+
+        Args:
+            self: (todo): write your description
+        """
         return self._features.copy()
 
     def get_labels(self):
+        """
+        Returns a list.
+
+        Args:
+            self: (todo): write your description
+        """
         return self._labels.copy()
 
     def get_label_names(self):
+        """
+        Return a list of label names.
+
+        Args:
+            self: (todo): write your description
+        """
         return self._label_names.copy()
 
     def get_feature_names(self):
+        """
+        Returns a list of feature names.
+
+        Args:
+            self: (todo): write your description
+        """
         return self._feature_names.copy()
 
     def get_tensors(self):
+        """
+        Returns : a list of the triangles.
+
+        Args:
+            self: (todo): write your description
+        """
         return self._tensors.copy()
 
     def get_number_of_training_samples(self):
+        """
+        Returns the training samples.
+
+        Args:
+            self: (todo): write your description
+        """
         return self._number_of_training_samples
 
     @staticmethod

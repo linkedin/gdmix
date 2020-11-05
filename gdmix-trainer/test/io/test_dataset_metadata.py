@@ -15,36 +15,84 @@ class TestDatasetMetadata(tf.test.TestCase):
     number_of_training_samples = 1000
 
     def test_feature_names(self):
+        """
+        Returns the names of all feature names.
+
+        Args:
+            self: (todo): write your description
+        """
         self.assertEqual(self.dummy_metadata.get_feature_names(), self.feature_names)
 
     def test_label_names(self):
+        """
+        Returns the label names of the dataset.
+
+        Args:
+            self: (todo): write your description
+        """
         self.assertEqual(self.dummy_metadata.get_label_names(), self.label_names)
 
     def test_number_of_training_samples(self):
+        """
+        Updates the training samples.
+
+        Args:
+            self: (todo): write your description
+        """
         self.assertEqual(self.dummy_metadata.get_number_of_training_samples(),
                          self.number_of_training_samples)
 
     def test_invalid_type(self):
+        """
+        Test if the test type is valid.
+
+        Args:
+            self: (todo): write your description
+        """
         msg_pattern = r"User provided dtype \'.*\' is not supported. Supported types are \'.*\'."
         with self.assertRaises(ValueError, msg=msg_pattern):
             DatasetMetadata(os.path.join(test_metadata_file, "invalid_type.json"))
 
     def test_invalid_name(self):
+        """
+        Check if the test name exists.
+
+        Args:
+            self: (todo): write your description
+        """
         msg_pattern = r"Feature name can not be None and must be str"
         with self.assertRaises(ValueError, msg=msg_pattern):
             DatasetMetadata(os.path.join(test_metadata_file, "invalid_name.json"))
 
     def test_invalid_shape(self):
+        """
+        Validate that the dataset metadata for invalid metadata.
+
+        Args:
+            self: (todo): write your description
+        """
         msg_pattern = r"Feature shape can not be None and must be a list"
         with self.assertRaises(ValueError, msg=msg_pattern):
             DatasetMetadata(os.path.join(test_metadata_file, "invalid_shape.json"))
 
     def test_duplicated_names(self):
+        """
+        Test if metadata file names exist.
+
+        Args:
+            self: (todo): write your description
+        """
         msg_pattern = r"The following tensor names in your metadata appears more than once:\['weight', 'response'\]"
         with self.assertRaises(ValueError, msg=msg_pattern):
             DatasetMetadata(os.path.join(test_metadata_file, "duplicated_names.json"))
 
     def test_map_int(self):
+        """
+        Return the int_map.
+
+        Args:
+            self: (todo): write your description
+        """
         int_dtypes = [tf.int8, tf.uint8, tf.uint16, tf.uint32, tf.uint64, tf.int16, tf.int32, tf.int64]
         for id in int_dtypes:
             assert tf.int64 == DatasetMetadata.map_int(id)

@@ -25,6 +25,13 @@ class FixedEffectDetextEstimatorModel(Model):
     __BEST = 'best_'
 
     def __init__(self, raw_model_params):
+        """
+        Initialize the model.
+
+        Args:
+            self: (todo): write your description
+            raw_model_params: (dict): write your description
+        """
         super().__init__(raw_model_params)
         self.checkpoint_path = self.model_params.out_dir
         #  train_data_path and validation_data_path are used by the driver
@@ -40,6 +47,18 @@ class FixedEffectDetextEstimatorModel(Model):
               checkpoint_path,
               execution_context,
               schema_params):
+        """
+        Train training model.
+
+        Args:
+            self: (todo): write your description
+            training_data_path: (str): write your description
+            validation_data_path: (str): write your description
+            metadata_file: (str): write your description
+            checkpoint_path: (str): write your description
+            execution_context: (todo): write your description
+            schema_params: (dict): write your description
+        """
         # Delegate to super class
         detext_driver.run_detext(self.model_params)
 
@@ -50,6 +69,18 @@ class FixedEffectDetextEstimatorModel(Model):
                 checkpoint_path,
                 execution_context,
                 schema_params):
+        """
+        Predict the model.
+
+        Args:
+            self: (array): write your description
+            output_dir: (str): write your description
+            input_data_path: (str): write your description
+            metadata_file: (str): write your description
+            checkpoint_path: (str): write your description
+            execution_context: (array): write your description
+            schema_params: (array): write your description
+        """
         n_records = 0
         n_batch = 0
         # Predict on the dataset
@@ -103,7 +134,21 @@ class FixedEffectDetextEstimatorModel(Model):
         logger.info(f"{n_batch} records, e.g. {n_records} records inferenced")
 
     def export(self, output_model_dir):
+        """
+        Export the model_dir.
+
+        Args:
+            self: (todo): write your description
+            output_model_dir: (str): write your description
+        """
         logger.info("Detext has built-in export operations during training")
 
     def _parse_parameters(self, raw_model_parameters):
+        """
+        Parse raw model parameters.
+
+        Args:
+            self: (todo): write your description
+            raw_model_parameters: (str): write your description
+        """
         return DetextArg.__from_argv__(raw_model_parameters, error_on_unknown=False)

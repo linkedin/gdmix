@@ -26,6 +26,12 @@ class GDMixParams:
     partition_list_file: Optional[str] = None  # File containing a list of all the partition ids, for random effect only
 
     def __post_init__(self):
+        """
+        Do some setup after initialisation.
+
+        Args:
+            self: (todo): write your description
+        """
         assert self.action in _ACTIONS, f"Action: {self.action} must be in {_ACTIONS}"
         assert self.stage in _STAGES, f"Stage: {self.stage} must be in {_STAGES}"
         assert self.model_type in _MODEL_TYPES, f"Model type: {self.model_type} must be in {_MODEL_TYPES}"
@@ -48,5 +54,11 @@ class Params(GDMixParams, SchemaParams):
     """GDMix Driver"""
 
     def __post_init__(self):
+        """
+        Do some setup after initialisation.
+
+        Args:
+            self: (todo): write your description
+        """
         super().__post_init__()
         assert (self.action == constants.ACTION_TRAIN and self.label) or (self.action == constants.ACTION_INFERENCE and self.prediction_score)

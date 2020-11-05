@@ -11,6 +11,12 @@ class TestDistributionUtils(tf.test.TestCase):
     """
 
     def setUp(self):
+        """
+        Sets the temp directory.
+
+        Args:
+            self: (todo): write your description
+        """
         self._base_dir = tempfile.mkdtemp()
         for i in range(10):
             with open(os.path.join(self._base_dir, f'{i}.avro'), 'w') as f:
@@ -20,9 +26,21 @@ class TestDistributionUtils(tf.test.TestCase):
                 f.write("test")
 
     def tearDown(self):
+        """
+        Tear down the directory.
+
+        Args:
+            self: (todo): write your description
+        """
         tf.io.gfile.rmtree(self._base_dir)
 
     def test_shard_input_files_with_wrong_params(self):
+        """
+        Test for input shard input files.
+
+        Args:
+            self: (todo): write your description
+        """
         with self.assertRaises(AssertionError):
             shard_input_files(self._base_dir, 1, 2)
         with self.assertRaises(AssertionError):
@@ -31,11 +49,23 @@ class TestDistributionUtils(tf.test.TestCase):
             shard_input_files(os.path.join(self._base_dir, "nowhere/nofile"), 3, 2)
 
     def test_shard_input_files_with_directory(self):
+        """
+        Test for input shard input shard.
+
+        Args:
+            self: (todo): write your description
+        """
         shard_files, _ = shard_input_files(self._base_dir, 2, 0)
         expected_files = [os.path.join(self._base_dir, f'{i}.avro') for i in range(10)]
         self.assertAllEqual(shard_files, expected_files)
 
     def test_shard_input_file_with_filename_pattern(self):
+        """
+        Test for input shard input file.
+
+        Args:
+            self: (todo): write your description
+        """
         input_file_pattern = os.path.join(self._base_dir, "*.tfrecord")
         shard_files, indicator = shard_input_files(input_file_pattern, 3, 1)
         expected_files = [os.path.join(self._base_dir, f'{i}.tfrecord') for i in range(1, 10, 3)]
@@ -43,6 +73,12 @@ class TestDistributionUtils(tf.test.TestCase):
         self.assertFalse(indicator)
 
     def test_shard_input_file_with_more_shards(self):
+        """
+        Test for input shard input shard input files.
+
+        Args:
+            self: (todo): write your description
+        """
         input_file_pattern = os.path.join(self._base_dir, "*.tfrecord")
         shard_files, indicator = shard_input_files(input_file_pattern, 20, 1)
         expected_files = [os.path.join(self._base_dir, '1.tfrecord')]

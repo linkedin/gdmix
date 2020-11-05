@@ -64,6 +64,14 @@ class FixedEffectLRModelLBFGS(Model):
     TF_ALL_REDUCE_GROUP_KEY = 0
 
     def __init__(self, raw_model_params, base_training_params: Params):
+        """
+        Initialize the model.
+
+        Args:
+            self: (todo): write your description
+            raw_model_params: (dict): write your description
+            base_training_params: (dict): write your description
+        """
         self.model_params: FixedLRParams = self._parse_parameters(raw_model_params)
         self.training_output_dir = base_training_params.training_output_dir
         self.validation_output_dir = base_training_params.validation_output_dir
@@ -138,6 +146,13 @@ class FixedEffectLRModelLBFGS(Model):
         return label_column_name in self.tensor_metadata.get_label_names()
 
     def _create_server(self, execution_context):
+        """
+        Creates a new server.
+
+        Args:
+            self: (str): write your description
+            execution_context: (str): write your description
+        """
         if self.server:
             return
         cluster_spec = execution_context[constants.CLUSTER_SPEC]
@@ -179,9 +194,31 @@ class FixedEffectLRModelLBFGS(Model):
         i = tf1.constant(0, tf1.int64)
 
         def cond(i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list):
+            """
+            Compute the conditional condition.
+
+            Args:
+                i: (array): write your description
+                sample_id_list: (str): write your description
+                label_list: (list): write your description
+                weight_list: (list): write your description
+                prediction_score_list: (bool): write your description
+                prediction_score_per_coordinate_list: (bool): write your description
+            """
             return tf1.less(i, num_iterations)
 
         def body(i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list):
+            """
+            Generate the body of each sample.
+
+            Args:
+                i: (int): write your description
+                sample_id_list: (str): write your description
+                label_list: (list): write your description
+                weight_list: (list): write your description
+                prediction_score_list: (bool): write your description
+                prediction_score_per_coordinate_list: (bool): write your description
+            """
             i += 1
             all_features, all_labels = diter.get_next()
             features = all_features[feature_bag_name]
@@ -233,9 +270,25 @@ class FixedEffectLRModelLBFGS(Model):
         i = 0
 
         def cond(i, value, gradients):
+            """
+            Evaluates a condition.
+
+            Args:
+                i: (array): write your description
+                value: (todo): write your description
+                gradients: (todo): write your description
+            """
             return i < num_iterations
 
         def body(i, value, gradients):
+            """
+            Implements the body of tf.
+
+            Args:
+                i: (int): write your description
+                value: (str): write your description
+                gradients: (todo): write your description
+            """
             i += 1
             all_features, all_labels = diter.get_next()
             features = all_features[feature_bag_name]
@@ -535,6 +588,13 @@ class FixedEffectLRModelLBFGS(Model):
         return model
 
     def export(self, output_model_dir):
+        """
+        Export the model to a directory.
+
+        Args:
+            self: (todo): write your description
+            output_model_dir: (str): write your description
+        """
         logging("No need model export for LR model. ")
 
     def predict(self,
@@ -544,6 +604,18 @@ class FixedEffectLRModelLBFGS(Model):
                 checkpoint_path,
                 execution_context,
                 schema_params):
+        """
+        Predict the model.
+
+        Args:
+            self: (todo): write your description
+            output_dir: (str): write your description
+            input_data_path: (str): write your description
+            metadata_file: (str): write your description
+            checkpoint_path: (str): write your description
+            execution_context: (array): write your description
+            schema_params: (array): write your description
+        """
         # Overwrite predict method from parent class.
         logging("Kicking off fixed effect LR predict")
 
@@ -590,4 +662,11 @@ class FixedEffectLRModelLBFGS(Model):
         snooze_after_tf_session_closure(tf_session, self.delayed_exit_in_seconds)
 
     def _parse_parameters(self, raw_model_parameters):
+        """
+        Parse the model parameters.
+
+        Args:
+            self: (todo): write your description
+            raw_model_parameters: (str): write your description
+        """
         return FixedLRParams.__from_argv__(raw_model_parameters, error_on_unknown=False)

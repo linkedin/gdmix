@@ -32,4 +32,10 @@ class LRParams:
     data_format: str = "tfrecord"
 
     def __post_init__(self):
+        """
+        Do some setup after initialisation.
+
+        Args:
+            self: (todo): write your description
+        """
         assert self.batch_size > 0, "Batch size must be positive number"

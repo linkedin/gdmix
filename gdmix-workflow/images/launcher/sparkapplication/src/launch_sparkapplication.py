@@ -11,6 +11,12 @@ from kubernetes import client as k8s_client
 from kubernetes import config
 
 def yamlOrJsonStr(str):
+    """
+    Parse yaml string.
+
+    Args:
+        str: (todo): write your description
+    """
     if str == "" or str == None:
         return None
     return yaml.safe_load(str)
@@ -20,15 +26,37 @@ SparkJobPlural = "sparkapplications"
 
 class SparkApplication(launch_crd.K8sCR):
     def __init__(self, version="v1beta2", client=None):
+        """
+        Initializes a job.
+
+        Args:
+            self: (todo): write your description
+            version: (todo): write your description
+            client: (todo): write your description
+        """
         super(SparkApplication, self).__init__(SparkJobGroup, SparkJobPlural, version, client)
 
     def is_expected_conditions(self, inst, expected_conditions):
+        """
+        Checks if the conditions are expected.
+
+        Args:
+            self: (todo): write your description
+            inst: (dict): write your description
+            expected_conditions: (todo): write your description
+        """
         conditions = inst.get('status', {}).get("applicationState")
         if not conditions:
             return False, ""
         return conditions["state"] == "COMPLETED", conditions["state"]
 
 def main(argv=None):
+    """
+    Main function.
+
+    Args:
+        argv: (str): write your description
+    """
     parser = argparse.ArgumentParser(description='SparkApplication launcher')
     parser.add_argument('--name', type=str,
                         help='SparkApplication name.')

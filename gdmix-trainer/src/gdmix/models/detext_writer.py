@@ -14,9 +14,22 @@ class DetextWriter:
     """
 
     def __init__(self, schema_params):
+        """
+        Initialize the schema.
+
+        Args:
+            self: (todo): write your description
+            schema_params: (dict): write your description
+        """
         self.schema_params = schema_params
 
     def get_inference_output_avro_schema(self):
+        """
+        Gets inference schema.
+
+        Args:
+            self: (todo): write your description
+        """
         schema = {
             'name': 'validation_result',
             'type': 'record',
@@ -30,6 +43,17 @@ class DetextWriter:
         return schema
 
     def append_validation_results(self, records, predicts, ids, labels, weights):
+        """
+        Applies a set of validation.
+
+        Args:
+            self: (todo): write your description
+            records: (todo): write your description
+            predicts: (todo): write your description
+            ids: (list): write your description
+            labels: (str): write your description
+            weights: (array): write your description
+        """
         batch_size = predicts.shape[0]
         assert predicts.shape[0] == ids.shape[0]
         assert predicts.shape[0] == labels.shape[0]
@@ -46,6 +70,17 @@ class DetextWriter:
         return batch_size
 
     def save_batch(self, f, batch_score, output_file, n_records, n_batch):
+        """
+        Save a batch of - batch.
+
+        Args:
+            self: (todo): write your description
+            f: (todo): write your description
+            batch_score: (todo): write your description
+            output_file: (str): write your description
+            n_records: (int): write your description
+            n_batch: (int): write your description
+        """
         validation_results = []
         validation_schema = fastavro.parse_schema(self.get_inference_output_avro_schema())
         # save one batch of score
@@ -69,6 +104,14 @@ class DetextWriter:
         return n_records, n_batch
 
     def create_error_message(self, n_batch, output_file):
+        """
+        Create an error message to the error message.
+
+        Args:
+            self: (todo): write your description
+            n_batch: (str): write your description
+            output_file: (str): write your description
+        """
         err_msg = 'An error occurred while writing batch #{} to path {}'.format(
             n_batch, output_file)
         return err_msg

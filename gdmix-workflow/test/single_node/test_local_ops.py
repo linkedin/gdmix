@@ -8,12 +8,24 @@ class TestLocalOps(unittest.TestCase):
     """
 
     def test_get_tfjob_cmd(self):
+        """
+        Function to execute job job.
+
+        Args:
+            self: (todo): write your description
+        """
         params = {"--a": "b"}
         expected = ['python', '-m', 'gdmix.gdmix', "--a", "b"]
         actual = get_tfjob_cmd(params)
         self.assertEqual(actual, expected)
 
     def test_get_sparkjob_cmd(self):
+        """
+        Return spark spark job.
+
+        Args:
+            self: (todo): write your description
+        """
         class_name = "Hello"
         params = {"-a": "b"}
         expected = ['spark-submit',

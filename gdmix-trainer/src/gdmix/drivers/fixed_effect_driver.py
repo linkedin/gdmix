@@ -16,12 +16,32 @@ class FixedEffectDriver(Driver):
     """
 
     def __init__(self, base_training_params, model):
+        """
+        Initialize the model.
+
+        Args:
+            self: (todo): write your description
+            base_training_params: (dict): write your description
+            model: (todo): write your description
+        """
         super().__init__(base_training_params, model, constants.FIXED_EFFECT)
 
     def _validate_params(self):
+        """
+        Checks if the params.
+
+        Args:
+            self: (todo): write your description
+        """
         pass
 
     def _setup_cluster(self):
+        """
+        Initialize the cluster.
+
+        Args:
+            self: (todo): write your description
+        """
         logger.info("Setting up cluster parameters for fixed effect training")
         tf_config = os.environ.get(constants.TF_CONFIG)
         if not tf_config:
@@ -58,10 +78,24 @@ class FixedEffectDriver(Driver):
         return execution_context
 
     def _get_partition_list(self):
+        """
+        Return partition partition list of partition.
+
+        Args:
+            self: (todo): write your description
+        """
         # For fixed effect training, partition index is the same as task index
         return [self.execution_context[constants.TASK_INDEX]]
 
     def _anchor_directory(self, directory_path, partition_index):
+        """
+        Return the directory of the given directory.
+
+        Args:
+            self: (todo): write your description
+            directory_path: (str): write your description
+            partition_index: (str): write your description
+        """
         # For fixed effect, anchoring using partition_index is not required
         assert partition_index >= 0
         return directory_path

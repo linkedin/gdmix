@@ -14,6 +14,12 @@ def create_output_dirs(gdmix_config_obj):
     """ Create output directories """
 
     def create_subdirs(root_dir):
+        """
+        Create all subdirectories.
+
+        Args:
+            root_dir: (str): write your description
+        """
         if os.path.isdir(root_dir):
             shutil.rmtree(root_dir)
         os.makedirs(root_dir)

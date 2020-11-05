@@ -16,6 +16,12 @@ class TestDriver(tf.test.TestCase):
     """
 
     def setUp(self):
+        """
+        Set the training.
+
+        Args:
+            self: (todo): write your description
+        """
         self.task_type = "worker"
         self.worker_index = 0
         self.num_workers = 5
@@ -36,6 +42,12 @@ class TestDriver(tf.test.TestCase):
                                                        model=self.mock_model)
 
     def tearDown(self):
+        """
+        Tear down the output directory.
+
+        Args:
+            self: (todo): write your description
+        """
         # Clean up the checkpoint dir created by the driver
         tf.io.gfile.rmtree(self.output_dir)
 

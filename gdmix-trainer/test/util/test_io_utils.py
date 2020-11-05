@@ -13,6 +13,12 @@ class TestIoUtils(tf.test.TestCase):
     """
 
     def setUp(self):
+        """
+        Create a list of - weights.
+
+        Args:
+            self: (todo): write your description
+        """
         self.base_dir = tempfile.mkdtemp()
         self.names = ['a', 'b', 'c']
         self.terms = ['x', '', 'z']
@@ -41,30 +47,66 @@ class TestIoUtils(tf.test.TestCase):
                                     output_file=self.model_file)
 
     def tearDown(self):
+        """
+        Tear down the rmtree.
+
+        Args:
+            self: (todo): write your description
+        """
         tf.io.gfile.rmtree(self.base_dir)
 
     def testNameTermToString(self):
+        """
+        Set the name of this name matches.
+
+        Args:
+            self: (todo): write your description
+        """
         for i in range(len(self.names)):
             expected = self.name_term_strings[i]
             actual = name_term_to_string(self.names[i], self.terms[i])
             self.assertEqual(expected, actual)
 
     def testNameTermFromString(self):
+        """
+        Name :
+
+        Args:
+            self: (todo): write your description
+        """
         for i in range(len(self.names)):
             expected_name, expected_term = name_term_from_string(self.name_term_strings[i])
             self.assertEqual(expected_name, self.names[i])
             self.assertEqual(expected_term, self.terms[i])
 
     def testReadFeatureList(self):
+        """
+        Reads a list of feature list.
+
+        Args:
+            self: (todo): write your description
+        """
         feature_list = read_feature_list(self.feature_file)
         self.assertAllEqual(feature_list, self.name_term_strings)
 
     def testGetFeatureMap(self):
+        """
+        Determines the feature map for the feature map.
+
+        Args:
+            self: (todo): write your description
+        """
         feature_map = get_feature_map(self.feature_file)
         for index, feature in enumerate(self.name_term_strings):
             self.assertEqual(index, feature_map[feature])
 
     def testLoadModel(self):
+        """
+        Test for all the models in a list of the given models.model.
+
+        Args:
+            self: (todo): write your description
+        """
         models = load_linear_models_from_avro(self.model_file, self.feature_file)
         for model, expected in zip(models, self.expected_models):
             self.assertAllEqual(model, expected)

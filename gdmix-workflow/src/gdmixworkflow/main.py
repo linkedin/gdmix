@@ -70,6 +70,11 @@ def get_parser():
 
 
 def main(args=None):
+    """
+    Main function.
+
+    Args:
+    """
     parser = get_parser()
     args = parser.parse_args(args)
 
@@ -91,6 +96,12 @@ GDMix training is finished, results are saved to {}.
             sys.exit(1)
 
         def wrapped_partial(func, *args, **kwargs):
+            """
+            Decorate a partial partial partial partial partial partial partial partial partial partial arguments.
+
+            Args:
+                func: (callable): write your description
+            """
             partial_func = partial(func, *args, **kwargs)
             update_wrapper(partial_func, func)
             return partial_func

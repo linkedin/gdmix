@@ -128,6 +128,11 @@ def export_linear_model_to_avro(model_ids,
     schema = fastavro.parse_schema(json.loads(BAYESIAN_LINEAR_MODEL_SCHEMA))
 
     def gen_records():
+        """
+        Generate model records.
+
+        Args:
+        """
         for i in range(num_models):
             yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i], list_of_weight_values[i], biases[i], feature_list)
     batched_write_avro(gen_records(), output_file, schema, model_log_interval)
@@ -266,6 +271,13 @@ def batched_write_avro(records: Iterator, output_file, schema, write_frequency=1
 
 
 def _chunked_iterator(iterator: Iterator, chuck_size):
+    """
+    Yields chunks of - based on an iterator.
+
+    Args:
+        iterator: (todo): write your description
+        chuck_size: (int): write your description
+    """
     while True:
         chunk_it = itertools.islice(iterator, chuck_size)
         try:
@@ -276,10 +288,23 @@ def _chunked_iterator(iterator: Iterator, chuck_size):
 
 
 def create_error_message(n_batch, output_file) -> str:
+    """
+    Creates an error message with the error message.
+
+    Args:
+        n_batch: (str): write your description
+        output_file: (str): write your description
+    """
     return f'An error occurred while writing batch #{n_batch} to path {output_file}'
 
 
 def dataset_reader(iterator):
+    """
+    Iterate over a dataset.
+
+    Args:
+        iterator: (todo): write your description
+    """
     # Iterate through TF dataset in a throttled manner
     # (Forking after the TensorFlow runtime creates internal threads is unsafe, use config provided in this
     # link -
@@ -295,6 +320,15 @@ def dataset_reader(iterator):
 
 
 def get_inference_output_avro_schema(metadata, has_logits_per_coordinate, schema_params, has_weight=False):
+    """
+    Gets inference output.
+
+    Args:
+        metadata: (dict): write your description
+        has_logits_per_coordinate: (todo): write your description
+        schema_params: (dict): write your description
+        has_weight: (todo): write your description
+    """
     fields = [{'name': schema_params.sample_id, 'type': 'long'}, {'name': schema_params.prediction_score, 'type': 'float'},
               {'name': schema_params.label, 'type': ['null', 'int'], "default": None}]
     if has_weight or metadata.get(schema_params.sample_weight) is not None:

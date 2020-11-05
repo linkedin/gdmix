@@ -58,6 +58,12 @@ def rm_backslash(params):
 def json_config_file_to_obj(config_file):
     """ load gdmix config from json file to object. """
     def _json_object_hook(d):
+        """
+        Convert a namedtuple to a namedtuple.
+
+        Args:
+            d: (todo): write your description
+        """
         return namedtuple('GDMIX_CONFIG', d.keys())(*d.values())
 
     with open(config_file) as f:
