@@ -68,6 +68,12 @@ def download_movieLens(url, dest_path):
     return dest_dir
 
 def cleanup_text(input):
+    """
+    Cleanup text from a string.
+
+    Args:
+        input: (str): write your description
+    """
     # remove release data which is at the end of the title e.g. (1995)
     input = re.sub(r'\([^)]*\)$', '', input)
     tokens = []
@@ -176,6 +182,12 @@ def split_train_test(data, masks):
 
 
 def prepare_dir(directory):
+    """
+    Create a directory.
+
+    Args:
+        directory: (str): write your description
+    """
     shutil.rmtree(directory, ignore_errors=True)
     os.makedirs(directory)
 
@@ -184,6 +196,16 @@ def save_tfrecord(data, feature_bag, other_features_map, label_name, output_file
     """Serialize data to TF record."""
 
     def get_example(row, feature_bag, other_features_map, label_name, detext):
+        """
+        Reads an example.
+
+        Args:
+            row: (int): write your description
+            feature_bag: (bool): write your description
+            other_features_map: (str): write your description
+            label_name: (str): write your description
+            detext: (str): write your description
+        """
         if detext:
             indices_name = DETEXT_WIDE_IDX
             values_name = DETEXT_WIDE_VAL
@@ -245,6 +267,12 @@ def convert_to_detext(indf):
     """Change column names to meet DeText's requirement. """
 
     def increase_one(x):
+        """
+        Increase the first value of x.
+
+        Args:
+            x: (todo): write your description
+        """
         a = np.array(x) + 1
         return a.tolist()
 
@@ -447,6 +475,11 @@ def data_process(input_dir, base_output_dir):
 
 
 def main(args=None):
+    """
+    Main function.
+
+    Args:
+    """
     parser = get_parser()
     args = parser.parse_args()
     input_dir = download_movieLens(args.url, args.dest_path)

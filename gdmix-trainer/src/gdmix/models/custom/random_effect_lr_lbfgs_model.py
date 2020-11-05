@@ -40,6 +40,12 @@ class REParams(LRParams):
     num_of_consumers: int = 2  # Number of consumer processes that will train RE models in parallel.
 
     def __post_init__(self):
+        """
+        Initialize the queue.
+
+        Args:
+            self: (todo): write your description
+        """
         assert self.max_training_queue_size > self.num_of_consumers, "queue size limit must be larger than the number of consumers"
 
 
@@ -50,6 +56,13 @@ class RandomEffectLRLBFGSModel(Model):
     Supports training entity-based models. Several models can be trained in parallel on multiple processes.
     """
     def __init__(self, raw_model_params):
+        """
+        Initialize training data.
+
+        Args:
+            self: (todo): write your description
+            raw_model_params: (dict): write your description
+        """
         super(RandomEffectLRLBFGSModel, self).__init__(raw_model_params)
         self.model_params: REParams = self._parse_parameters(raw_model_params)
         self.checkpoint_path = os.path.join(self.model_params.model_output_dir)
@@ -64,14 +77,50 @@ class RandomEffectLRLBFGSModel(Model):
         self.validation_data_path = self.model_params.validation_data_path
 
     def train(self, training_data_path, validation_data_path, metadata_file, checkpoint_path, execution_context, schema_params):
+        """
+        Train the training.
+
+        Args:
+            self: (todo): write your description
+            training_data_path: (str): write your description
+            validation_data_path: (str): write your description
+            metadata_file: (str): write your description
+            checkpoint_path: (str): write your description
+            execution_context: (todo): write your description
+            schema_params: (dict): write your description
+        """
         logger.info("Kicking off random effect custom LR training")
         self._action(constants.ACTION_TRAIN, (training_data_path, validation_data_path), metadata_file, checkpoint_path, execution_context, schema_params)
 
     def predict(self, output_dir, input_data_path, metadata_file, checkpoint_path, execution_context, schema_params):
+        """
+        Predict model.
+
+        Args:
+            self: (todo): write your description
+            output_dir: (str): write your description
+            input_data_path: (str): write your description
+            metadata_file: (str): write your description
+            checkpoint_path: (str): write your description
+            execution_context: (array): write your description
+            schema_params: (array): write your description
+        """
         logger.info(f"Running inference on dataset : {input_data_path}, results to be written to path : {output_dir}")
         self._action(constants.ACTION_INFERENCE, (output_dir, input_data_path), metadata_file, checkpoint_path, execution_context, schema_params)
 
     def _action(self, action, action_context, metadata_file, checkpoint_path, execution_context, schema_params):
+        """
+        Predict the given action.
+
+        Args:
+            self: (todo): write your description
+            action: (str): write your description
+            action_context: (todo): write your description
+            metadata_file: (str): write your description
+            checkpoint_path: (str): write your description
+            execution_context: (dict): write your description
+            schema_params: (dict): write your description
+        """
         partition_index = execution_context[constants.PARTITION_INDEX]
         # Read tensor metadata
         metadata = read_json_file(metadata_file)
@@ -115,6 +164,19 @@ class RandomEffectLRLBFGSModel(Model):
                 raise ValueError(f"Invalid action {action!r}.")
 
     def _train(self, pool, input_path, metadata_file, model_weights: dict, num_features, schema_params, output_model_file):
+        """
+        Train the model.
+
+        Args:
+            self: (todo): write your description
+            pool: (array): write your description
+            input_path: (str): write your description
+            metadata_file: (str): write your description
+            model_weights: (todo): write your description
+            num_features: (int): write your description
+            schema_params: (dict): write your description
+            output_model_file: (str): write your description
+        """
         logger.info(f"Start training with {f'loaded {len(model_weights)} previous models' if model_weights else 'zeros'} as the model initial value.")
         lr_model = BinaryLogisticRegressionTrainer(regularize_bias=self.model_params.regularize_bias, lambda_l2=self.model_params.l2_reg_weight,
                                                    precision=self.model_params.lbfgs_tolerance / np.finfo(float).eps,
@@ -133,6 +195,22 @@ class RandomEffectLRLBFGSModel(Model):
         return model_weights
 
     def _predict(self, pool, input_path, metadata, tensor_metadata, output_file, schema_params, num_features, metadata_file, model_weights, use_local_index):
+        """
+        Run inference.
+
+        Args:
+            self: (todo): write your description
+            pool: (array): write your description
+            input_path: (str): write your description
+            metadata: (dict): write your description
+            tensor_metadata: (todo): write your description
+            output_file: (str): write your description
+            schema_params: (array): write your description
+            num_features: (int): write your description
+            metadata_file: (str): write your description
+            model_weights: (todo): write your description
+            use_local_index: (bool): write your description
+        """
         logger.info(f"Start inference for {input_path}.")
         # Create LR model object for inference
         lr_model = BinaryLogisticRegressionTrainer(regularize_bias=True, lambda_l2=self.model_params.l2_reg_weight)
@@ -150,8 +228,27 @@ class RandomEffectLRLBFGSModel(Model):
         logger.info(f"Inference complete: {input_path}.")
 
     def _pooled_action(self, pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file, gen_index_map):
+        """
+        Action : pygments.
+
+        Args:
+            self: (todo): write your description
+            pool: (todo): write your description
+            consumer: (todo): write your description
+            input_path: (str): write your description
+            schema_params: (dict): write your description
+            model_weights: (todo): write your description
+            num_features: (int): write your description
+            metadata_file: (str): write your description
+            gen_index_map: (int): write your description
+        """
         # Create training dataset
         def get_iterator():
+            """
+            Returns tf.
+
+            Args:
+            """
             #  iterator and dataset should be created in the same thread to avoid TF failures.
             logger.info(f"creating TF dataset and iterator on {input_path!r}.")
             dataset = per_entity_grouped_input_fn(
@@ -170,6 +267,16 @@ class RandomEffectLRLBFGSModel(Model):
         return pool.imap_unordered(consumer, jobs, self.model_params.max_training_queue_size)
 
     def _save_model(self, output_file, model_coefficients, num_features, feature_file):
+        """
+        Saves the model_file.
+
+        Args:
+            self: (todo): write your description
+            output_file: (str): write your description
+            model_coefficients: (dict): write your description
+            num_features: (int): write your description
+            feature_file: (str): write your description
+        """
         # Create model IDs, biases, weight indices and weight value arrays. Account for local indexing
         model_ids = list(model_coefficients.keys())
         global_indices = None if self.model_params.enable_local_indexing else np.arange(num_features)
@@ -190,6 +297,14 @@ class RandomEffectLRLBFGSModel(Model):
         export_linear_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values, biases, feature_file, output_file)
 
     def _load_weights(self, model_file, catch_exception=False):
+        """
+        Load weights from a file.
+
+        Args:
+            self: (todo): write your description
+            model_file: (str): write your description
+            catch_exception: (str): write your description
+        """
         logger.info(f"Loading model from {model_file}")
         # Handle exception when the model file does not exist
         # two possibilities, either return empty dict, or raise exception.
@@ -209,6 +324,13 @@ class RandomEffectLRLBFGSModel(Model):
 
     @staticmethod
     def _convert_avro_model_record_to_sparse_coefficients(model_record, feature2global_id):
+        """
+        Convert a list of a model_record_record. model_record.
+
+        Args:
+            model_record: (todo): write your description
+            feature2global_id: (str): write your description
+        """
         # Extract model id
         model_id = np.int64(model_record["modelId"])
 
@@ -224,7 +346,21 @@ class RandomEffectLRLBFGSModel(Model):
         return model_id, TrainingResult(theta=np.array(model_coefficients), unique_global_indices=np.array(unique_global_indices))
 
     def export(self, output_model_dir):
+        """
+        Export the model_dir.
+
+        Args:
+            self: (todo): write your description
+            output_model_dir: (str): write your description
+        """
         logger.info("Model export is done as part of the training() API for random effect LR LBFGS training. Skipping.")
 
     def _parse_parameters(self, raw_model_parameters) -> REParams:
+        """
+        Parses model parameters.
+
+        Args:
+            self: (todo): write your description
+            raw_model_parameters: (str): write your description
+        """
         return REParams.__from_argv__(raw_model_parameters, error_on_unknown=False)

@@ -32,6 +32,15 @@ class Driver(abc.ABC):
     """
 
     def __init__(self, base_training_params, model, effect_name):
+        """
+        Initialize the training.
+
+        Args:
+            self: (todo): write your description
+            base_training_params: (dict): write your description
+            model: (todo): write your description
+            effect_name: (str): write your description
+        """
         self.base_training_params = base_training_params
         self.model = model
         # Verify parameters and setup cluster
@@ -182,6 +191,13 @@ class Driver(abc.ABC):
         self.model.export(output_model_dir=output_model_dir)
 
     def _prepare_training_context(self, partition_index):
+        """
+        Prepare training context.
+
+        Args:
+            self: (todo): write your description
+            partition_index: (int): write your description
+        """
         # If training Scipy-based model for Random effect, add output files to training context
         if self.base_training_params.stage == constants.RANDOM_EFFECT:
             active_training_inference_output_file = os.path.join(

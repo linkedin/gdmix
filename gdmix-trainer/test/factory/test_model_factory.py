@@ -13,10 +13,22 @@ class TestModelFactory(tf.test.TestCase):
     """
 
     def setUp(self):
+        """
+        Set the model.
+
+        Args:
+            self: (todo): write your description
+        """
         self.params = setup_fake_base_training_params()
         self.model_params = setup_fake_raw_model_params()
 
     def test_fixed_effect_lr_lbfgs_model_creation(self):
+        """
+        Test if training learning learning learning rate.
+
+        Args:
+            self: (todo): write your description
+        """
         fe_model = ModelFactory.get_model(
             base_training_params=setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT,
                                                                  model_type=constants.LOGISTIC_REGRESSION),
@@ -25,6 +37,12 @@ class TestModelFactory(tf.test.TestCase):
         self.assertIsInstance(fe_model, FixedEffectLRModelLBFGS)
 
     def test_random_effect_custom_lr_model_creation(self):
+        """
+        Sets the model learning learning rate.
+
+        Args:
+            self: (todo): write your description
+        """
         re_model = ModelFactory.get_model(
             base_training_params=setup_fake_base_training_params(training_stage=constants.RANDOM_EFFECT,
                                                                  model_type=constants.LOGISTIC_REGRESSION),

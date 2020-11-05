@@ -50,6 +50,12 @@ json_string = """
 class TestPerRecordInputFn(tf.test.TestCase):
     """Test per_record_input_fn."""
     def setUp(self):
+        """
+        Sets the evaluation for the test.
+
+        Args:
+            self: (todo): write your description
+        """
         self.test_data_dir = tempfile.mkdtemp()
         self.fd, self.test_metadata_file = tempfile.mkstemp()
         self.num_shards = 2
@@ -65,6 +71,12 @@ class TestPerRecordInputFn(tf.test.TestCase):
         self.generate_metadata(json_string, self.test_metadata_file)
 
     def tearDown(self):
+        """
+        Removes the data file
+
+        Args:
+            self: (todo): write your description
+        """
         shutil.rmtree(self.test_data_dir)
         os.close(self.fd)
         os.remove(self.test_metadata_file)
@@ -85,6 +97,15 @@ class TestPerRecordInputFn(tf.test.TestCase):
         """
 
         def get_example(w_i, w_v, f, l):
+            """
+            Returns a tf.
+
+            Args:
+                w_i: (todo): write your description
+                w_v: (todo): write your description
+                f: (todo): write your description
+                l: (todo): write your description
+            """
             features = tf.train.Features(feature={
                 'weight_indices': tf.train.Feature(int64_list=tf.train.Int64List(
                     value=w_i)),

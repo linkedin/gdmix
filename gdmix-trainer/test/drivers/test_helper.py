@@ -48,6 +48,14 @@ def setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT,
 
 
 def setup_fake_raw_model_params(training_stage=constants.FIXED_EFFECT):
+    """
+    Setup the raw stage model params.
+
+    Args:
+        training_stage: (todo): write your description
+        constants: (todo): write your description
+        FIXED_EFFECT: (str): write your description
+    """
     raw_model_params = [f"--{constants.SAMPLE_ID}", "uid", f"--{constants.SAMPLE_WEIGHT}", "weight",
                         f"--{constants.FEATURE_BAGS}", "global",
                         f"--{constants.TRAIN_DATA_PATH}", os.path.join(os.getcwd(), "test/resources/train"),
@@ -67,6 +75,11 @@ def setup_fake_raw_model_params(training_stage=constants.FIXED_EFFECT):
 
 
 def setup_fake_schema_params():
+    """
+    Setup params for the fake fake params.
+
+    Args:
+    """
     return SchemaParams(**{constants.SAMPLE_ID: "uid",
                            constants.SAMPLE_WEIGHT: "weight",
                            constants.LABEL: "response",

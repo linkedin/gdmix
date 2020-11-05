@@ -77,6 +77,12 @@ class WorkflowGenerator(object):
 
     @abstractmethod
     def get_job_sequence(self):
+        """
+        : return : class : return :
+
+        Args:
+            self: (todo): write your description
+        """
         pass
 
     def gen_workflow(self):

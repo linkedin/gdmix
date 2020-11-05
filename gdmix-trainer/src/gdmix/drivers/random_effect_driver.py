@@ -17,15 +17,35 @@ class RandomEffectDriver(Driver):
     _RANDOM_EFFECT_PARTITION_DIR_PREFIX = "partitionId="
 
     def __init__(self, base_training_params, model):
+        """
+        Initialize model.
+
+        Args:
+            self: (todo): write your description
+            base_training_params: (dict): write your description
+            model: (todo): write your description
+        """
         super().__init__(base_training_params, model, constants.RANDOM_EFFECT)
 
     def _validate_params(self):
+        """
+        Validate training parameters.
+
+        Args:
+            self: (todo): write your description
+        """
         assert self.base_training_params.model_type == constants.LOGISTIC_REGRESSION, \
             "Random effect supports logistic_regression only"
         assert self.base_training_params.partition_list_file is not None, \
             "Random effect requires partition list file"
 
     def _setup_cluster(self):
+        """
+        Setup the cluster.
+
+        Args:
+            self: (todo): write your description
+        """
         logger.info("Setting up cluster parameters for random effect training")
         tf_config = os.environ.get(constants.TF_CONFIG)
         if not tf_config:
@@ -58,6 +78,12 @@ class RandomEffectDriver(Driver):
         return execution_context
 
     def _get_partition_list(self):
+        """
+        Get partition_partitions.
+
+        Args:
+            self: (todo): write your description
+        """
         with tf.io.gfile.GFile(self.base_training_params.partition_list_file) as f:
             line = f.readline()
         all_partitions = [int(l) for l in line.split(',')]
@@ -68,6 +94,14 @@ class RandomEffectDriver(Driver):
         return partition_index_list
 
     def _anchor_directory(self, directory_path, partition_index):
+        """
+        Return the directory of the given directory.
+
+        Args:
+            self: (todo): write your description
+            directory_path: (str): write your description
+            partition_index: (str): write your description
+        """
         # For random effect, directories should be anchored by attaching partition information
         return os.path.join(directory_path,
                             RandomEffectDriver._RANDOM_EFFECT_PARTITION_DIR_PREFIX + str(partition_index))

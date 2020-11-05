@@ -26,6 +26,12 @@ from kubernetes import config
 
 
 def yamlOrJsonStr(str):
+    """
+    Convert yaml string to a string.
+
+    Args:
+        str: (todo): write your description
+    """
     if str == "" or str is None:
         return None
     return yaml.safe_load(str)
@@ -37,9 +43,25 @@ TFJobPlural = "tfjobs"
 
 class TFJob(launch_crd.K8sCR):
     def __init__(self, version="v1", client=None):
+        """
+        Initialize the job object.
+
+        Args:
+            self: (todo): write your description
+            version: (todo): write your description
+            client: (todo): write your description
+        """
         super(TFJob, self).__init__(TFJobGroup, TFJobPlural, version, client)
 
     def is_expected_conditions(self, inst, expected_conditions):
+        """
+        Returns true if the conditions of the conditions are expected.
+
+        Args:
+            self: (todo): write your description
+            inst: (dict): write your description
+            expected_conditions: (todo): write your description
+        """
         conditions = inst.get('status', {}).get("conditions")
         if not conditions:
             return False, ""
@@ -47,6 +69,12 @@ class TFJob(launch_crd.K8sCR):
 
 
 def main(argv=None):
+    """
+    Main entry point.
+
+    Args:
+        argv: (str): write your description
+    """
     parser = argparse.ArgumentParser(description='Kubeflow TFJob launcher')
     parser.add_argument('--name', type=str,
                         help='TFJob name.')

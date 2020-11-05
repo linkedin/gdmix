@@ -19,6 +19,14 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
     """
 
     def get_raw_params(self, partition_entity='memberId', num_of_lbfgs_iterations=None):
+        """
+        Get raw model parameters.
+
+        Args:
+            self: (todo): write your description
+            partition_entity: (str): write your description
+            num_of_lbfgs_iterations: (int): write your description
+        """
         base_training_params = setup_fake_base_training_params(training_stage=constants.RANDOM_EFFECT)
         base_training_params.batch_size = 2
         # flatten the params
@@ -35,6 +43,12 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         return base_training_params, raw_params
 
     def test_train_should_fail_if_producer_or_consumer_fails(self):
+        """
+        Test if we want to run.
+
+        Args:
+            self: (todo): write your description
+        """
 
         # Create raw params with fake partition entity
         base_training_params, raw_params = self.get_raw_params(partition_entity='fake_partition_entity')
@@ -60,6 +74,12 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         tf.io.gfile.rmtree(avro_model_output_dir)
 
     def test_train_and_predict(self):
+        """
+        Test the model.
+
+        Args:
+            self: (todo): write your description
+        """
 
         # Create and add AVRO model output directory to raw parameters
         base_training_params, raw_params = self.get_raw_params()
@@ -125,6 +145,12 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         tf.io.gfile.rmtree(predict_output_dir)
 
     def test_warm_start(self):
+        """
+        Test if the model.
+
+        Args:
+            self: (todo): write your description
+        """
 
         # Step 1: train an initial model
         # Create and add AVRO model output directory to raw parameters

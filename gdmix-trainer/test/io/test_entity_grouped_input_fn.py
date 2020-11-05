@@ -11,6 +11,12 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 class TestPerEntityGroupedInputFn(tf.test.TestCase):
     """Test per_entity_grouped_input_fn."""
     def setUp(self):
+        """
+        Sets the examples.
+
+        Args:
+            self: (todo): write your description
+        """
         self._base_dir = tempfile.mkdtemp()
         self._metadata_file = os.path.join(self._base_dir, "data.json")
         self._input_file = os.path.join(self._base_dir, "data.tfrecord")
@@ -79,13 +85,31 @@ class TestPerEntityGroupedInputFn(tf.test.TestCase):
                 writer.write(example.SerializeToString())
 
     def tearDown(self):
+        """
+        Tear down the directory.
+
+        Args:
+            self: (todo): write your description
+        """
         tf.io.gfile.rmtree(self._base_dir)
 
     def test_entity_name_not_in_features(self):
+        """
+        Determine the entity name for a group of input entities.
+
+        Args:
+            self: (todo): write your description
+        """
         self.assertRaises(ValueError, per_entity_grouped_input_fn, self._input_file, self._metadata_file,
                           1, 0, 2, constants.TFRECORD, "random_feature")
 
     def test_per_entity_group_input_fn(self):
+        """
+        Gathers a group of the input tensors.
+
+        Args:
+            self: (todo): write your description
+        """
         dataset = per_entity_grouped_input_fn(self._input_file, self._metadata_file,
                                               num_shards=1, shard_index=0,
                                               batch_size=2, data_format=constants.TFRECORD,
@@ -129,6 +153,17 @@ class TestPerEntityGroupedInputFn(tf.test.TestCase):
             return root
 
         def get_list(indices_values, parent, start, end, curr_dim, max_dim):
+            """
+            Get a list of indices.
+
+            Args:
+                indices_values: (int): write your description
+                parent: (todo): write your description
+                start: (int): write your description
+                end: (todo): write your description
+                curr_dim: (int): write your description
+                max_dim: (int): write your description
+            """
             if curr_dim == max_dim - 1:
                 for i in range(start, end):
                     parent.append(indices_values[i][1])

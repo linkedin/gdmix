@@ -21,6 +21,18 @@ class BinaryLogisticRegressionTrainer:
     """
 
     def __init__(self, lambda_l2=1.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10, max_iter=100, regularize_bias=False):
+        """
+        Initialize the lbfgs.
+
+        Args:
+            self: (todo): write your description
+            lambda_l2: (float): write your description
+            solver: (todo): write your description
+            precision: (float): write your description
+            num_lbfgs_corrections: (int): write your description
+            max_iter: (int): write your description
+            regularize_bias: (dict): write your description
+        """
         self.lambda_l2 = lambda_l2
         assert solver in ("lbfgs",)
         self.solver = solver

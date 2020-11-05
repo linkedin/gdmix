@@ -53,6 +53,12 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
     Test logistic regression model with lbfgs solver
     """
     def setUp(self):
+        """
+        Sets the list of the list.
+
+        Args:
+            self: (todo): write your description
+        """
         self.datasets_without_offset = _create_expected_data(False, 0, False)
         self.datasets_with_offset = _create_expected_data(True, 0, False)
         self.datasets_with_offset_and_previous_model = _create_expected_data(True, 0, True)
@@ -300,12 +306,30 @@ def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=N
     :return: Estimated coefficients.
     """
     def _loss(theta, features, offsets, labels):
+        """
+        Compute loss.
+
+        Args:
+            theta: (float): write your description
+            features: (todo): write your description
+            offsets: (float): write your description
+            labels: (list): write your description
+        """
         _, pred = _predict(theta, features, offsets)
         logloss = np.maximum(pred, 0) - pred * labels + np.log(1 + np.exp(-np.absolute(pred)))
         loss = logloss.sum() + _L2_REG_WEIGHT / 2.0 * theta.dot(theta)
         return loss
 
     def _gradient(theta, features, offsets, labels):
+        """
+        Predict the gradient of the gradient.
+
+        Args:
+            theta: (array): write your description
+            features: (todo): write your description
+            offsets: (array): write your description
+            labels: (array): write your description
+        """
         _, logit = _predict(theta, features, offsets)
         pred = expit(logit)
         cost_grad = features.T.dot(pred - labels)
@@ -514,6 +538,15 @@ class _ProcFunc:
     So it is limited to single-worker single-process usage.
     """
     def __init__(self, worker_index, ports, training_params):
+        """
+        Initialize training model.
+
+        Args:
+            self: (todo): write your description
+            worker_index: (todo): write your description
+            ports: (list): write your description
+            training_params: (dict): write your description
+        """
         self.execution_context = _build_execution_context(worker_index, ports)
         self.base_training_params = training_params[0]
         self.schema_params = training_params[1]

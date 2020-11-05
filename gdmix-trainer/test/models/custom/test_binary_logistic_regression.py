@@ -17,6 +17,12 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
     """
 
     def setUp(self):
+        """
+        Set the classifier dataset.
+
+        Args:
+            self: (todo): write your description
+        """
         # Since grid machines may or may not have access to internet,
         # using a pickled instance of popular open-source breast cancer dataset for testing
         sample_dataset = pickle.load(open(sample_dataset_path + "/sklearn_data.p", "rb"))

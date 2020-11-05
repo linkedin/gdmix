@@ -23,6 +23,16 @@ from kubernetes.client import rest
 
 class K8sCR(object):
     def __init__(self, group, plural, version, client):
+        """
+        Initialize a client.
+
+        Args:
+            self: (todo): write your description
+            group: (todo): write your description
+            plural: (todo): write your description
+            version: (todo): write your description
+            client: (todo): write your description
+        """
         self.group = group
         self.plural = plural
         self.version = version
@@ -99,6 +109,14 @@ class K8sCR(object):
             time.sleep(polling_interval.seconds)
 
     def is_expected_conditions(self, cr_object, expected_conditions):
+        """
+        Return true if cr_object_objects.
+
+        Args:
+            self: (todo): write your description
+            cr_object: (todo): write your description
+            expected_conditions: (todo): write your description
+        """
         return False, ""
 
     def create(self, spec):
@@ -128,6 +146,14 @@ class K8sCR(object):
             self._log_and_raise_exception(e, "create")
 
     def delete(self, name, namespace):
+        """
+        Deletes the specified namespace.
+
+        Args:
+            self: (todo): write your description
+            name: (str): write your description
+            namespace: (str): write your description
+        """
         try:
             body = {
                 # Set garbage collection so that CR won't be deleted until all
@@ -150,6 +176,14 @@ class K8sCR(object):
             self._log_and_raise_exception(e, "delete")
 
     def _log_and_raise_exception(self, ex, action):
+        """
+        Log a message to the logger.
+
+        Args:
+            self: (todo): write your description
+            ex: (todo): write your description
+            action: (str): write your description
+        """
         message = ""
         if ex.message:
             message = ex.message

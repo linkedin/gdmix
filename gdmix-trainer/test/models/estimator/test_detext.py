@@ -14,6 +14,13 @@ score_out_dir = os.path.join(tfrecord_out_dir, "score-output")
 class TestDetextModel(tf.test.TestCase):
 
     def _cleanUp(self, tf_out_dir):
+        """
+        Cleans up the temporary directory.
+
+        Args:
+            self: (todo): write your description
+            tf_out_dir: (str): write your description
+        """
         if os.path.exists(tf_out_dir):
             shutil.rmtree(tf_out_dir, ignore_errors=True)
 

@@ -15,6 +15,12 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
     """
 
     def setUp(self):
+        """
+        Sets configurations of the config file.
+
+        Args:
+            self: (todo): write your description
+        """
         lr_config_file = path_join(
             os.getcwd(),
             "test/resources/lr-single-node-movieLens.config")
@@ -29,6 +35,12 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
         self.maxDiff = None
 
     def test_lr_model_fixed_effect_workflow_generator(self):
+        """
+        Test if the cross - only workflow
+
+        Args:
+            self: (todo): write your description
+        """
         fe_workflow = FixedEffectWorkflowGenerator(self.lr_config_obj)
         # check sequence
         seq = fe_workflow.get_job_sequence()
@@ -75,6 +87,12 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
         self.assertEqual(actual_compute_metric_job, expected_compute_metric_job)
 
     def test_detext_model_fixed_effect_workflow_generator(self):
+        """
+        Test if a fixed - size fixed - size
+
+        Args:
+            self: (todo): write your description
+        """
         fe_workflow = FixedEffectWorkflowGenerator(self.detext_config_obj)
         # check sequence
         seq = fe_workflow.get_job_sequence()
@@ -158,6 +176,12 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
         self.assertEqual(actual_compute_metric_job, expected_compute_metric_job)
 
     def test_lr_model_random_effect_workflow_generator(self):
+        """
+        Randomly generate learning rate rate sequence
+
+        Args:
+            self: (todo): write your description
+        """
         re_workflow = RandomEffectWorkflowGenerator(self.lr_config_obj)
         # check sequence
         seq = re_workflow.get_job_sequence()

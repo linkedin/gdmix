@@ -21,6 +21,14 @@ VALUES_SUFFIX = '_values'
 class TrainingJobConsumer:
     """Callable class to consume entity-based random effect training jobs"""
     def __init__(self, lr_model, name):
+        """
+        Initialize a new job.
+
+        Args:
+            self: (todo): write your description
+            lr_model: (str): write your description
+            name: (str): write your description
+        """
         self.name = f'Training: {name}'
         self.lr_model = lr_model
         self.job_count = 0
@@ -44,6 +52,17 @@ class TrainingJobConsumer:
 class InferenceJobConsumer:
     """Callable class to consume entity-based random effect inference jobs"""
     def __init__(self, lr_model, num_features, schema_params, use_local_index, name):
+        """
+        Initialize a job.
+
+        Args:
+            self: (todo): write your description
+            lr_model: (str): write your description
+            num_features: (int): write your description
+            schema_params: (dict): write your description
+            use_local_index: (bool): write your description
+            name: (str): write your description
+        """
         self.use_local_index = use_local_index
         self.name = f'Inference: {name}'
         self.num_features = num_features
@@ -100,6 +119,12 @@ class InferenceJobConsumer:
 
 
 def inc_count(job_consumer):
+    """
+    Inc_count
+
+    Args:
+        job_consumer: (int): write your description
+    """
     job_consumer.job_count += 1
     if job_consumer.job_count % _CONSUMER_LOGGING_FREQUENCY == 0:
         logger.info(f"{current_process()}: completed {job_consumer.job_count} jobs so far for {job_consumer.name}.")

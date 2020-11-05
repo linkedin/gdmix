@@ -46,6 +46,11 @@ def shard_input_files(input_path, num_shards, shard_index):
 
 
 def remove_tf_config():
+    """
+    Remove tf configuration from the tf.
+
+    Args:
+    """
     tf_config = os.environ.pop('TF_CONFIG', '')
 
     if tf_config:

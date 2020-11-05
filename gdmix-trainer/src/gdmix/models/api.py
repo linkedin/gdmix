@@ -15,6 +15,13 @@ class Model(abc.ABC):
     4) Exposes APIs for model compiling, training, prediction, export to be used in the business logic of the driver
     """
     def __init__(self, raw_model_params):
+        """
+        Initialize model.
+
+        Args:
+            self: (todo): write your description
+            raw_model_params: (dict): write your description
+        """
         self.model_params = self._parse_parameters(raw_model_params)
         self.metadata_file = None
         self.checkpoint_path = None
