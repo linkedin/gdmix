@@ -18,13 +18,13 @@ class Model(abc.ABC):
         self.model_params = self._parse_parameters(raw_model_params)
         self.metadata_file = None
         self.checkpoint_path = None
-        self.training_data_path = None
-        self.validation_data_path = None
+        self.training_data_dir = None
+        self.validation_data_dir = None
 
     @abc.abstractmethod
     def train(self,
-              training_data_path,
-              validation_data_path,
+              training_data_dir,
+              validation_data_dir,
               metadata_file,
               checkpoint_path,
               execution_context,
@@ -34,8 +34,8 @@ class Model(abc.ABC):
         The interface should use internal model parameters `model_params` for model-specifc params.
         The data path arguments' values could be different from what users specify in the config
         because gdmix internally partitions the data into different chunks for distributed training/inference.
-        :param training_data_path   the path to training data
-        :param validation_data_path the path to validation data
+        :param training_data_dir   the path to training data
+        :param validation_data_dir the path to validation data
         :param metadata_file        the path to tensor metadata file
         :param checkpoint_path      the path to designated savedmodel/checkpoint directory
         :param execution_context    the tensorflow cluster setup

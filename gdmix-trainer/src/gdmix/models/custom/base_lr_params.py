@@ -8,9 +8,9 @@ class LRParams:
 
     # Input / output files or directories
     metadata_file: str  # Path to metadata.
-    model_output_dir: str  # Model output directory.
-    train_data_path: Optional[str] = None  # Path of directory holding only training data files.
-    validation_data_path: Optional[str] = None  # "Path of directory holding only data files for in-line validation."
+    output_model_dir: str  # Model output directory.
+    training_data_dir: Optional[str] = None  # Path of directory holding only training data files.
+    validation_data_dir: Optional[str] = None  # "Path of directory holding only data files for in-line validation."
     # Column names in the dataset
     feature_bag: Optional[str] = None  # Feature bag name that is used for training and scoring.
 

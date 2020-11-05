@@ -14,13 +14,13 @@ from scipy.special import expit
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
-AllPaths = namedtuple("AllPaths", "training_data_path "
-                                  "validation_data_path "
+AllPaths = namedtuple("AllPaths", "training_data_dir "
+                                  "validation_data_dir "
                                   "metadata_file "
                                   "feature_file "
-                                  "training_score_path "
-                                  "validation_score_path "
-                                  "model_output_dir")
+                                  "training_score_dir "
+                                  "validation_score_dir "
+                                  "output_model_dir")
 
 ExpectedData = namedtuple("ExpectedData", "features "
                                           "labels "
@@ -78,11 +78,11 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         paths = _prepare_paths(base_dir, True)
         training_params = _get_params(paths, _LARGE_MAX_ITERS, False)
         datasets = self.datasets_with_offset
-        _write_model(datasets['training'].coefficients, paths.feature_file, paths.model_output_dir, False)
+        _write_model(datasets['training'].coefficients, paths.feature_file, paths.output_model_dir, False)
         _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True)
         proc_func = _ProcFunc(0, [_PORTS[4]], training_params)
         proc_func.__call__(paths, False)
-        self._check_scores(datasets['validation'], paths.validation_score_path)
+        self._check_scores(datasets['validation'], paths.validation_score_dir)
         tf.io.gfile.rmtree(base_dir)
 
     def _check_model(self, coefficients, model_dir, feature_file):
@@ -144,9 +144,9 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         _write_tfrecord_datasets(datasets, paths, 2, has_offset)
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
-        self._check_model(datasets['training'].coefficients, paths.model_output_dir, paths.feature_file)
-        self._check_scores(datasets['training'], paths.training_score_path)
-        self._check_scores(datasets['validation'], paths.validation_score_path)
+        self._check_model(datasets['training'].coefficients, paths.output_model_dir, paths.feature_file)
+        self._check_scores(datasets['training'], paths.training_score_dir)
+        self._check_scores(datasets['validation'], paths.validation_score_dir)
         tf.io.gfile.rmtree(base_dir)
 
 
@@ -170,26 +170,26 @@ def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=Fal
         feature_file = os.path.join(feature_dir, "global")
     metadata_dir = os.path.join(base_dir, "metadata")
     all_paths = AllPaths(
-        training_data_path=os.path.join(base_dir, "trainingData"),
-        validation_data_path=os.path.join(base_dir, "validationData"),
+        training_data_dir=os.path.join(base_dir, "trainingData"),
+        validation_data_dir=os.path.join(base_dir, "validationData"),
         metadata_file=os.path.join(metadata_dir, "tensor_metadata.json"),
         feature_file=feature_file,
-        training_score_path=os.path.join(base_dir, "trainingScore"),
-        validation_score_path=os.path.join(base_dir, "validationScore"),
-        model_output_dir=os.path.join(base_dir, "modelOutput"))
+        training_score_dir=os.path.join(base_dir, "trainingScore"),
+        validation_score_dir=os.path.join(base_dir, "validationScore"),
+        output_model_dir=os.path.join(base_dir, "modelOutput"))
     if feature_dir:
         tf.io.gfile.mkdir(feature_dir)
     tf.io.gfile.mkdir(metadata_dir)
-    tf.io.gfile.mkdir(all_paths.training_data_path)
-    tf.io.gfile.mkdir(all_paths.validation_data_path)
-    tf.io.gfile.mkdir(all_paths.model_output_dir)
-    tf.io.gfile.mkdir(all_paths.training_score_path)
-    tf.io.gfile.mkdir(all_paths.validation_score_path)
+    tf.io.gfile.mkdir(all_paths.training_data_dir)
+    tf.io.gfile.mkdir(all_paths.validation_data_dir)
+    tf.io.gfile.mkdir(all_paths.output_model_dir)
+    tf.io.gfile.mkdir(all_paths.training_score_dir)
+    tf.io.gfile.mkdir(all_paths.validation_score_dir)
     if feature_file:
         _create_feature_file(all_paths.feature_file)
     _create_metadata_file(all_paths.metadata_file, has_offset)
     if previous_model is not None:
-        _write_model(previous_model, all_paths.feature_file, all_paths.model_output_dir, intercept_only)
+        _write_model(previous_model, all_paths.feature_file, all_paths.output_model_dir, intercept_only)
     return all_paths
 
 
@@ -202,16 +202,16 @@ def _get_params(paths, max_iters, intercept_only):
     :return: Three different parameter sets.
     """
     base_training_params = setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT)
-    base_training_params.training_output_dir = paths.training_score_path
-    base_training_params.validation_output_dir = paths.validation_score_path
+    base_training_params.training_score_dir = paths.training_score_dir
+    base_training_params.validation_score_dir = paths.validation_score_dir
 
     schema_params = setup_fake_schema_params()
 
-    raw_model_params = ['--' + constants.TRAIN_DATA_PATH, paths.training_data_path,
-                        '--' + constants.VALIDATION_DATA_PATH, paths.validation_data_path,
+    raw_model_params = ['--' + constants.TRAINING_DATA_DIR, paths.training_data_dir,
+                        '--' + constants.VALIDATION_DATA_DIR, paths.validation_data_dir,
                         '--' + constants.METADATA_FILE, paths.metadata_file,
                         '--' + constants.NUM_OF_LBFGS_ITERATIONS, f"{max_iters}",
-                        '--' + constants.MODEL_OUTPUT_DIR, paths.model_output_dir,
+                        '--' + constants.OUTPUT_MODEL_DIR, paths.output_model_dir,
                         '--' + constants.COPY_TO_LOCAL, 'False',
                         '--' + constants.BATCH_SIZE, '16',
                         '--' + constants.L2_REG_WEIGHT, f"{_L2_REG_WEIGHT}",
@@ -368,8 +368,8 @@ def _write_tfrecord_datasets(data, paths, num_files, has_offset):
     :return: None
     """
     training, validation = data['training'], data['validation']
-    _write_single_dataset(training, paths.training_data_path, num_files, has_offset)
-    _write_single_dataset(validation, paths.validation_data_path, num_files, has_offset)
+    _write_single_dataset(training, paths.training_data_dir, num_files, has_offset)
+    _write_single_dataset(validation, paths.validation_data_dir, num_files, has_offset)
 
 
 def _write_single_dataset(data, output_path, num_files, has_offset):
@@ -399,16 +399,16 @@ def _write_single_dataset(data, output_path, num_files, has_offset):
                 writer.write(example.SerializeToString())
 
 
-def _write_model(coefficients, feature_file, model_output_dir, intercept_only):
+def _write_model(coefficients, feature_file, output_model_dir, intercept_only):
     """
     Write model to an avro file per Photon-ML format.
     :param coefficients: Model coefficients, the last element is the bias/intercept.
     :param feature_file: A file with all the features.
-    :param model_output_dir: Output directory for the model file.
+    :param output_model_dir: Output directory for the model file.
     :param intercept_only: Whether this is an intercept only model.
     :return: None
     """
-    model_file = os.path.join(model_output_dir, "part-00000.avro")
+    model_file = os.path.join(output_model_dir, "part-00000.avro")
     bias = coefficients[-1]
     if intercept_only:
         list_of_weight_indices = None
@@ -568,16 +568,16 @@ class _ProcFunc:
         :return: None
         """
         if isTrain:
-            self.model.train(training_data_path=paths.training_data_path,
-                             validation_data_path=paths.validation_data_path,
+            self.model.train(training_data_dir=paths.training_data_dir,
+                             validation_data_dir=paths.validation_data_dir,
                              metadata_file=paths.metadata_file,
-                             checkpoint_path=paths.model_output_dir,
+                             checkpoint_path=paths.output_model_dir,
                              execution_context=self.execution_context,
                              schema_params=self.schema_params)
         else:
-            self.model.predict(output_dir=paths.validation_score_path,
-                               input_data_path=paths.validation_data_path,
+            self.model.predict(output_dir=paths.validation_score_dir,
+                               input_data_path=paths.validation_data_dir,
                                metadata_file=paths.metadata_file,
-                               checkpoint_path=paths.model_output_dir,
+                               checkpoint_path=paths.output_model_dir,
                                execution_context=self.execution_context,
                                schema_params=self.schema_params)

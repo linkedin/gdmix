@@ -28,7 +28,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         raw_params.extend(['--' + constants.MODEL_IDS_DIR, test_dataset_path])
         raw_params.extend(['--' + constants.FEATURE_FILE, os.path.join(test_dataset_path, fake_feature_file)])
         raw_params.extend(['--' + constants.PARTITION_ENTITY, partition_entity])
-        raw_params.extend(['--' + constants.LABEL, 'response'])
+        raw_params.extend(['--' + constants.LABEL_COLUMN_NAME, 'response'])
         raw_params.extend(['--' + constants.L2_REG_WEIGHT, '0.1'])
         if num_of_lbfgs_iterations:
             raw_params.extend(['--' + constants.NUM_OF_LBFGS_ITERATIONS, f'{num_of_lbfgs_iterations}'])
@@ -45,7 +45,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         # Create raw params with fake partition entity
         base_training_params, raw_params = self.get_raw_params(partition_entity='fake_partition_entity')
         avro_model_output_dir = tempfile.mkdtemp()
-        raw_params.extend(['--' + constants.MODEL_OUTPUT_DIR, avro_model_output_dir])
+        raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
 
         # Create random effect LR LBFGS Model
         re_lr_model = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
@@ -53,12 +53,12 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
 
         checkpoint_dir = tempfile.mkdtemp()
         training_context = {constants.PARTITION_INDEX: 0,
-                            constants.PASSIVE_TRAINING_DATA_PATH: test_dataset_path}
+                            constants.PASSIVE_TRAINING_DATA_DIR: test_dataset_path}
         schema_params = setup_fake_schema_params()
 
         # Training should fail as partition entity doesnt exist in dataset
         with self.assertRaises(Exception):
-            re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
+            re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
                               metadata_file=os.path.join(test_dataset_path, "data.json"),
                               checkpoint_path=checkpoint_dir, execution_context=training_context,
                               schema_params=schema_params)
@@ -70,7 +70,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         # Create and add AVRO model output directory to raw parameters
         base_training_params, raw_params = self.get_raw_params()
         avro_model_output_dir = tempfile.mkdtemp()
-        raw_params.extend(['--' + constants.MODEL_OUTPUT_DIR, avro_model_output_dir])
+        raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
         raw_params.extend(['--' + constants.ENABLE_LOCAL_INDEXING, 'True'])
 
         # Create random effect LR LBFGS Model
@@ -84,9 +84,9 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         training_context = {constants.ACTIVE_TRAINING_OUTPUT_FILE: active_train_output_file,
                             constants.PASSIVE_TRAINING_OUTPUT_FILE: passive_train_output_file,
                             constants.PARTITION_INDEX: 0,
-                            constants.PASSIVE_TRAINING_DATA_PATH: test_dataset_path}
+                            constants.PASSIVE_TRAINING_DATA_DIR: test_dataset_path}
         schema_params = setup_fake_schema_params()
-        re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
+        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
                           metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
 
@@ -151,7 +151,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         # Create and add AVRO model output directory to raw parameters
         base_training_params, raw_params = self.get_raw_params(intercept_only=intercept_only)
         avro_model_output_dir = tempfile.mkdtemp()
-        raw_params.extend(['--' + constants.MODEL_OUTPUT_DIR, avro_model_output_dir])
+        raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
 
         if intercept_only:
             metadata_file = os.path.join(test_dataset_path, "data_intercept_only.json")
@@ -168,9 +168,9 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         training_context = {constants.ACTIVE_TRAINING_OUTPUT_FILE: active_train_output_file,
                             constants.PASSIVE_TRAINING_OUTPUT_FILE: passive_train_output_file,
                             constants.PARTITION_INDEX: 0,
-                            constants.PASSIVE_TRAINING_DATA_PATH: test_dataset_path}
+                            constants.PASSIVE_TRAINING_DATA_DIR: test_dataset_path}
         schema_params = setup_fake_schema_params()
-        re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
+        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
                           metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
 
@@ -182,13 +182,13 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
 
         # Step 2: Train for 1 l-bfgs step with warm start
         base_training_params, raw_params = self.get_raw_params('memberId', 1, intercept_only)
-        raw_params.extend(['--' + constants.MODEL_OUTPUT_DIR, avro_model_output_dir])
+        raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
 
         # Create random effect LR LBFGS Model
         re_lr_model = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
 
         schema_params = setup_fake_schema_params()
-        re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
+        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
                           metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
         final_model = re_lr_model._load_weights(avro_model_output_file, 0)
@@ -209,7 +209,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         for f in model_files:
             tf.io.gfile.remove(f)
         # Train for 1 l-bfgs step.
-        re_lr_model.train(training_data_path=test_dataset_path, validation_data_path=test_dataset_path,
+        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
                           metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
         cold_model = re_lr_model._load_weights(avro_model_output_file, 0)

@@ -303,10 +303,10 @@ def dataset_reader(iterator):
 
 
 def get_inference_output_avro_schema(metadata, has_logits_per_coordinate, schema_params, has_weight=False):
-    fields = [{'name': schema_params.sample_id, 'type': 'long'}, {'name': schema_params.prediction_score, 'type': 'float'},
-              {'name': schema_params.label, 'type': ['null', 'int'], "default": None}]
-    if has_weight or metadata.get(schema_params.sample_weight) is not None:
-        fields.append({'name': schema_params.sample_weight, 'type': 'float'})
+    fields = [{'name': schema_params.uid_column_name, 'type': 'long'}, {'name': schema_params.prediction_score_column_name, 'type': 'float'},
+              {'name': schema_params.label_column_name, 'type': ['null', 'int'], "default": None}]
+    if has_weight or metadata.get(schema_params.weight_column_name) is not None:
+        fields.append({'name': schema_params.weight_column_name, 'type': 'float'})
     if has_logits_per_coordinate:
-        fields.append({'name': schema_params.prediction_score_per_coordinate, 'type': 'float'})
+        fields.append({'name': schema_params.prediction_score_per_coordinate_column_name, 'type': 'float'})
     return {'name': 'validation_result', 'type': 'record', 'fields': fields}

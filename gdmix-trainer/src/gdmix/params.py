@@ -18,9 +18,9 @@ class GDMixParams:
     model_type: str = _MODEL_TYPES[0]  # The model type to train, e.g, logistic regression, detext, etc.
     __model_type = {"choices": _MODEL_TYPES}
 
-    # Input / output files or directories
-    training_output_dir: Optional[str] = None  # Training output directory.
-    validation_output_dir: Optional[str] = None  # Validation output directory.
+    # Input / output directories
+    training_score_dir: Optional[str] = None  # Path to the prediction score directory of the training data..
+    validation_score_dir: Optional[str] = None  # Path to the prediction score directory of the validation data..
 
     # Driver arguments for random effect training
     partition_list_file: Optional[str] = None  # File containing a list of all the partition ids, for random effect only
@@ -35,11 +35,11 @@ class GDMixParams:
 @dataclass
 class SchemaParams:
     # Schema names
-    sample_id: str = LateInit  # Sample id column name in the input file.
-    sample_weight: Optional[str] = None  # Sample weight column name in the input file.
-    label: Optional[str] = None  # Label column name in the train/validation file.
-    prediction_score: Optional[str] = None  # Prediction score column name in the generated result file.
-    prediction_score_per_coordinate: str = "predictionScorePerCoordinate"  # ColumnName of the prediction score without the offset.
+    uid_column_name: str = LateInit  # Unique id column name in the train/validation data.
+    weight_column_name: Optional[str] = None  # weight column name in the train/validation data.
+    label_column_name: Optional[str] = None  # Label column name in the train/validation data.
+    prediction_score_column_name: Optional[str] = None  # Prediction score column name in the generated result file.
+    prediction_score_per_coordinate_column_name: str = "predictionScorePerCoordinate"  # Column name of the prediction score without the offset.
 
 
 @arg_suite
@@ -49,4 +49,5 @@ class Params(GDMixParams, SchemaParams):
 
     def __post_init__(self):
         super().__post_init__()
-        assert (self.action == constants.ACTION_TRAIN and self.label) or (self.action == constants.ACTION_INFERENCE and self.prediction_score)
+        assert (self.action == constants.ACTION_TRAIN and self.label_column_name) or \
+               (self.action == constants.ACTION_INFERENCE and self.prediction_score_column_name)

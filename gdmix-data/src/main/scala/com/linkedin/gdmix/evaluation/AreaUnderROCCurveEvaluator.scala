@@ -58,10 +58,10 @@ object AreaUnderROCCurveEvaluator {
   def run(spark: SparkSession, params: AreaUnderROCCurveEvaluatorParams): Unit = {
 
     // Read file and cast the label and score to double.
-    val df = spark.read.avro(params.inputPath)
+    val df = spark.read.avro(params.metricsInputDir)
 
     // Compute auc.
-    val auc = calculateAreaUnderROCCurve(df, params.labelName, params.scoreName)
+    val auc = calculateAreaUnderROCCurve(df, params.labelColumnName, params.predictionColumnName)
 
     // Set up Hadoop file system.
     val hadoopJobConf = new JobConf()
@@ -69,6 +69,6 @@ object AreaUnderROCCurveEvaluator {
 
     // Convert to json and save to HDFS.
     val jsonResult = JsonUtils.toJsonString(Map("auc" -> auc))
-    IoUtils.writeFile(fs, new Path(params.outputPath, EVAL_SUMMARY_JSON), jsonResult)
+    IoUtils.writeFile(fs, new Path(params.outputMetricFile, EVAL_SUMMARY_JSON), jsonResult)
   }
 }

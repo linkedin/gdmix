@@ -26,9 +26,9 @@ class TestDriver(tf.test.TestCase):
 
         self.mock_model = Mock()
         self.mock_model.metadata_file = os.path.join(os.getcwd(), "test/resources/metadata/tensor_metadata.json")
-        self.mock_model.validation_data_path = os.path.join(os.getcwd(), "test/resources/validate")
+        self.mock_model.validation_data_dir = os.path.join(os.getcwd(), "test/resources/validate")
         self.mock_model.checkpoint_path = self.output_dir
-        self.mock_model.training_data_path = os.path.join(os.getcwd(), "test/resources/train")
+        self.mock_model.training_data_dir = os.path.join(os.getcwd(), "test/resources/train")
 
         self.fixed_effect_driver = FixedEffectDriver(base_training_params=self.base_training_params,
                                                      model=self.mock_model)
@@ -101,8 +101,8 @@ class TestDriver(tf.test.TestCase):
         self.fixed_effect_driver.run_training(schema_params=self.schema_params, export_model=False, output_model_dir=None)
 
         # Assert model is trained only once with the right parameters
-        self.mock_model.train.assert_called_once_with(training_data_path=self.mock_model.training_data_path,
-                                                      validation_data_path=self.mock_model.validation_data_path,
+        self.mock_model.train.assert_called_once_with(training_data_dir=self.mock_model.training_data_dir,
+                                                      validation_data_dir=self.mock_model.validation_data_dir,
                                                       metadata_file=self.mock_model.metadata_file,
                                                       checkpoint_path=self.mock_model.checkpoint_path,
                                                       execution_context=self.fixed_effect_driver.execution_context,
@@ -130,10 +130,10 @@ class TestDriver(tf.test.TestCase):
 
         for partition_index in partition_index_list:
             checkpoint_path = self.random_effect_driver._anchor_directory(self.mock_model.checkpoint_path, partition_index)
-            training_data_path = self.random_effect_driver._anchor_directory(self.mock_model.training_data_path, partition_index)
-            validation_data_path = self.random_effect_driver._anchor_directory(self.mock_model.validation_data_path, partition_index)
-            train_calls.append(mock.call(training_data_path=training_data_path,
-                                         validation_data_path=validation_data_path,
+            training_data_dir = self.random_effect_driver._anchor_directory(self.mock_model.training_data_dir, partition_index)
+            validation_data_dir = self.random_effect_driver._anchor_directory(self.mock_model.validation_data_dir, partition_index)
+            train_calls.append(mock.call(training_data_dir=training_data_dir,
+                                         validation_data_dir=validation_data_dir,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=checkpoint_path,
                                          execution_context=self.random_effect_driver.execution_context,
@@ -153,15 +153,15 @@ class TestDriver(tf.test.TestCase):
         self.fixed_effect_driver.run_inference(schema_params=self.schema_params)
         inference_calls = []
         inference_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params.training_output_dir),
-                                         input_data_path=self.mock_model.training_data_path,
+                                             self.base_training_params.training_score_dir),
+                                         input_data_path=self.mock_model.training_data_dir,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=self.mock_model.checkpoint_path,
                                          execution_context=self.fixed_effect_driver.execution_context,
                                          schema_params=self.schema_params))
         inference_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params.validation_output_dir),
-                                         input_data_path=self.mock_model.validation_data_path,
+                                             self.base_training_params.validation_score_dir),
+                                         input_data_path=self.mock_model.validation_data_dir,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=self.mock_model.checkpoint_path,
                                          execution_context=self.fixed_effect_driver.execution_context,
@@ -192,22 +192,22 @@ class TestDriver(tf.test.TestCase):
         infer_calls = []
         for partition_index in partition_index_list:
             checkpoint_path = os.path.join(self.mock_model.checkpoint_path)
-            training_data_path = self.random_effect_driver._anchor_directory(
-                self.mock_model.training_data_path, partition_index)
-            validation_data_path = self.random_effect_driver._anchor_directory(
-                self.mock_model.validation_data_path, partition_index)
+            training_data_dir = self.random_effect_driver._anchor_directory(
+                self.mock_model.training_data_dir, partition_index)
+            validation_data_dir = self.random_effect_driver._anchor_directory(
+                self.mock_model.validation_data_dir, partition_index)
             infer_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params.training_output_dir,
+                                             self.base_training_params.training_score_dir,
                                              RandomEffectDriver._RANDOM_EFFECT_PARTITION_DIR_PREFIX + str(partition_index)),
-                                         input_data_path=training_data_path,
+                                         input_data_path=training_data_dir,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=checkpoint_path,
                                          execution_context=self.random_effect_driver.execution_context,
                                          schema_params=self.schema_params))
             infer_calls.append(mock.call(output_dir=os.path.join(
-                                             self.base_training_params.validation_output_dir,
+                                             self.base_training_params.validation_score_dir,
                                              RandomEffectDriver._RANDOM_EFFECT_PARTITION_DIR_PREFIX + str(partition_index)),
-                                         input_data_path=validation_data_path,
+                                         input_data_path=validation_data_dir,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=checkpoint_path,
                                          execution_context=self.random_effect_driver.execution_context,

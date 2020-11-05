@@ -35,24 +35,24 @@ object DataPartitioner {
   def run(spark: SparkSession, params: DataPartitionerParams): Unit = {
 
     // Parse the commandline option.
-    val trainInputDataPath = params.trainInputDataPath
-    val trainInputScorePath = params.trainInputScorePath
-    val trainPerCoordinateScorePath = params.trainPerCoordinateScorePath
-    val trainOutputPartitionDataPath = params.trainOutputPartitionDataPath
-    val validationInputDataPath = params.validationInputDataPath
-    val validationInputScorePath = params.validationInputScorePath
-    val validationPerCoordinateScorePath = params.validationPerCoordinateScorePath
-    val validationOutputPartitionDataPath = params.validationOutputPartitionDataPath
-    val inputMetadataFile = params.inputMetadataFile
+    val trainInputDataPath = params.trainingDataDir
+    val trainInputScorePath = params.trainingScoreDir
+    val trainPerCoordinateScorePath = params.trainingScorePerCoordinateDir
+    val trainOutputPartitionDataPath = params.partitionedTrainingDataDir
+    val validationInputDataPath = params.validationDataDir
+    val validationInputScorePath = params.validationScoreDir
+    val validationPerCoordinateScorePath = params.validationScorePerCoordinateDir
+    val validationOutputPartitionDataPath = params.partitionedValidationDataDir
+    val inputMetadataFile = params.metadataFile
     val outputMetadataFile = params.outputMetadataFile
     val outputPartitionListFile = params.outputPartitionListFile
-    val partitionEntity = params.partitionEntity
+    val partitionEntity = params.partitionId
     val numPartitions = params.numPartitions
     val dataFormat = params.dataFormat
-    val predictionScore = params.predictionScore
-    val predictionScorePerCoordinate = params.predictionScorePerCoordinate
-    val offset = params.offset
-    val uid = params.uid
+    val predictionScore = params.predictionScoreColumnName
+    val predictionScorePerCoordinate = params.predictionScorePerCoordinateColumnName
+    val offset = params.offsetColumnName
+    val uid = params.uidColumnName
     val maxNumOfSamplesPerModel = params.maxNumOfSamplesPerModel
     val minNumOfSamplesPerModel = params.minNumOfSamplesPerModel
 

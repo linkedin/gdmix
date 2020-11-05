@@ -65,14 +65,14 @@ class FixedEffectLRModelLBFGS(Model):
 
     def __init__(self, raw_model_params, base_training_params: Params):
         self.model_params: FixedLRParams = self._parse_parameters(raw_model_params)
-        self.training_output_dir = base_training_params.training_output_dir
-        self.validation_output_dir = base_training_params.validation_output_dir
+        self.training_output_dir = base_training_params.training_score_dir
+        self.validation_output_dir = base_training_params.validation_score_dir
         self.local_training_input_dir = "local_training_input_dir"
         self.lbfgs_iteration = 0
-        self.training_data_path = self.model_params.train_data_path
-        self.validation_data_path = self.model_params.validation_data_path
+        self.training_data_dir = self.model_params.training_data_dir
+        self.validation_data_dir = self.model_params.validation_data_dir
         self.metadata_file = self.model_params.metadata_file
-        self.checkpoint_path = self.model_params.model_output_dir
+        self.checkpoint_path = self.model_params.output_model_dir
         self.data_format = self.model_params.data_format
         self.offset_column_name = self.model_params.offset
         self.feature_bag_name = self.model_params.feature_bag
@@ -186,9 +186,9 @@ class FixedEffectLRModelLBFGS(Model):
         prediction_score_per_coordinate_list = tf1.constant([], tf1.float64)
 
         feature_bag_name = self.feature_bag_name
-        sample_id_column_name = schema_params.sample_id
-        label_column_name = schema_params.label
-        sample_weight_column_name = schema_params.sample_weight
+        sample_id_column_name = schema_params.uid_column_name
+        label_column_name = schema_params.label_column_name
+        sample_weight_column_name = schema_params.weight_column_name
         offset_column_name = self.offset_column_name
         has_offset = self._has_feature(offset_column_name)
         has_label = self._has_label(label_column_name)
@@ -241,8 +241,8 @@ class FixedEffectLRModelLBFGS(Model):
         # Add bias
         gradients = tf1.constant(np.zeros(num_features + 1))
         feature_bag_name = self.feature_bag_name
-        label_column_name = schema_params.label
-        sample_weight_column_name = schema_params.sample_weight
+        label_column_name = schema_params.label_column_name
+        sample_weight_column_name = schema_params.weight_column_name
         offset_column_name = self.offset_column_name
         is_regularize_bias = self.is_regularize_bias
         has_weight = self._has_feature(sample_weight_column_name)
@@ -314,19 +314,19 @@ class FixedEffectLRModelLBFGS(Model):
             self.metadata,
             True,
             schema_params,
-            has_weight=self._has_feature(schema_params.sample_weight))
+            has_weight=self._has_feature(schema_params.weight_column_name))
         parsed_schema = parse_schema(output_avro_schema)
 
         records = []
         for rec_id, rec_label, rec_weight, rec_prediction_score, rec_prediction_score_per_coordinate in \
                 zip(sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate):
-            rec = {schema_params.sample_id: int(rec_id),
-                   schema_params.prediction_score: float(rec_prediction_score),
-                   schema_params.prediction_score_per_coordinate: float(rec_prediction_score_per_coordinate)}
-            if self._has_label(schema_params.label):
-                rec[schema_params.label] = int(rec_label)
-            if self._has_feature(schema_params.sample_weight):
-                rec[schema_params.sample_weight] = int(rec_weight)
+            rec = {schema_params.uid_column_name: int(rec_id),
+                   schema_params.prediction_score_column_name: float(rec_prediction_score),
+                   schema_params.prediction_score_per_coordinate_column_name: float(rec_prediction_score_per_coordinate)}
+            if self._has_label(schema_params.label_column_name):
+                rec[schema_params.label_column_name] = int(rec_label)
+            if self._has_feature(schema_params.weight_column_name):
+                rec[schema_params.weight_column_name] = int(rec_weight)
             records.append(rec)
 
         output_file = os.path.join(output_dir, f"part-{task_index:05d}.avro")
@@ -365,7 +365,7 @@ class FixedEffectLRModelLBFGS(Model):
         num_iterations = int(local_num_samples / self.batch_size) + (1 if local_num_samples % self.batch_size else 0)
         return num_iterations
 
-    def train(self, training_data_path, validation_data_path, metadata_file, checkpoint_path,
+    def train(self, training_data_dir, validation_data_dir, metadata_file, checkpoint_path,
               execution_context, schema_params):
         """ Overwrite train method from parent class. """
         logging("Kicking off fixed effect LR LBFGS training")
@@ -375,7 +375,7 @@ class FixedEffectLRModelLBFGS(Model):
         is_chief = execution_context[constants.IS_CHIEF]
         self._create_server(execution_context)
 
-        assigned_train_files = self._get_assigned_files(training_data_path, num_workers, task_index)
+        assigned_train_files = self._get_assigned_files(training_data_dir, num_workers, task_index)
         if self.copy_to_local:
             train_input_dir = self.local_training_input_dir
             actual_train_files = copy_files(assigned_train_files, train_input_dir)
@@ -383,7 +383,7 @@ class FixedEffectLRModelLBFGS(Model):
             train_num_shards = 1
             train_shard_index = 0
         else:
-            train_input_dir = self.training_data_path
+            train_input_dir = self.training_data_dir
             actual_train_files = assigned_train_files
             train_num_shards = num_workers
             train_shard_index = task_index
@@ -413,7 +413,7 @@ class FixedEffectLRModelLBFGS(Model):
             train_ops = (init_train_dataset_op, value_op, gradients_op)
 
             # Define ops for inference
-            valid_dataset = per_record_input_fn(validation_data_path,
+            valid_dataset = per_record_input_fn(validation_data_dir,
                                                 metadata_file,
                                                 num_workers,
                                                 task_index,
@@ -430,7 +430,7 @@ class FixedEffectLRModelLBFGS(Model):
                     schema_params)
 
             inference_validation_data_diter = tf1.data.make_one_shot_iterator(valid_dataset)
-            assigned_validation_files = self._get_assigned_files(validation_data_path, num_workers, task_index)
+            assigned_validation_files = self._get_assigned_files(validation_data_dir, num_workers, task_index)
             validation_data_num_iterations = self._get_num_iterations(assigned_validation_files)
             valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
                 valid_prediction_score_per_coordinate_op = self._inference_model_fn(

@@ -7,14 +7,14 @@ class ConcreteModel(Model):
     """Derived model class"""
 
     def train(self,
-              training_data_path,
-              validation_data_path,
+              training_data_dir,
+              validation_data_dir,
               metadata_file,
               checkpoint_path,
               execution_context,
               schema_params):
-        super(ConcreteModel, self).train(training_data_path,
-                                         validation_data_path,
+        super(ConcreteModel, self).train(training_data_dir,
+                                         validation_data_dir,
                                          metadata_file,
                                          checkpoint_path,
                                          execution_context,

@@ -52,23 +52,23 @@ class RandomEffectLRLBFGSModel(Model):
     def __init__(self, raw_model_params):
         super(RandomEffectLRLBFGSModel, self).__init__(raw_model_params)
         self.model_params: REParams = self._parse_parameters(raw_model_params)
-        self.checkpoint_path = os.path.join(self.model_params.model_output_dir)
+        self.checkpoint_path = os.path.join(self.model_params.output_model_dir)
         self.metadata_file = self.model_params.metadata_file
         self.feature_bag_name = self.model_params.feature_bag
         # If no features, then make sure feature file is None. This is intercept only model.
         self.feature_file = None if self.feature_bag_name is None else self.model_params.feature_file
         # If TRAIN_DATA_PATH is set, initialize active/passive training data path, else set to None
-        if self.model_params.train_data_path is not None:
-            self.training_data_path = os.path.join(self.model_params.train_data_path, constants.ACTIVE)
-            self.passive_training_data_path = os.path.join(self.model_params.train_data_path, constants.PASSIVE)
+        if self.model_params.training_data_dir is not None:
+            self.training_data_dir = os.path.join(self.model_params.training_data_dir, constants.ACTIVE)
+            self.passive_training_data_dir = os.path.join(self.model_params.training_data_dir, constants.PASSIVE)
         else:
-            self.training_data_path = None
-            self.passive_training_data_path = None
-        self.validation_data_path = self.model_params.validation_data_path
+            self.training_data_dir = None
+            self.passive_training_data_dir = None
+        self.validation_data_dir = self.model_params.validation_data_dir
 
-    def train(self, training_data_path, validation_data_path, metadata_file, checkpoint_path, execution_context, schema_params):
+    def train(self, training_data_dir, validation_data_dir, metadata_file, checkpoint_path, execution_context, schema_params):
         logger.info("Kicking off random effect custom LR training")
-        self._action(constants.ACTION_TRAIN, (training_data_path, validation_data_path), metadata_file, checkpoint_path, execution_context, schema_params)
+        self._action(constants.ACTION_TRAIN, (training_data_dir, validation_data_dir), metadata_file, checkpoint_path, execution_context, schema_params)
 
     def predict(self, output_dir, input_data_path, metadata_file, checkpoint_path, execution_context, schema_params):
         logger.info(f"Running inference on dataset : {input_data_path}, results to be written to path : {output_dir}")
@@ -94,26 +94,26 @@ class RandomEffectLRLBFGSModel(Model):
                               output_file=os.path.join(output_dir, avro_filename), model_weights=model_weights,
                               schema_params=schema_params, use_local_index=True, num_features=num_features)
             elif action == constants.ACTION_TRAIN:
-                training_data_path, validation_data_path = action_context
-                model_file = os.path.join(self.model_params.model_output_dir, avro_filename)
+                training_data_dir, validation_data_dir = action_context
+                model_file = os.path.join(self.model_params.output_model_dir, avro_filename)
                 # load initial model if available
                 model_weights = self._load_weights(model_file, True)
                 # Train the model
-                model_weights = self._train(pool, training_data_path, metadata_file, model_weights, num_features, schema_params, model_file)
+                model_weights = self._train(pool, training_data_dir, metadata_file, model_weights, num_features, schema_params, model_file)
 
                 # shorthand for self._predict
                 predict = partial(self._predict, use_local_index=self.model_params.enable_local_indexing, metadata=metadata, tensor_metadata=tensor_metadata,
                                   pool=pool, schema_params=schema_params, num_features=num_features, metadata_file=metadata_file, model_weights=model_weights)
                 # Run inference on validation set
                 o = execution_context.get(constants.VALIDATION_OUTPUT_FILE, None)
-                o and predict(input_path=validation_data_path, output_file=o)
+                o and predict(input_path=validation_data_dir, output_file=o)
 
                 # Run inference on active training set
                 o = execution_context.get(constants.ACTIVE_TRAINING_OUTPUT_FILE, None)
-                o and predict(input_path=training_data_path, output_file=o)
+                o and predict(input_path=training_data_dir, output_file=o)
 
                 # Run inference on passive training set
-                i, o = execution_context.get(constants.PASSIVE_TRAINING_DATA_PATH, None), execution_context.get(constants.PASSIVE_TRAINING_OUTPUT_FILE, None)
+                i, o = execution_context.get(constants.PASSIVE_TRAINING_DATA_DIR, None), execution_context.get(constants.PASSIVE_TRAINING_OUTPUT_FILE, None)
                 i and o and predict(input_path=i, output_file=o)
             else:
                 raise ValueError(f"Invalid action {action!r}.")
@@ -147,7 +147,7 @@ class RandomEffectLRLBFGSModel(Model):
             metadata,
             has_logits_per_coordinate=True,  # Always true for custom scipy-based LR
             schema_params=schema_params,
-            has_weight=any(schema_params.sample_weight == feature.name for feature in tensor_metadata.get_features())))
+            has_weight=any(schema_params.weight_column_name == feature.name for feature in tensor_metadata.get_features())))
         batched_write_avro(itertools.chain.from_iterable(results), output_file, output_schema)
         logger.info(f"Inference complete: {input_path}.")
 

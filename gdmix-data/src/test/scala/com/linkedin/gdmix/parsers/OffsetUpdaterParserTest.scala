@@ -13,44 +13,44 @@ class OffsetUpdaterParserTest {
     Array(
       Array(
         Seq(
-          "--trainInputDataPath", "fixed-effect/trainingData",
-          "--trainInputScorePath", "jymbii_lr/per-job/trainingScore",
-          "--trainPerCoordinateScorePath", "jymbii_lr/global/trainingScore",
-          "--trainOutputDataPath", "jymbii_lr/global/updatedTrainingData",
-          "--validationInputDataPath", "fixed-effect/validationData",
-          "--validationInputScorePath", "jymbii_lr/per-job/validationScore",
-          "--validationPerCoordinateScorePath", "jymbii_lr/global/validationScore",
-          "--validationOutputDataPath", "jymbii_lr/global/updatedValidationData")))
+          "--trainingDataDir", "fixed-effect/trainingData",
+          "--trainingScoreDir", "jymbii_lr/per-job/trainingScore",
+          "--trainingScorePerCoordinateDir", "jymbii_lr/global/trainingScore",
+          "--outputTrainingDataDir", "jymbii_lr/global/updatedTrainingData",
+          "--validationDataDir", "fixed-effect/validationData",
+          "--validationScoreDir", "jymbii_lr/per-job/validationScore",
+          "--validationScorePerCoordinateDir", "jymbii_lr/global/validationScore",
+          "--outputValidationDataDir", "jymbii_lr/global/updatedValidationData")))
   }
 
   @DataProvider
   def dataIncompleteArgs(): Array[Array[Any]] = {
 
     Array(
-      // miss trainInputDataPath
+      // miss trainingDataDir
       Array(
         Seq(
-          "--trainInputScorePath", "jymbii_lr/per-job/trainingScore",
-          "--trainPerCoordinateScorePath", "jymbii_lr/global/trainingScore",
-          "--trainOutputDataPath", "jymbii_lr/global/updatedTrainingData")),
-      // miss trainInputScorePath
+          "--trainingScoreDir", "jymbii_lr/per-job/trainingScore",
+          "--trainingScorePerCoordinateDir", "jymbii_lr/global/trainingScore",
+          "--outputTrainingDataDir", "jymbii_lr/global/updatedTrainingData")),
+      // miss trainingScoreDir
       Array(
         Seq(
-          "--trainInputDataPath", "fixed-effect/trainingData",
-          "--trainPerCoordinateScorePath", "jymbii_lr/global/trainingScore",
-          "--trainOutputDataPath", "jymbii_lr/global/updatedTrainingData")),
-      // miss trainPerCoordinateScorePath
+          "--trainingDataDir", "fixed-effect/trainingData",
+          "--trainingScorePerCoordinateDir", "jymbii_lr/global/trainingScore",
+          "--outputTrainingDataDir", "jymbii_lr/global/updatedTrainingData")),
+      // miss trainingScorePerCoordinateDir
       Array(
         Seq(
-          "--trainInputDataPath", "fixed-effect/trainingData",
-          "--trainInputScorePath", "jymbii_lr/per-job/trainingScore",
-          "--trainOutputDataPath", "jymbii_lr/global/updatedTrainingData")),
-      // miss trainOutputDataPath
+          "--trainingDataDir", "fixed-effect/trainingData",
+          "--trainingScoreDir", "jymbii_lr/per-job/trainingScore",
+          "--outputTrainingDataDir", "jymbii_lr/global/updatedTrainingData")),
+      // miss outputTrainingDataDir
       Array(
         Seq(
-          "--trainInputDataPath", "fixed-effect/trainingData",
-          "--trainInputScorePath", "jymbii_lr/per-job/trainingScore",
-          "--trainPerCoordinateScorePath", "jymbii_lr/global/trainingScore"))
+          "--trainingDataDir", "fixed-effect/trainingData",
+          "--trainingScoreDir", "jymbii_lr/per-job/trainingScore",
+          "--trainingScorePerCoordinateDir", "jymbii_lr/global/trainingScore"))
     )
   }
 
@@ -59,14 +59,14 @@ class OffsetUpdaterParserTest {
 
     val params = OffsetUpdaterParser.parse(completeArgs)
     val expectedParams = OffsetUpdaterParams(
-      trainInputDataPath = "fixed-effect/trainingData",
-      trainInputScorePath = "jymbii_lr/per-job/trainingScore",
-      trainPerCoordinateScorePath = "jymbii_lr/global/trainingScore",
-      trainOutputDataPath = "jymbii_lr/global/updatedTrainingData",
-      validationInputDataPath = Some("fixed-effect/validationData"),
-      validationInputScorePath = Some("jymbii_lr/per-job/validationScore"),
-      validationPerCoordinateScorePath = Some("jymbii_lr/global/validationScore"),
-      validationOutputDataPath = Some("jymbii_lr/global/updatedValidationData")
+      trainingDataDir = "fixed-effect/trainingData",
+      trainingScoreDir = "jymbii_lr/per-job/trainingScore",
+      trainingScorePerCoordinateDir = "jymbii_lr/global/trainingScore",
+      outputTrainingDataDir = "jymbii_lr/global/updatedTrainingData",
+      validationDataDir = Some("fixed-effect/validationData"),
+      validationScoreDir = Some("jymbii_lr/per-job/validationScore"),
+      validationScorePerCoordinateDir = Some("jymbii_lr/global/validationScore"),
+      outputValidationDataDir = Some("jymbii_lr/global/updatedValidationData")
     )
     assertEquals(params, expectedParams)
   }
