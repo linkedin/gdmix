@@ -27,15 +27,15 @@ class FixedEffectDetextEstimatorModel(Model):
     def __init__(self, raw_model_params):
         super().__init__(raw_model_params)
         self.checkpoint_path = self.model_params.out_dir
-        #  train_data_path and validation_data_path are used by the driver
-        self.training_data_path = self.model_params.train_file
-        self.validation_data_path = self.model_params.dev_file
+        #  training_data_dir and validation_data_dir are used by the driver
+        self.training_data_dir = self.model_params.train_file
+        self.validation_data_dir = self.model_params.dev_file
         self.best_checkpoint = os.path.join(
             self.checkpoint_path, FixedEffectDetextEstimatorModel.__BEST + self.model_params.pmetric)
 
     def train(self,
-              training_data_path,
-              validation_data_path,
+              training_data_dir,
+              validation_data_dir,
               metadata_file,
               checkpoint_path,
               execution_context,

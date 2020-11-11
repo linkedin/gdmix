@@ -21,10 +21,10 @@ class DetextWriter:
             'name': 'validation_result',
             'type': 'record',
             'fields': [
-                {'name': self.schema_params.sample_id, 'type': 'long'},
-                {'name': self.schema_params.sample_weight, 'type': 'float'},
-                {'name': self.schema_params.label, 'type': 'int'},
-                {'name': self.schema_params.prediction_score, 'type': 'float'}
+                {'name': self.schema_params.uid_column_name, 'type': 'long'},
+                {'name': self.schema_params.weight_column_name, 'type': 'float'},
+                {'name': self.schema_params.label_column_name, 'type': 'int'},
+                {'name': self.schema_params.prediction_score_column_name, 'type': 'float'}
             ],
         }
         return schema
@@ -38,10 +38,10 @@ class DetextWriter:
             # we only support pointwise training for detext
             # label is list of one scalar
             # score is also scalar
-            record = {self.schema_params.prediction_score: predicts[i][0],
-                      self.schema_params.sample_id: ids[i],
-                      self.schema_params.label: int(labels[i][0]),
-                      self.schema_params.sample_weight: weights[i]}
+            record = {self.schema_params.prediction_score_column_name: predicts[i][0],
+                      self.schema_params.uid_column_name: ids[i],
+                      self.schema_params.label_column_name: int(labels[i][0]),
+                      self.schema_params.weight_column_name: weights[i]}
             records.append(record)
         return batch_size
 

@@ -35,24 +35,24 @@ object DataPartitioner {
   def run(spark: SparkSession, params: DataPartitionerParams): Unit = {
 
     // Parse the commandline option.
-    val trainInputDataPath = params.trainInputDataPath
-    val trainInputScorePath = params.trainInputScorePath
-    val trainPerCoordinateScorePath = params.trainPerCoordinateScorePath
-    val trainOutputPartitionDataPath = params.trainOutputPartitionDataPath
-    val validationInputDataPath = params.validationInputDataPath
-    val validationInputScorePath = params.validationInputScorePath
-    val validationPerCoordinateScorePath = params.validationPerCoordinateScorePath
-    val validationOutputPartitionDataPath = params.validationOutputPartitionDataPath
-    val inputMetadataFile = params.inputMetadataFile
+    val trainInputDataPath = params.trainingDataDir
+    val trainInputScorePath = params.trainingScoreDir
+    val trainPerCoordinateScorePath = params.trainingScorePerCoordinateDir
+    val trainOutputPartitionDataPath = params.partitionedTrainingDataDir
+    val validationInputDataPath = params.validationDataDir
+    val validationInputScorePath = params.validationScoreDir
+    val validationPerCoordinateScorePath = params.validationScorePerCoordinateDir
+    val validationOutputPartitionDataPath = params.partitionedValidationDataDir
+    val inputMetadataFile = params.metadataFile
     val outputMetadataFile = params.outputMetadataFile
     val outputPartitionListFile = params.outputPartitionListFile
-    val partitionEntity = params.partitionEntity
+    val partitionEntity = params.partitionId
     val numPartitions = params.numPartitions
     val dataFormat = params.dataFormat
-    val predictionScore = params.predictionScore
-    val predictionScorePerCoordinate = params.predictionScorePerCoordinate
-    val offset = params.offset
-    val uid = params.uid
+    val predictionScore = params.predictionScoreColumnName
+    val predictionScorePerCoordinate = params.predictionScorePerCoordinateColumnName
+    val offset = params.offsetColumnName
+    val uid = params.uidColumnName
     val maxNumOfSamplesPerModel = params.maxNumOfSamplesPerModel
     val minNumOfSamplesPerModel = params.minNumOfSamplesPerModel
 
@@ -67,9 +67,12 @@ object DataPartitioner {
     val hadoopJobConf = new JobConf()
     val fs = FileSystem.get(hadoopJobConf)
 
+    val schemaOpt = if (dataFormat == TFRECORD) Some(MetadataGenerator
+      .createSchemaForTfrecord(inputMetadataFile)) else None
+
     // Partition training dataset if the training input data is provided.
     val trainOutputOpt = if (!IoUtils.isEmptyStr(trainInputDataPath)) {
-      val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath.get, dataFormat)
+      val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath.get, dataFormat, schemaOpt)
       val trainInputScoreOpt = if (!IoUtils.isEmptyStr(trainInputScorePath)) {
         Some(spark.read.avro(trainInputScorePath.get))
       } else {
@@ -107,7 +110,6 @@ object DataPartitioner {
         .map(row => row.getAs[Int](PARTITION_ID))
         .collect()
       IoUtils.writeFile(fs, new Path(outputPartitionListFile.get), partitionIds.sorted.mkString(","))
-
       Some(outputDf)
     } else {
       None
@@ -115,7 +117,7 @@ object DataPartitioner {
 
     // Partition validation dataset if the validation input data is provided.
     val validationOutputOpt = if (!IoUtils.isEmptyStr(validationInputDataPath)) {
-      val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath.get, dataFormat)
+      val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath.get, dataFormat, schemaOpt)
       val validationInputScoreOpt = if (!IoUtils.isEmptyStr(validationInputScorePath)) {
         Some(spark.read.avro(validationInputScorePath.get))
       } else {
@@ -199,8 +201,8 @@ object DataPartitioner {
     predictionScorePerCoordinate: String,
     offset: String,
     uid: String,
-    lowerBound: Int,
-    upperBound: Int,
+    lowerBound: Option[Int],
+    upperBound: Option[Int],
     inputMetadataFile: String,
     ifSplitData: Boolean): DataFrame = {
 
@@ -238,7 +240,7 @@ object DataPartitioner {
       }
 
       // Save the passive data. Passive data is generated when there is a lower bound or an upper bound.
-      if (lowerBound > 0 || upperBound > 0) {
+      if (!(lowerBound.isEmpty && upperBound.isEmpty)) {
         val passiveData = dFWithPartitionId.filter(col(GROUP_ID) =!= 0).drop(GROUP_ID)
         if (!passiveData.rdd.isEmpty()) {
           IoUtils.saveDataFrame(
@@ -279,8 +281,8 @@ object DataPartitioner {
    */
   private[data] def boundAndGroupData(
     dataFrame: DataFrame,
-    lowerBound: Int,
-    upperBound: Int,
+    lowerBound: Option[Int],
+    upperBound: Option[Int],
     partitionEntity: String): DataFrame = {
 
     // Get the group id for each entity.
@@ -311,38 +313,44 @@ object DataPartitioner {
    */
   private[data] def getGroupId(
     dataFrame: DataFrame,
-    lowerBound: Int,
-    upperBound: Int,
+    lowerBound: Option[Int],
+    upperBound: Option[Int],
     partitionEntity: String): DataFrame = {
 
     // No lower bound and upper bound. All the samples are active data.
-    if (lowerBound <= 0 && upperBound <= 0) {
-      return dataFrame.withColumn(GROUP_ID, lit(0))
-    }
-
-    // If there's a bound, either lower bound or upper bound, we need to count the samples per-entity.
-    val perEntityCounts = dataFrame
-      .select(partitionEntity)
-      .groupBy(partitionEntity)
-      .count()
-      .select(col(partitionEntity), col(COUNT).alias(PER_ENTITY_TOTAL_SAMPLE_COUNT))
-    val dfWithEntityCount = dataFrame.join(perEntityCounts, partitionEntity)
-
-    // If there's an upper bound, calculate the number of groups needed to bound the data.
-    val dfWithGroupCounts = if (upperBound > 0) {
-      dfWithEntityCount
-        .withColumn(PER_ENTITY_GROUP_COUNT, (col(PER_ENTITY_TOTAL_SAMPLE_COUNT) / upperBound + 1).cast(IntegerType))
+    if (lowerBound.isEmpty && upperBound.isEmpty) {
+      dataFrame.withColumn(GROUP_ID, lit(0))
     } else {
-      dfWithEntityCount.withColumn(PER_ENTITY_GROUP_COUNT, lit(1))
-    }
+      // If there's a bound, either lower bound or upper bound, we need to count the samples per-entity.
+      val perEntityCounts = dataFrame
+        .select(partitionEntity)
+        .groupBy(partitionEntity)
+        .count()
+        .select(col(partitionEntity), col(COUNT).alias(PER_ENTITY_TOTAL_SAMPLE_COUNT))
+      val dfWithEntityCount = dataFrame.join(perEntityCounts, partitionEntity)
 
-    // Assign the group id and drop redundant columns. The group id is uniformly random.
-    // TODO: Explore different sampling strategy.
-    dfWithGroupCounts
-      .withColumn(GROUP_ID,
-        when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lowerBound, -1)
-          .otherwise((col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType)))
-      .drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
+      // If there's an upper bound, calculate the number of groups needed to bound the data.
+      val dfWithGroupCounts = if (!upperBound.isEmpty) {
+        dfWithEntityCount
+          .withColumn(PER_ENTITY_GROUP_COUNT, (col(PER_ENTITY_TOTAL_SAMPLE_COUNT) / upperBound.get + 1).cast(IntegerType))
+      } else {
+        dfWithEntityCount.withColumn(PER_ENTITY_GROUP_COUNT, lit(1))
+      }
+
+      // Assign the group id and drop redundant columns. The group id is uniformly random.
+      // TODO: Explore different sampling strategy.
+      val dfWithGroupId = lowerBound match {
+        case Some(lb) =>
+          dfWithGroupCounts
+          .withColumn(GROUP_ID,
+          when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lb, -1)
+            .otherwise((col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType)))
+        case _ =>
+          dfWithGroupCounts
+            .withColumn(GROUP_ID, (col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType))
+      }
+      dfWithGroupId.drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
+    }
   }
 
   /**

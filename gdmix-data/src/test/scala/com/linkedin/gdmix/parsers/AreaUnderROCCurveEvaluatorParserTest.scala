@@ -13,40 +13,40 @@ class AreaUnderROCCurveEvaluatorParserTest {
     Array(
       Array(
         Seq(
-          "--inputPath", "global/validationScore",
-          "--outputPath", "global/metric/0",
-          "--labelName", "response",
-          "--scoreName", "predictionScore")))
+          "--metricsInputDir", "global/validationScore",
+          "--outputMetricFile", "global/metric/0",
+          "--labelColumnName", "response",
+          "--predictionColumnName", "predictionScore")))
   }
 
   @DataProvider
   def dataIncompleteArgs(): Array[Array[Any]] = {
 
     Array(
-      // miss inputPath
+      // miss metricsInputDir
       Array(
         Seq(
-          "--outputPath", "global/metric/0",
-          "--labelName", "response",
-          "--scoreName", "predictionScore")),
-      // miss outputPath
+          "--outputMetricFile", "global/metric/0",
+          "--labelColumnName", "response",
+          "--predictionColumnName", "predictionScore")),
+      // miss outputMetricFile
       Array(
         Seq(
-          "--inputPath", "global/validationScore",
-          "--labelName", "response",
-          "--scoreName", "predictionScore")),
-      // miss labelName
+          "--metricsInputDir", "global/validationScore",
+          "--labelColumnName", "response",
+          "--predictionColumnName", "predictionScore")),
+      // miss labelColumnName
       Array(
         Seq(
-          "--inputPath", "global/validationScore",
-          "--outputPath", "global/metric/0",
-          "--scoreName", "predictionScore")),
-      // miss scoreName
+          "--metricsInputDir", "global/validationScore",
+          "--outputMetricFile", "global/metric/0",
+          "--predictionColumnName", "predictionScore")),
+      // miss predictionColumnName
       Array(
         Seq(
-          "--inputPath", "global/validationScore",
-          "--outputPath", "global/metric/0",
-          "--labelName", "response"))
+          "--metricsInputDir", "global/validationScore",
+          "--outputMetricFile", "global/metric/0",
+          "--labelColumnName", "response"))
     )
   }
 
@@ -55,10 +55,10 @@ class AreaUnderROCCurveEvaluatorParserTest {
 
     val params = AreaUnderROCCurveEvaluatorParser.parse(completeArgs)
     val expectedParams = AreaUnderROCCurveEvaluatorParams(
-      inputPath = "global/validationScore",
-      outputPath = "global/metric/0",
-      labelName = "response",
-      scoreName = "predictionScore"
+      metricsInputDir = "global/validationScore",
+      outputMetricFile = "global/metric/0",
+      labelColumnName = "response",
+      predictionColumnName = "predictionScore"
     )
     assertEquals(params, expectedParams)
   }

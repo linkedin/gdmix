@@ -96,8 +96,8 @@ class DataPartitionerTest extends SharedSparkSession {
   @Test()
   def testGetGroupIdAvro(): Unit = {
     val dfAvro = createAvroDataFrame(uid, entityId, label, indices, values)
-    val lowerBound = 2
-    val upperBound = 4
+    val lowerBound = Some(2)
+    val upperBound = Some(4)
 
     val dfWithGroupId = DataPartitioner.getGroupId(dfAvro, lowerBound, upperBound, ENTITY_ID)
 
@@ -121,8 +121,8 @@ class DataPartitionerTest extends SharedSparkSession {
   @Test()
   def testGetGroupIdTfRecord(): Unit = {
     val dfTfRecord = createTfRecordDataFrame(uid, entityId, label, indices, values)
-    val lowerBound = 2
-    val upperBound = 4
+    val lowerBound = Some(2)
+    val upperBound = Some(4)
 
     val dfWithGroupId = DataPartitioner.getGroupId(dfTfRecord, lowerBound, upperBound, ENTITY_ID)
 
@@ -146,8 +146,8 @@ class DataPartitionerTest extends SharedSparkSession {
   @Test()
   def testBoundAndGroupDataAvro(): Unit = {
     val dfAvro = createAvroDataFrame(uid, entityId, label, indices, values)
-    val lowerBound = 2
-    val upperBound = 4
+    val lowerBound = Some(2)
+    val upperBound = Some(4)
     val dfGrouped = DataPartitioner
       .boundAndGroupData(dfAvro, lowerBound, upperBound, ENTITY_ID)
 
@@ -191,8 +191,8 @@ class DataPartitionerTest extends SharedSparkSession {
   @Test()
   def testBoundAndGroupDataTfRecord(): Unit = {
     val dfTfRecord = createTfRecordDataFrame(uid, entityId, label, indices, values)
-    val lowerBound = 2
-    val upperBound = 4
+    val lowerBound = Some(2)
+    val upperBound = Some(4)
     val dfGrouped = DataPartitioner
       .boundAndGroupData(dfTfRecord, lowerBound, upperBound, ENTITY_ID)
 

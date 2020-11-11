@@ -6,19 +6,19 @@ import com.linkedin.gdmix.utils.Constants._
  * Parameters for offset update job.
  */
 case class OffsetUpdaterParams(
-  trainInputDataPath: String,
-  trainInputScorePath: String,
-  trainPerCoordinateScorePath: String,
-  trainOutputDataPath: String,
-  validationInputDataPath: Option[String] = None,
-  validationInputScorePath: Option[String] = None,
-  validationPerCoordinateScorePath: Option[String] = None,
-  validationOutputDataPath: Option[String] = None,
-  predictionScore: String = PREDICTION_SCORE,
-  predictionScorePerCoordinate: String = PREDICTION_SCORE_PER_COORDINATE,
+  trainingDataDir: String,
+  trainingScoreDir: String,
+  trainingScorePerCoordinateDir: String,
+  outputTrainingDataDir: String,
+  validationDataDir: Option[String] = None,
+  validationScoreDir: Option[String] = None,
+  validationScorePerCoordinateDir: Option[String] = None,
+  outputValidationDataDir: Option[String] = None,
+  predictionScoreColumnName: String = PREDICTION_SCORE,
+  predictionScorePerCoordinateColumnName: String = PREDICTION_SCORE_PER_COORDINATE,
   dataFormat: String = AVRO,
-  offset: String = OFFSET,
-  uid: String = UID
+  offsetColumnName: String = OFFSET,
+  uidColumnName: String = UID
 )
 
 /**
@@ -28,62 +28,62 @@ object OffsetUpdaterParser {
   private val offsetUpdaterParser = new scopt.OptionParser[OffsetUpdaterParams](
     "Parsing command line for offset updater job.") {
 
-    opt[String]("trainInputDataPath").action((x, p) => p.copy(trainInputDataPath = x.trim))
+    opt[String]("trainingDataDir").action((x, p) => p.copy(trainingDataDir = x.trim))
       .required
       .text(
         """Required.
           |Training input dataset path.""".stripMargin)
 
-    opt[String]("trainInputScorePath").action((x, p) => p.copy(trainInputScorePath = x.trim))
+    opt[String]("trainingScoreDir").action((x, p) => p.copy(trainingScoreDir = x.trim))
       .required
       .text(
         """Required.
           |Training input score path.""".stripMargin)
 
-    opt[String]("trainPerCoordinateScorePath").action((x, p) => p.copy(trainPerCoordinateScorePath = x.trim))
+    opt[String]("trainingScorePerCoordinateDir").action((x, p) => p.copy(trainingScorePerCoordinateDir = x.trim))
       .required
       .text(
         """Required.
           |Path to the per-coordinate training score of the previous iteration.""".stripMargin)
 
-    opt[String]("trainOutputDataPath").action((x, p) => p.copy(trainOutputDataPath = x.trim))
+    opt[String]("outputTrainingDataDir").action((x, p) => p.copy(outputTrainingDataDir = x.trim))
       .required
       .text(
         """Required.
           |Output path for training data.""".stripMargin)
 
-    opt[String]("validationInputDataPath").action((x, p) => p.copy(validationInputDataPath = if (x.trim.isEmpty) None else Some(x.trim)))
+    opt[String]("validationDataDir").action((x, p) => p.copy(validationDataDir = if (x.trim.isEmpty) None else Some(x.trim)))
       .optional
       .text(
         """Optional.
           |Validation input dataset path.""".stripMargin)
 
 
-    opt[String]("validationInputScorePath").action((x, p) => p.copy(validationInputScorePath = if (x.trim.isEmpty) None else Some(x.trim)))
+    opt[String]("validationScoreDir").action((x, p) => p.copy(validationScoreDir = if (x.trim.isEmpty) None else Some(x.trim)))
       .optional
       .text(
         """Optional.
           |Validation input score path.""".stripMargin)
 
-    opt[String]("validationPerCoordinateScorePath").action((x, p) => p.copy(validationPerCoordinateScorePath = if (x.trim.isEmpty) None else Some(x.trim)))
+    opt[String]("validationScorePerCoordinateDir").action((x, p) => p.copy(validationScorePerCoordinateDir = if (x.trim.isEmpty) None else Some(x.trim)))
       .optional
       .text(
         """Optional.
           |Path to the per-coordinate validation score of the previous iteration.""".stripMargin)
 
-    opt[String]("validationOutputDataPath").action((x, p) => p.copy(validationOutputDataPath = if (x.trim.isEmpty) None else Some(x.trim)))
+    opt[String]("outputValidationDataDir").action((x, p) => p.copy(outputValidationDataDir = if (x.trim.isEmpty) None else Some(x.trim)))
       .optional
       .text(
         """Optional.
           |Output path for validation data.""".stripMargin)
 
-    opt[String]("predictionScore").action((x, p) => p.copy(predictionScore = x.trim))
+    opt[String]("predictionScoreColumnName").action((x, p) => p.copy(predictionScoreColumnName = x.trim))
       .optional
       .text(
         """Optional.
           |Column name of prediction score.""".stripMargin)
 
-    opt[String]("predictionScorePerCoordinate").action((x, p) => p.copy(predictionScorePerCoordinate = x.trim))
+    opt[String]("predictionScorePerCoordinateColumnName").action((x, p) => p.copy(predictionScorePerCoordinateColumnName = x.trim))
       .optional
       .text(
         """Optional.
@@ -95,13 +95,13 @@ object OffsetUpdaterParser {
         """Optional.
           |Data format, either avro or tfrecord.""".stripMargin)
 
-    opt[String]("offset").action((x, p) => p.copy(offset = x.trim))
+    opt[String]("offsetColumnName").action((x, p) => p.copy(offsetColumnName = x.trim))
       .optional
       .text(
         """Optional.
           |Column name of offset.""".stripMargin)
 
-    opt[String]("uid").action((x, p) => p.copy(uid = x.trim))
+    opt[String]("uidColumnName").action((x, p) => p.copy(uidColumnName = x.trim))
       .optional
       .text(
         """Optional.
@@ -111,10 +111,10 @@ object OffsetUpdaterParser {
 
   def parse(args: Seq[String]): OffsetUpdaterParams = {
     val emptyOffsetUpdaterParams = OffsetUpdaterParams(
-      trainInputDataPath = "",
-      trainInputScorePath = "",
-      trainPerCoordinateScorePath = "",
-      trainOutputDataPath = ""
+      trainingDataDir = "",
+      trainingScoreDir = "",
+      trainingScorePerCoordinateDir = "",
+      outputTrainingDataDir = ""
     )
     offsetUpdaterParser.parse(args, emptyOffsetUpdaterParams) match {
       case Some(params) => params

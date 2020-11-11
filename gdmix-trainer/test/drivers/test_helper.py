@@ -30,17 +30,17 @@ def setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT,
     params = {constants.ACTION: "train",
               constants.STAGE: training_stage,
               constants.MODEL_TYPE: model_type,
-              constants.TRAINING_OUTPUT_DIR: "dummy_training_output_dir",
-              constants.VALIDATION_OUTPUT_DIR: "dummy_validation_output_dir",
+              constants.TRAINING_SCORE_DIR: "dummy_training_output_dir",
+              constants.VALIDATION_SCORE_DIR: "dummy_validation_output_dir",
 
               constants.PARTITION_LIST_FILE: os.path.join(os.getcwd(), "test/resources/metadata",
                                                           "partition_list.txt"),
 
-              constants.SAMPLE_ID: "uid",
-              constants.SAMPLE_WEIGHT: "weight",
-              constants.LABEL: "response",
-              constants.PREDICTION_SCORE: "predictionScore",
-              constants.PREDICTION_SCORE_PER_COORDINATE: "predictionScorePerCoordinate"
+              constants.UID_COLUMN_NAME: "uid",
+              constants.WEIGHT_COLUMN_NAME: "weight",
+              constants.LABEL_COLUMN_NAME: "response",
+              constants.PREDICTION_SCORE_COLUMN_NAME: "predictionScore",
+              constants.PREDICTION_SCORE_PER_COORDINATE_COLUMN_NAME: "predictionScorePerCoordinate"
               }
     params = Params(**params)
     object.__delattr__(params, '__frozen__')  # Allow the test code to mutate the params.
@@ -48,28 +48,32 @@ def setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT,
 
 
 def setup_fake_raw_model_params(training_stage=constants.FIXED_EFFECT):
-    raw_model_params = [f"--{constants.SAMPLE_ID}", "uid", f"--{constants.SAMPLE_WEIGHT}", "weight",
-                        f"--{constants.FEATURE_BAGS}", "global",
-                        f"--{constants.TRAIN_DATA_PATH}", os.path.join(os.getcwd(), "test/resources/train"),
-                        f"--{constants.VALIDATION_DATA_PATH}",
+    raw_model_params = [f"--{constants.UID_COLUMN_NAME}", "uid", f"--{constants.WEIGHT_COLUMN_NAME}", "weight",
+                        f"--{constants.TRAINING_DATA_DIR}", os.path.join(os.getcwd(), "test/resources/train"),
+                        f"--{constants.VALIDATION_DATA_DIR}",
                         os.path.join(os.getcwd(), "test/resources/validate"),
-                        f"--{constants.MODEL_OUTPUT_DIR}", "dummy_model_output_dir",
+                        f"--{constants.OUTPUT_MODEL_DIR}", "dummy_model_output_dir",
                         f"--{constants.METADATA_FILE}",
-                        os.path.join(os.getcwd(), "test/resources/fe_lbfgs/metadata/tensor_metadata.json"),
-                        f"--{constants.FEATURE_FILE}", "test/resources/fe_lbfgs/featureList/global",
+                        os.path.join(os.getcwd(), "test/resources/fe_lbfgs/metadata/tensor_metadata.json")
                         ]
     if training_stage == constants.RANDOM_EFFECT:
-        raw_model_params.append(f"--{constants.FEATURE_BAGS}")
+        raw_model_params.append(f"--{constants.FEATURE_BAG}")
         raw_model_params.append("per_member")
-        raw_model_params.append(f"--{constants.OFFSET}")
+        raw_model_params.append(f"--{constants.OFFSET_COLUMN_NAME}")
         raw_model_params.append("offset")
+    else:
+        raw_model_params.append(f"--{constants.FEATURE_BAG}")
+        raw_model_params.append("global")
+        raw_model_params.append(f"--{constants.FEATURE_FILE}")
+        raw_model_params.append("test/resources/fe_lbfgs/featureList/global",)
+
     return raw_model_params
 
 
 def setup_fake_schema_params():
-    return SchemaParams(**{constants.SAMPLE_ID: "uid",
-                           constants.SAMPLE_WEIGHT: "weight",
-                           constants.LABEL: "response",
-                           constants.PREDICTION_SCORE: "predictionScore",
-                           constants.PREDICTION_SCORE_PER_COORDINATE: "predictionScorePerCoordinate"
+    return SchemaParams(**{constants.UID_COLUMN_NAME: "uid",
+                           constants.WEIGHT_COLUMN_NAME: "weight",
+                           constants.LABEL_COLUMN_NAME: "response",
+                           constants.PREDICTION_SCORE_COLUMN_NAME: "predictionScore",
+                           constants.PREDICTION_SCORE_PER_COORDINATE_COLUMN_NAME: "predictionScorePerCoordinate"
                            })

@@ -179,11 +179,11 @@ def per_entity_grouped_input_fn(input_path, metadata_file, num_shards, shard_ind
             sequence_features = dict()
             context_features = dict()
             for tensor in tensors:
+                tensor_dtype = DatasetMetadata.map_int(tensor.dtype)
                 if tensor.name == entity_name:
                     # entity_name column is a scalar
-                    context_features[entity_name] = tf.io.FixedLenFeature(shape=[], dtype=tf.int64)
+                    context_features[entity_name] = tf.io.FixedLenFeature(shape=[], dtype=tensor_dtype)
                 else:
-                    tensor_dtype = DatasetMetadata.map_int(tensor.dtype)
                     if tensor.isSparse:
                         # If this is a sparse tensor, we process indices and values separately.
                         # Note in the metadata, we don't see _indices and _values,

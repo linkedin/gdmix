@@ -28,18 +28,18 @@ object OffsetUpdater {
   def run(spark: SparkSession, params: OffsetUpdaterParams): Unit = {
 
     // Parse the commandline option.
-    val trainInputDataPath = params.trainInputDataPath
-    val trainInputScorePath = params.trainInputScorePath
-    val trainPerCoordinateScorePath = params.trainPerCoordinateScorePath
-    val trainOutputDataPath = params.trainOutputDataPath
-    val validationInputDataPath = params.validationInputDataPath
-    val validationInputScorePath = params.validationInputScorePath
-    val validationPerCoordinateScorePath = params.validationPerCoordinateScorePath
-    val validationOutputDataPath = params.validationOutputDataPath
-    val predictionScore = params.predictionScore
-    val predictionScorePerCoordinate = params.predictionScorePerCoordinate
-    val offset = params.offset
-    val uid = params.uid
+    val trainInputDataPath = params.trainingDataDir
+    val trainInputScorePath = params.trainingScoreDir
+    val trainPerCoordinateScorePath = params.trainingScorePerCoordinateDir
+    val trainOutputDataPath = params.outputTrainingDataDir
+    val validationInputDataPath = params.validationDataDir
+    val validationInputScorePath = params.validationScoreDir
+    val validationPerCoordinateScorePath = params.validationScorePerCoordinateDir
+    val validationOutputDataPath = params.outputValidationDataDir
+    val predictionScore = params.predictionScoreColumnName
+    val predictionScorePerCoordinate = params.predictionScorePerCoordinateColumnName
+    val offset = params.offsetColumnName
+    val uid = params.uidColumnName
     val dataFormat = params.dataFormat
 
     // Create a Spark session.

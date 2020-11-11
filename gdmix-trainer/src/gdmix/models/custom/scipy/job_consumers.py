@@ -69,11 +69,11 @@ class InferenceJobConsumer:
         params = self.schema_params
         records = []
         for i in range(batch_size):
-            record = {params.prediction_score: predicts[i], params.sample_weight: sample_weights[i], params.sample_id: sample_ids[i]}
+            record = {params.prediction_score_column_name: predicts[i], params.weight_column_name: sample_weights[i], params.uid_column_name: sample_ids[i]}
             if labels is not None:
-                record[params.label] = labels[i]
+                record[params.label_column_name] = labels[i]
             if predicts_per_coordinate is not None:
-                record[params.prediction_score_per_coordinate] = predicts_per_coordinate[i]
+                record[params.prediction_score_per_coordinate_column_name] = predicts_per_coordinate[i]
             records.append(record)
         return records
 
@@ -126,19 +126,31 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
         X_index = 0
         y_index = 0
         for entity in range(num_entities):
+            ids_indices = features_val[schema_params.uid_column_name].indices
+            rows = ids_indices[np.where(ids_indices[:, 0] == entity)][:, 1]
+            sample_count_from_ids = rows.size
+            if model_params.feature_bag is None:
+                # intercept only model
+                assert(num_features == 1)
+                sample_count = sample_count_from_ids
+                values = np.zeros(sample_count)
+                cols = np.zeros(sample_count, dtype=int)
+            else:
+                # Construct data matrix X. Slice portion of arrays from X_index through the number of rows for the entity
+                features = features_val[model_params.feature_bag + INDICES_SUFFIX]
+                indices = features.indices
+                rows = indices[np.where(indices[:, 0] == entity)][:, 1]
+                cols = features.values[X_index: X_index + len(rows)]
+                values = features_val[model_params.feature_bag + VALUES_SUFFIX].values[X_index: X_index + len(rows)]
+
+                # Get sample count
+                sample_count = np.amax(rows) + 1
+
+                # sanity check
+                assert(sample_count == sample_count_from_ids)
+
             # Construct entity ID
-            entity_id = features_val[model_params.partition_entity][entity]
-
-            # Construct data matrix X. Slice portion of arrays from X_index through the number of rows for the entity
-            features = features_val[model_params.feature_bags[0] + INDICES_SUFFIX]
-            indices = features.indices
-            rows = indices[np.where(indices[:, 0] == entity)][:, 1]
-            cols = features.values[X_index: X_index + len(rows)]
-            values = features_val[model_params.feature_bags[0] + VALUES_SUFFIX].values[X_index: X_index + len(rows)]
-
-            # Get sample count
-            sample_count = np.amax(rows) + 1
-
+            entity_id = str(features_val[model_params.partition_entity][entity])
             result = model_weights.get(entity_id, None)
             if gen_index_map:
                 # Locally index the column values, and preserve mapping to global space
@@ -149,14 +161,15 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
                 X = coo_matrix((values, (rows, cols)), shape=(sample_count, num_features))
 
             # Construct y, offsets, weights and ids. Slice portion of arrays from y_index through sample_count
-            y = labels_val[schema_params.label].values[y_index: y_index + sample_count]
+            y = labels_val[schema_params.label_column_name].values[y_index: y_index + sample_count]
             offsets = features_val[model_params.offset].values[y_index: y_index + sample_count]
-            weights = (features_val[schema_params.sample_weight].values[y_index: y_index + sample_count]
-                       if schema_params.sample_weight in features_val else np.ones(sample_count))
+            weights = (features_val[schema_params.weight_column_name].values[y_index: y_index + sample_count]
+                       if schema_params.weight_column_name in features_val else np.ones(sample_count))
 
-            ids = features_val[schema_params.sample_id].values[y_index: y_index + sample_count]
+            ids = features_val[schema_params.uid_column_name].values[y_index: y_index + sample_count]
 
-            yield Job(entity_id, X, y, offsets, weights, ids, unique_global_indices, theta=result.theta if result else None)
+            yield Job(entity_id, X, y, offsets, weights, ids, unique_global_indices,
+                      theta=result.theta if result else None)
 
             # Update X_index and y_index
             y_index += sample_count

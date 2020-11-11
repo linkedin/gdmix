@@ -18,8 +18,8 @@ from gdmix.models.custom.base_lr_params import LRParams
 from gdmix.params import SchemaParams, Params
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
-from gdmix.util.io_utils import read_json_file, try_write_avro_blocks, export_linear_model_to_avro, \
-    load_linear_models_from_avro, copy_files, get_inference_output_avro_schema
+from gdmix.util.io_utils import add_dummy_weight, read_json_file, try_write_avro_blocks,\
+    export_linear_model_to_avro, load_linear_models_from_avro, copy_files, get_inference_output_avro_schema
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -65,20 +65,18 @@ class FixedEffectLRModelLBFGS(Model):
 
     def __init__(self, raw_model_params, base_training_params: Params):
         self.model_params: FixedLRParams = self._parse_parameters(raw_model_params)
-        self.training_output_dir = base_training_params.training_output_dir
-        self.validation_output_dir = base_training_params.validation_output_dir
+        self.training_output_dir = base_training_params.training_score_dir
+        self.validation_output_dir = base_training_params.validation_score_dir
         self.local_training_input_dir = "local_training_input_dir"
         self.lbfgs_iteration = 0
-        self.training_data_path = self.model_params.train_data_path
-        self.validation_data_path = self.model_params.validation_data_path
+        self.training_data_dir = self.model_params.training_data_dir
+        self.validation_data_dir = self.model_params.validation_data_dir
         self.metadata_file = self.model_params.metadata_file
-        self.feature_file = self.model_params.feature_file
-        self.checkpoint_path = self.model_params.model_output_dir
+        self.checkpoint_path = self.model_params.output_model_dir
         self.data_format = self.model_params.data_format
-
-        self.feature_bag_name = self.model_params.feature_bags[0]
         self.offset_column_name = self.model_params.offset
-
+        self.feature_bag_name = self.model_params.feature_bag
+        self.feature_file = self.model_params.feature_file if self.feature_bag_name else None
         self.batch_size = int(self.model_params.batch_size)
         self.copy_to_local = self.model_params.copy_to_local
         self.num_correction_pairs = self.model_params.num_of_lbfgs_curvature_pairs
@@ -99,10 +97,10 @@ class FixedEffectLRModelLBFGS(Model):
         self.server = None
 
         # validate parameters:
-        assert len(self.model_params.feature_bags) == 1, "Only support one feature bag"
-        assert self.global_num_samples > 0,\
+        assert self.global_num_samples > 0, \
             "Number of training samples must be set in the metadata and be positive"
-        assert self.feature_file and tf1.io.gfile.exists(self.feature_file), \
+        assert self.feature_file is None or \
+            (self.feature_file and tf1.io.gfile.exists(self.feature_file)), \
             "feature file {} doesn't exist".format(self.feature_file)
 
     def _load_metadata(self):
@@ -124,14 +122,33 @@ class FixedEffectLRModelLBFGS(Model):
 
     def _get_num_features(self):
         """ Get number of features from metadata. """
-        num_features = next(filter(lambda x: x.name == self.feature_bag_name,
-                                   self.tensor_metadata.get_features())).shape[0]
+        if self.feature_bag_name is None:
+            # intercept only model, we pad one dummy feature of zero value.
+            num_features = 1
+        else:
+            num_features = self.tensor_metadata.get_feature_shape(self.feature_bag_name)[0]
         assert num_features > 0, "number of features must > 0"
         return num_features
 
     def _has_feature(self, feature_column_name):
         """ Check if tensor schema has the provided feature field. """
         return feature_column_name in self.tensor_metadata.get_feature_names()
+
+    @staticmethod
+    def _get_feature_bag_tensor(all_features, feature_bag, batch_size):
+        """
+        Method to get feature tensor. If feature exists, it will return the feature tensor.
+        If this is an intercept only model, e.g. no feature exists, it will return a all zero tensor.
+        :param all_features: a dict with all features.
+        :param feature_bag: feature bag name
+        :param batch_size: batch size
+        :return: feature tensor
+        """
+        if feature_bag:
+            feature_tensor = all_features[feature_bag]
+        else:
+            feature_tensor = tf1.sparse.SparseTensor(indices=[[0, 0]], values=[0.0], dense_shape=[batch_size, 1])
+        return feature_tensor
 
     def _has_label(self, label_column_name):
         """ Check if tensor schema has the provided label field. """
@@ -169,9 +186,9 @@ class FixedEffectLRModelLBFGS(Model):
         prediction_score_per_coordinate_list = tf1.constant([], tf1.float64)
 
         feature_bag_name = self.feature_bag_name
-        sample_id_column_name = schema_params.sample_id
-        label_column_name = schema_params.label
-        sample_weight_column_name = schema_params.sample_weight
+        sample_id_column_name = schema_params.uid_column_name
+        label_column_name = schema_params.label_column_name
+        sample_weight_column_name = schema_params.weight_column_name
         offset_column_name = self.offset_column_name
         has_offset = self._has_feature(offset_column_name)
         has_label = self._has_label(label_column_name)
@@ -184,9 +201,9 @@ class FixedEffectLRModelLBFGS(Model):
         def body(i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list):
             i += 1
             all_features, all_labels = diter.get_next()
-            features = all_features[feature_bag_name]
             sample_ids = all_features[sample_id_column_name]
             current_batch_size = tf1.shape(sample_ids)[0]
+            features = self._get_feature_bag_tensor(all_features, feature_bag_name, current_batch_size)
             offsets = all_features[offset_column_name] if has_offset else tf1.zeros(current_batch_size, tf1.float64)
             weights = all_features[sample_weight_column_name] if has_weight \
                 else tf1.ones(current_batch_size, tf1.float32)
@@ -224,8 +241,8 @@ class FixedEffectLRModelLBFGS(Model):
         # Add bias
         gradients = tf1.constant(np.zeros(num_features + 1))
         feature_bag_name = self.feature_bag_name
-        label_column_name = schema_params.label
-        sample_weight_column_name = schema_params.sample_weight
+        label_column_name = schema_params.label_column_name
+        sample_weight_column_name = schema_params.weight_column_name
         offset_column_name = self.offset_column_name
         is_regularize_bias = self.is_regularize_bias
         has_weight = self._has_feature(sample_weight_column_name)
@@ -238,9 +255,9 @@ class FixedEffectLRModelLBFGS(Model):
         def body(i, value, gradients):
             i += 1
             all_features, all_labels = diter.get_next()
-            features = all_features[feature_bag_name]
             labels = all_labels[label_column_name]
             current_batch_size = tf1.shape(labels)[0]
+            features = self._get_feature_bag_tensor(all_features, feature_bag_name, current_batch_size)
             weights = all_features[sample_weight_column_name] if has_weight else tf1.ones(current_batch_size,
                                                                                           tf1.float64)
             offsets = all_features[offset_column_name] if has_offset else tf1.zeros(current_batch_size, tf1.float64)
@@ -297,19 +314,19 @@ class FixedEffectLRModelLBFGS(Model):
             self.metadata,
             True,
             schema_params,
-            has_weight=self._has_feature(schema_params.sample_weight))
+            has_weight=self._has_feature(schema_params.weight_column_name))
         parsed_schema = parse_schema(output_avro_schema)
 
         records = []
         for rec_id, rec_label, rec_weight, rec_prediction_score, rec_prediction_score_per_coordinate in \
                 zip(sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate):
-            rec = {schema_params.sample_id: int(rec_id),
-                   schema_params.prediction_score: float(rec_prediction_score),
-                   schema_params.prediction_score_per_coordinate: float(rec_prediction_score_per_coordinate)}
-            if self._has_label(schema_params.label):
-                rec[schema_params.label] = int(rec_label)
-            if self._has_feature(schema_params.sample_weight):
-                rec[schema_params.sample_weight] = int(rec_weight)
+            rec = {schema_params.uid_column_name: int(rec_id),
+                   schema_params.prediction_score_column_name: float(rec_prediction_score),
+                   schema_params.prediction_score_per_coordinate_column_name: float(rec_prediction_score_per_coordinate)}
+            if self._has_label(schema_params.label_column_name):
+                rec[schema_params.label_column_name] = int(rec_label)
+            if self._has_feature(schema_params.weight_column_name):
+                rec[schema_params.weight_column_name] = int(rec_weight)
             records.append(rec)
 
         output_file = os.path.join(output_dir, f"part-{task_index:05d}.avro")
@@ -348,7 +365,7 @@ class FixedEffectLRModelLBFGS(Model):
         num_iterations = int(local_num_samples / self.batch_size) + (1 if local_num_samples % self.batch_size else 0)
         return num_iterations
 
-    def train(self, training_data_path, validation_data_path, metadata_file, checkpoint_path,
+    def train(self, training_data_dir, validation_data_dir, metadata_file, checkpoint_path,
               execution_context, schema_params):
         """ Overwrite train method from parent class. """
         logging("Kicking off fixed effect LR LBFGS training")
@@ -358,7 +375,7 @@ class FixedEffectLRModelLBFGS(Model):
         is_chief = execution_context[constants.IS_CHIEF]
         self._create_server(execution_context)
 
-        assigned_train_files = self._get_assigned_files(training_data_path, num_workers, task_index)
+        assigned_train_files = self._get_assigned_files(training_data_dir, num_workers, task_index)
         if self.copy_to_local:
             train_input_dir = self.local_training_input_dir
             actual_train_files = copy_files(assigned_train_files, train_input_dir)
@@ -366,7 +383,7 @@ class FixedEffectLRModelLBFGS(Model):
             train_num_shards = 1
             train_shard_index = 0
         else:
-            train_input_dir = self.training_data_path
+            train_input_dir = self.training_data_dir
             actual_train_files = assigned_train_files
             train_num_shards = num_workers
             train_shard_index = task_index
@@ -396,7 +413,7 @@ class FixedEffectLRModelLBFGS(Model):
             train_ops = (init_train_dataset_op, value_op, gradients_op)
 
             # Define ops for inference
-            valid_dataset = per_record_input_fn(validation_data_path,
+            valid_dataset = per_record_input_fn(validation_data_dir,
                                                 metadata_file,
                                                 num_workers,
                                                 task_index,
@@ -413,7 +430,7 @@ class FixedEffectLRModelLBFGS(Model):
                     schema_params)
 
             inference_validation_data_diter = tf1.data.make_one_shot_iterator(valid_dataset)
-            assigned_validation_files = self._get_assigned_files(validation_data_path, num_workers, task_index)
+            assigned_validation_files = self._get_assigned_files(validation_data_dir, num_workers, task_index)
             validation_data_num_iterations = self._get_num_iterations(assigned_validation_files)
             valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
                 valid_prediction_score_per_coordinate_op = self._inference_model_fn(
@@ -507,13 +524,20 @@ class FixedEffectLRModelLBFGS(Model):
 
     def _save_model(self):
         """ Save the trained linear model in avro format. """
-        weights = self.model_coefficients[:-1]
         bias = self.model_coefficients[-1]
-        list_of_weight_indices = np.arange(weights.shape[0])
+        if self.feature_bag_name is None:
+            # intercept only model
+            list_of_weight_indices = None
+            list_of_weight_values = None
+        else:
+            weights = self.model_coefficients[:-1]
+            indices = np.arange(weights.shape[0])
+            list_of_weight_values = np.expand_dims(weights, axis=0)
+            list_of_weight_indices = np.expand_dims(indices, axis=0)
         output_file = os.path.join(self.checkpoint_path, "part-00000.avro")
         export_linear_model_to_avro(model_ids=["global model"],
-                                    list_of_weight_indices=np.expand_dims(list_of_weight_indices, axis=0),
-                                    list_of_weight_values=np.expand_dims(weights, axis=0),
+                                    list_of_weight_indices=list_of_weight_indices,
+                                    list_of_weight_values=list_of_weight_values,
                                     biases=np.expand_dims(bias, axis=0),
                                     feature_file=self.feature_file,
                                     output_file=output_file)
@@ -532,6 +556,9 @@ class FixedEffectLRModelLBFGS(Model):
                                  " files found in the model diretory {}".format(self.checkpoint))
         elif not catch_exception:
             raise FileNotFoundError("checkpoint path {} doesn't exist".format(self.checkpoint_path))
+        if self.feature_bag_name is None and model is not None:
+            # intercept only model, add a dummy weight.
+            model = add_dummy_weight(model)
         return model
 
     def export(self, output_model_dir):
@@ -586,8 +613,9 @@ class FixedEffectLRModelLBFGS(Model):
                             task_index,
                             schema_params,
                             output_dir)
-
+        logging("Snooze before closing the session")
         snooze_after_tf_session_closure(tf_session, self.delayed_exit_in_seconds)
+        logging("Closed the session")
 
     def _parse_parameters(self, raw_model_parameters):
         return FixedLRParams.__from_argv__(raw_model_parameters, error_on_unknown=False)

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Optional
 
 
 @dataclass
@@ -7,16 +7,15 @@ class LRParams:
     """Base logistic regression parameters"""
 
     # Input / output files or directories
-    train_data_path: str  # Path of directory holding only training data files.
-    validation_data_path: str  # "Path of directory holding only data files for in-line validation."
     metadata_file: str  # Path to metadata.
-    model_output_dir: str  # Model output directory.
-
+    output_model_dir: str  # Model output directory.
+    training_data_dir: Optional[str] = None  # Path of directory holding only training data files.
+    validation_data_dir: Optional[str] = None  # "Path of directory holding only data files for in-line validation."
     # Column names in the dataset
-    feature_bags: List[str]  # Feature bag names that used for training and scoring.
+    feature_bag: Optional[str] = None  # Feature bag name that is used for training and scoring.
 
     # Arguments for model export
-    feature_file: str  # Feature file for model exporting.
+    feature_file: Optional[str] = None  # Feature file for model exporting.
 
     # Optimizer related parameters
     regularize_bias: bool = True  # Boolean for L2 regularization of bias term.

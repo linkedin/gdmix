@@ -2,7 +2,7 @@ package com.linkedin.gdmix.data
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.types.{ArrayType, FloatType, IntegerType, LongType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.testng.Assert.{assertEquals, assertFalse, assertTrue}
 import org.testng.annotations.Test
 
@@ -196,5 +196,27 @@ class MetadataGeneratorTest {
       .isSparseColumnComponent(inputMap, "xyz"))
     assertFalse(MetadataGenerator
       .isSparseColumnComponent(inputMap, ""))
+  }
+
+  /**
+   * Unit test for [[MetadataGenerator.appendNewFields]].
+   */
+  @Test
+  def testCreateSchemaForTfrecord(): Unit = {
+    val metadataJsonFile = "metadata/ExpectedGlobalMetadata.json"
+    val metadataJson = readFile(null, metadataJsonFile, true)
+    val (featureCols, labelColsOpt) = MetadataGenerator.getFeatureAndLabelColumns(metadataJson)
+    val schemaFields = mutable.ArrayBuffer[StructField]()
+    MetadataGenerator.appendNewFields(schemaFields, featureCols(0))
+    MetadataGenerator.appendNewFields(schemaFields, featureCols(1))
+    labelColsOpt match {
+      case Some(labels) =>
+        MetadataGenerator.appendNewFields(schemaFields, labels(0))
+      case None =>
+    }
+    assertEquals(StructField("global_indices",ArrayType(LongType, true),true), schemaFields(0))
+    assertEquals(StructField("global_values",ArrayType(FloatType, true), true), schemaFields(1))
+    assertEquals(StructField("uid",LongType,true), schemaFields(2))
+    assertEquals(StructField("response",FloatType,true), schemaFields(3))
   }
 }
