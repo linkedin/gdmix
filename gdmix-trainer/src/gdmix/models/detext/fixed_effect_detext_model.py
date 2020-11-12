@@ -2,27 +2,24 @@ import logging
 import os
 
 import detext.run_detext as detext_driver
-import detext.train.train as detext_train
-import detext.utils.misc_utils as detext_utils
 import tensorflow as tf
 from detext.run_detext import DetextArg
-from detext.train.data_fn import input_fn
-from detext.utils import vocab_utils
+from detext.train.data_fn import input_fn_tfrecord
+from detext.train import train_flow_helper, train_model_helper
+from detext.utils import parsing_utils
 from gdmix.models.api import Model
 from gdmix.models.detext_writer import DetextWriter
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
-from tensorflow.contrib.training import HParams
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class FixedEffectDetextEstimatorModel(Model):
+class FixedEffectDetextModel(Model):
     """
-    TF Estimator-based model class to support fixed-effect training.
+    DeText model class to support fixed-effect training.
     """
-    __BEST = 'best_'
 
     def __init__(self, raw_model_params):
         super().__init__(raw_model_params)
@@ -30,8 +27,7 @@ class FixedEffectDetextEstimatorModel(Model):
         #  training_data_dir and validation_data_dir are used by the driver
         self.training_data_dir = self.model_params.train_file
         self.validation_data_dir = self.model_params.dev_file
-        self.best_checkpoint = os.path.join(
-            self.checkpoint_path, FixedEffectDetextEstimatorModel.__BEST + self.model_params.pmetric)
+        self.best_checkpoint = train_flow_helper.get_export_model_variable_dir(self.checkpoint_path)
 
     def train(self,
               training_data_dir,
@@ -60,30 +56,17 @@ class FixedEffectDetextEstimatorModel(Model):
             logger.info("No input dataset is found, returning...")
             return
 
-        inference_dataset = lambda: input_fn(input_pattern=','.join(sharded_dataset_paths),  # noqa: E731
-                                             # DeText uses metadata_path
-                                             metadata_path=self.model_params.metadata_path,
-                                             batch_size=self.model_params.test_batch_size,
-                                             mode=tf.estimator.ModeKeys.EVAL,
-                                             vocab_table=vocab_utils.read_tf_vocab(
-                                                 self.model_params.vocab_file, self.model_params.UNK),
-                                             vocab_table_for_id_ftr=vocab_utils.read_tf_vocab(
-                                                 self.model_params.vocab_file_for_id_ftr,
-                                                 self.model_params.UNK_FOR_ID_FTR),
-                                             feature_names=self.model_params.feature_names,
-                                             CLS=self.model_params.CLS, SEP=self.model_params.SEP,
-                                             PAD=self.model_params.PAD,
-                                             PAD_FOR_ID_FTR=self.model_params.PAD_FOR_ID_FTR,
-                                             max_len=self.model_params.max_len,
-                                             min_len=self.model_params.min_len,
-                                             cnn_filter_window_size=max(
-                                                 self.model_params.filter_window_sizes)
-                                             if self.model_params.ftr_ext == 'cnn' else 0)
+        inference_dataset = input_fn_tfrecord(input_pattern=','.join(sharded_dataset_paths),  # noqa: E731
+                                              batch_size=self.model_params.test_batch_size,
+                                              mode=tf.estimator.ModeKeys.EVAL,
+                                              feature_map=self.model_params.feature_map)
 
-        self.estimator_based_model = detext_train.get_estimator(detext_utils.extend_hparams(HParams(**self.model_params._asdict())),
-                                                                strategy=None,  # local mode
-                                                                best_checkpoint=self.best_checkpoint)
-        output = self.estimator_based_model.predict(inference_dataset, yield_single_examples=False)
+        self.model = train_model_helper.load_model_with_ckpt(
+            parsing_utils.HParams(**self.model_params._asdict()),
+            self.best_checkpoint)
+        output = train_flow_helper.predict_with_additional_info(inference_dataset,
+                                                                self.model,
+                                                                self.model_params.feature_map)
         detext_writer = DetextWriter(schema_params=schema_params)
         shard_index = execution_context[constants.SHARD_INDEX]
         output_file = os.path.join(output_dir, f"part-{shard_index:05d}.avro")

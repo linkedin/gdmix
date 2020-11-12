@@ -76,14 +76,16 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
         self.assertEqual(len(seq), 3)
         # check job properties
         actual_train_job = seq[0]
-        actual_inference_job = seq[1]
-        actual_compute_metric_job = seq[2]
+        actual_inference_training_data_job = seq[1]
+        actual_inference_validation_data_job = seq[2]
+        actual_compute_metric_job = seq[3]
 
         expected_train_job_param = (
             Params(uid_column_name='uid', weight_column_name='weight', label_column_name='response', prediction_score_column_name='predictionScore',
                    prediction_score_per_coordinate_column_name='predictionScorePerCoordinate', action='train', stage='fixed_effect', model_type='detext',
                    training_score_dir='detext-training/global/training_scores', validation_score_dir='detext-training/global/validation_scores'),
-            DetextArg(feature_names=['label', 'doc_query', 'uid', 'wide_ftrs_sp_idx', 'wide_ftrs_sp_val'], ftr_ext='cnn', num_units=64,
+            DetextArg(queyr='query', wide_ftrs='wide_ftrs', doc_text='doc_title', usr_text='user_headline',
+                      wide_ftrs_sp_idx='wide_ftrs_sp_idx', wide_ftrs_sp_val='wide_ftrs_sp_val', ftr_ext='cnn', num_units=64,
                       sp_emb_size=1, num_hidden=[0], num_wide=0, num_wide_sp=45, use_deep=True, elem_rescale=True, use_doc_projection=False,
                       use_usr_projection=False, ltr_loss_fn='pointwise', emb_sim_func=['inner'], num_classes=1, filter_window_sizes=[3], num_filters=50,
                       explicit_empty=False, use_bert_dropout=False, unit_type='lstm', num_layers=1,
@@ -97,7 +99,6 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
                       steps_per_eval=100, keep_checkpoint_max=1, init_weight=0.1, pmetric='auc', all_metrics=['auc'], score_rescale=None,
                       add_first_dim_for_query_placeholder=False, add_first_dim_for_usr_placeholder=False, tokenization='punct', resume_training=False,
                       use_tfr_loss=False, tfr_loss_fn='softmax_loss'))
-
         expected_train_job = ('gdmix_tfjob', 'global-tf-train', '', expected_train_job_param)
         self.assertEqual(expected_train_job, actual_train_job)
 

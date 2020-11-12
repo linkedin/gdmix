@@ -24,8 +24,6 @@ from gdmix.util.io_utils import add_dummy_weight, read_json_file, try_write_avro
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-tf1.disable_eager_execution()
-
 
 def logging(msg):
     """ logging util. """

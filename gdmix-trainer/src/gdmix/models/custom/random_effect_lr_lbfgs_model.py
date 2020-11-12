@@ -26,8 +26,6 @@ from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-tf.compat.v1.disable_eager_execution()
-
 
 @arg_suite
 @dataclasses.dataclass

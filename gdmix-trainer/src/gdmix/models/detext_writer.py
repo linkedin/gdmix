@@ -10,7 +10,7 @@ logger.setLevel(logging.INFO)
 
 class DetextWriter:
     """
-    Helper class to run estimator style inference and write detext model and/or data
+    Helper class to run inference and write detext model and/or data
     """
 
     def __init__(self, schema_params):
@@ -50,10 +50,10 @@ class DetextWriter:
         validation_schema = fastavro.parse_schema(self.get_inference_output_avro_schema())
         # save one batch of score
         try:
-            predict_val = batch_score['scores']
-            ids = batch_score['uid']
-            labels = batch_score['label']
-            weights = batch_score['weight']
+            predict_val = batch_score['score'].numpy()
+            ids = batch_score['uid'].numpy()
+            labels = batch_score['label'].numpy()
+            weights = batch_score['weight'].numpy()
             n_records += self.append_validation_results(validation_results,
                                                         predict_val,
                                                         ids,
