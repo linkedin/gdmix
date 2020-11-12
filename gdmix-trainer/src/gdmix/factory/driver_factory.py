@@ -13,14 +13,14 @@ class DriverFactory:
     """
     Provider class for creating driver and dependencies
 
-    NOTE - for now, only Estimator-based linear models are supported. In the future, the factory will also
+    NOTE - for now, only linear and DeText models are supported. In the future, the factory will also
     accept model type as an input parameter
     """
 
     @staticmethod
     def get_driver(base_training_params, raw_model_params):
         """
-        Create driver and associated dependencies, based on type. Only linear, estimator-based models supported
+        Create driver and associated dependencies, based on type. Only linear and DeText models are supported
         for now
         :param base_training_params:      Parsed base training parameters common to all models. This could including
         path to training data, validation data, metadata file path, learning rate etc.
