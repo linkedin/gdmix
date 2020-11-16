@@ -168,8 +168,13 @@ class RandomEffectLRLBFGSModel(Model):
 
         # Create the job generator
         jobs = prepare_jobs(get_iterator, self.model_params, schema_params, num_features=num_features, model_weights=model_weights, gen_index_map=gen_index_map)
-        # results = map(consumer, jobs)  # Use this line instead of the next for a single process equivalent for easier dubugging
-        return pool.imap_unordered(consumer, jobs, self.model_params.max_training_queue_size)
+        # When the number of consumers is one, use map directly, for easier debugging and for working
+        # around the pickling 2G limit.
+        if self.model_params.num_of_consumers == 1:
+            return map(consumer, jobs)
+        else:
+            # Jobs are pickled, so subject to 2G limit.
+            return pool.imap_unordered(consumer, jobs, self.model_params.max_training_queue_size)
 
     def _save_model(self, output_file, model_coefficients, num_features, feature_file):
         # Create model IDs, biases, weight indices and weight value arrays. Account for local indexing
