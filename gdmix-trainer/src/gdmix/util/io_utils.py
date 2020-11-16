@@ -292,12 +292,13 @@ def dataset_reader(iterator):
     # (Forking after the TensorFlow runtime creates internal threads is unsafe, use config provided in this
     # link -
     # https://github.com/tensorflow/tensorflow/issues/14442)
+    next_item = iterator.get_next()
     with tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(use_per_session_threads=True)) as sess:
         sess.run(iterator.initializer)
         while True:
             try:
                 # Extract and process raw entity data
-                yield sess.run(iterator.get_next())
+                yield sess.run(next_item)
             except tf.errors.OutOfRangeError:
                 break
 

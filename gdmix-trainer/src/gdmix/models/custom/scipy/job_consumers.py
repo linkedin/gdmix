@@ -167,9 +167,16 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
                        if schema_params.weight_column_name in features_val else np.ones(sample_count))
 
             ids = features_val[schema_params.uid_column_name].values[y_index: y_index + sample_count]
-
+            # Check if the prior model is compatible with the current model
+            # Pick up the prior model only if it has the same size of the model to be trained, and the global indices
+            # from the prior model are identical to the current one.
+            prior_model_compatible = (result is not None
+                                      and result.unique_global_indices is not None
+                                      and unique_global_indices is not None
+                                      and result.unique_global_indices.size == unique_global_indices.size
+                                      and (result.unique_global_indices == unique_global_indices).all())
             yield Job(entity_id, X, y, offsets, weights, ids, unique_global_indices,
-                      theta=result.theta if result else None)
+                      theta=result.theta if prior_model_compatible else None)
 
             # Update X_index and y_index
             y_index += sample_count
