@@ -30,7 +30,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "setuptools>=41.0.0",
-        "tensorflow==1.15.2",
+        "tensorflow==2.3.1",
         "tensorflow_ranking==0.1.4",
         "fastavro==0.21.22",
         "decorator==4.4.2",
