@@ -238,7 +238,7 @@ def write_feature_list(features, outfile):
     """Write feature list to file."""
     with open(outfile, 'w') as f:
         for feature in features:
-            f.write(f'{feature}\n')
+            f.write(f'{feature},\n')
 
 
 def convert_to_detext(indf):

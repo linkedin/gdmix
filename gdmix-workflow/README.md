@@ -48,7 +48,7 @@ We'll also need a GDMix config, a reference of training logistic regression mode
 Please see the section [Try out the movieLens example](../README.md#Try-out-the-movieLens-example) in the root [README.md](../README.md) for details of how to run the movieLens example on single node.
 
 ### Run on Kubernetes for distributed training
-To run on Kubernetes, as mentioned earlier, user will need to copy the processed movieLens data to the centralized storage, modify the input path fields such as `train_data_path`,  `validation_data_path`, `feature_file` and `metadata_file` of the GDMix config for distributed training [lr-distributed-movieLens.config](examples/movielens-100k/lr-distributed-movieLens.config).
+To run on Kubernetes, as mentioned earlier, user will need to copy the processed movieLens data to the centralized storage, modify the input path fields such as `training_data_dir`,  `validation_data_dir`, `feature_file` and `metadata_file` of the GDMix config for distributed training [lr-distributed-movieLens.config](examples/movielens-100k/lr-distributed-movieLens.config).
 
 If using the provided image [linkedin/gdmix](https://hub.docker.com/repository/docker/linkedin/gdmix), user can mount the processed movieLens data from the centralized storage to path `/workspace/notebook/movieLens` for each worker then no change is needed for the distributed training GDMix config [lr-distributed-movieLens.config](examples/movielens-100k/resources/lr-distributed-movieLens.config).
 

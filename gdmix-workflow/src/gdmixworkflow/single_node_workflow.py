@@ -17,7 +17,7 @@ def create_output_dirs(gdmix_config_obj):
         if os.path.isdir(root_dir):
             shutil.rmtree(root_dir)
         os.makedirs(root_dir)
-        for sub_dir_name in [MODELS, METRIC, TRAIN_SCORES, VALIDATION_SCORES]:
+        for sub_dir_name in [MODELS, METRIC, TRAINING_SCORES, VALIDATION_SCORES]:
             sub_dir = path_join(root_dir, sub_dir_name)
             os.makedirs(sub_dir)
 
@@ -32,7 +32,7 @@ def create_output_dirs(gdmix_config_obj):
             create_subdirs(root_dir)
 
             num_partitions = re_config.num_partitions
-            for score_output_name in [TRAIN_SCORES, VALIDATION_SCORES]:
+            for score_output_name in [TRAINING_SCORES, VALIDATION_SCORES]:
                 sub_dir = path_join(root_dir, score_output_name)
                 for idx in range(num_partitions):
                     os.makedirs(path_join(sub_dir, "partitionId={}".format(idx)))

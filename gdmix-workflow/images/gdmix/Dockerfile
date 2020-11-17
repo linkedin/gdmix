@@ -5,6 +5,9 @@ USER root
 # Set default shell to /bin/bash
 SHELL ["/bin/bash", "-cu"]
 
+ENV PYTHON_VERSION=3.7.4
+ENV GDMIX_DATA_VERSION=0.3.0
+
 # Install required tools and libraries
 RUN yum update -y
 RUN yum  install -y \
@@ -20,20 +23,37 @@ RUN yum  install -y \
     unzip \
     tree \
     curl \
-    python3-devel \
-    python3
+    gcc \
+    libffi-devel \
+    make \
+    sqlite-devel
+
 ENV JAVA_HOME=/etc/alternatives/jre
 
-RUN yum groupinstall -y 'Development Tools'
+# Install python 3.7.4
+RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz
+RUN tar xzf Python-${PYTHON_VERSION}.tgz && \
+    cd Python-${PYTHON_VERSION} && \
+    ./configure --enable-optimizations --enable-loadable-sqlite-extensions && \
+    make -j16 altinstall
+RUN cd .. && rm -rf Python*
 
 # Make python3 the default python
 RUN rm -rf /usr/bin/python && \
-    ln -s /usr/bin/python3 /usr/bin/python && \
-    ln -s /usr/bin/pip3 /usr/bin/pip
+    ln -s /usr/local/bin/python3.7 /usr/bin/python && \
+    ln -s /usr/local/bin/pip3.7 /usr/bin/pip
 
 # Yum uses python2, update its interpreter
 RUN sed -i 's/python/python2/g' /usr/bin/yum
 RUN sed -i 's/python/python2/g' /usr/libexec/urlgrabber-ext-down
+
+# Install GDMix trainer and workflow packages
+RUN pip install gdmix-trainer \
+                gdmix-workflow \
+                pandas \
+                notebook \
+                jupyter_contrib_nbextensions
+RUN jupyter contrib nbextension install
 
 # Install spark 2.4.7 and its dependencies
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
@@ -66,21 +86,10 @@ ENV SPARK_HOME /opt/spark
 ENV PATH /opt/spark/bin:$PATH
 ENV SPARK_CLASSPATH=$SPARK_CLASSPATH:/opt/spark/jars/
 
-# Install GDMix trainer and workflow packages
-RUN pip install gdmix-trainer \
-                gdmix-workflow \
-                pandas \
-                notebook \
-                jupyter_contrib_nbextensions
-RUN jupyter contrib nbextension install
-
-RUN rm -rf ~/.gradle/caches/* ~/.cache/pip/* /var/cache/yum/* && yum clean all
-
 WORKDIR /workspace/notebook
 
 # Download gdmix-data jar for intermediate data processing
-RUN wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.2.0/gdmix-data-all_2.11-0.2.0.jar \
-    -O gdmix-data-all_2.11.jar
+RUN wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/${GDMIX_DATA_VERSION}/gdmix-data-all_2.11-${GDMIX_DATA_VERSION}.jar -O gdmix-data-all_2.11.jar
 
 # Download and process movieLens data
 ADD download_process_movieLens_data.py .
@@ -88,3 +97,5 @@ RUN python download_process_movieLens_data.py
 
 # Add gdmix config examples
 ADD *.config ./
+
+RUN rm -rf ~/.gradle/caches/* ~/.cache/pip/* /var/cache/yum/* && yum clean all

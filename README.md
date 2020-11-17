@@ -36,7 +36,8 @@ User will need to :
 - Download the `gdmix-data` fat jar for intermediate data processing
 - Install the `gdmix-trainer` and `gdmix-workflow` python packages
 ```
-wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.2.0/gdmix-data-all_2.11-0.2.0.jar -O gdmix-data-all_2.11.jar
+version=0.3.0
+wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
 
 pip install gdmix-trainer gdmix-workflow
 ```
@@ -185,11 +186,11 @@ python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config -
 
 ### Run GDMix directly
 To run GDMix directly, user will need to follow the instruction in the section [As user](#As-user), we elaborate the steps below.
-Spark installation is required as we haven't supported PySpark yet. We present how to install Spark 2.4.6 on CentOS/RHEL 7.x below, installation on other systems can be done similarly.
+Spark installation is required as we haven't supported PySpark yet. We present how to install Spark 2.4.7 on CentOS/RHEL 7.x below, installation on other systems can be done similarly.
 ```
 yum  install -y java-1.8.0-openjdk
 export JAVA_HOME=/etc/alternatives/jre
-spark_version=2.4.6
+spark_version=2.4.7
 spark_pkg=spark-${spark_version}-bin-hadoop2.7
 wget https://downloads.apache.org/spark/spark-${spark_version}/${spark_pkg}.tgz
 mkdir /opt/spark
@@ -216,7 +217,8 @@ python download_process_movieLens_data.py
 ```
 Download the `gdmix-data` fat jar for spark to process intermediate data:
 ```
-wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/0.2.0/gdmix-data-all_2.11-0.2.0.jar -O gdmix-data-all_2.11.jar
+version=0.3.0
+wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
 ```
 Install python packages `gdmix-trainer` and `gdmix-workflow`:
 ```
