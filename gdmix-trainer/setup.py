@@ -6,13 +6,13 @@ from sys import version_info as _py_version
 import sys
 
 
-VERSION="0.2.1"
+VERSION="0.3.0"
 current_dir = Path(__file__).resolve().parent
 with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-if _py_version < (3, 3):
-    print('\nrequires at least Python 3.3!')
+if _py_version < (3, 7):
+    print('\nrequires at least Python 3.7!')
     sys.exit(1)
 
 if _platform not in ["linux", "linux2", "darwin"]:
@@ -34,7 +34,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "setuptools>=41.0.0",
-        "tensorflow==1.14.0",
+        "tensorflow==1.15.2",
         "tensorflow_ranking==0.1.4",
         "fastavro==0.21.22",
         "decorator==4.4.2",
@@ -42,7 +42,6 @@ setup(
         "psutil==5.7.0",
         "scipy==1.3.2",
         "scikit-learn==0.21.2",
-        "dataclasses==0.7",
         "smart-arg==0.2.12"
     ],
     tests_require=['pytest']

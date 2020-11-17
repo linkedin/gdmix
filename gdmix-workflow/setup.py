@@ -6,13 +6,13 @@ from sys import version_info as _py_version
 import sys
 
 
-VERSION="0.2.1"
+VERSION="0.3.0"
 current_dir = Path(__file__).resolve().parent
 with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-if _py_version < (3, 3):
-    print('\nrequires at least Python 3.3!')
+if _py_version < (3, 7):
+    print('\nrequires at least Python 3.7!')
     sys.exit(1)
 
 if _platform not in ["linux", "linux2", "darwin"]:

@@ -20,9 +20,9 @@ allprojects {
 
 // The gradle variables defined here are visible in sub-projects
 ext {
-  sparkVersion = '2.4.6'
+  sparkVersion = '2.4.7'
   scalaSuffix = "_2.11"
-  gdmixDataVersion = "0.2.0"
+  gdmixDataVersion = "0.3.0"
   pomConfig = {
       licenses {
           license {

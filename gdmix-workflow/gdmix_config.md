@@ -6,33 +6,32 @@ configs for Tensorflow and Spark jobs are needed.
 
 GDMix config examples for movieLens with a fixed-effect `global` model and two random effect `per-user` and `per-movie` models are available in directory `examples/movielens-100k`:
   - [lr-single-node-movieLens.config](examples/movielens-100k/lr-single-node-movieLens.config): train logistic regression models for the `global`, `per-user` and `per-movie` models
-  - [lr-distributed-movieLens.config](examples/movielens-100k/lr-distributed-movieLens.config): Same as above plus resource config for distributed training
-  - [detext-single-node-movieLens.config](examples/movielens-100k/detext-single-node-movieLens.config): traing deep and wide neural network model for the `global` and logistic regression models for the `per-user` and `per-movie`
-  - [detext-distributed-movieLens.config](examples/movielens-100k/detext-distributed-movieLens.config): Same as above plus resource config for distributed training
+  - [lr-distributed-movieLens.config](examples/movielens-100k/lr-distributed-movieLens.config): same as above plus resource config for distributed training
+  - [detext-single-node-movieLens.config](examples/movielens-100k/detext-single-node-movieLens.config): train a deep and wide neural network model for the `global` and logistic regression models for the `per-user` and `per-movie`
+  - [detext-distributed-movieLens.config](examples/movielens-100k/detext-distributed-movieLens.config): same as above plus resource config for distributed training
 
 ## Logistic regression models
 ### Fixed-effect config
 Required fields:
   - **name**: name of the model. String.
-  - **train_data_path**: training input path. String.
-  - **input_column_names**: input column names. String map.
-  - **output_column_name**: output column name when inferencing. String.
-  - **metadata_file**: input data tensor metadata file. String.
-  - **feature_file**: feature list file for output photon-ml name-term-value format model. String.
+  - **training_data_dir**: path to training data directory. String.
+  - **input_column_names**: input column names for label, unique id, weight and feature bag(the collection of features). String map.
+  - **prediction_score_column_name**: column name for prediction score. String.
+  - **metadata_file**: path to an input data tensor metadata file. String.
+  - **feature_file**: path to a feature list file for outputing model in name-term-value format. String.
 
 Optional fields:
-  - **validation_data_path**: validation input path. String, default is "".
+  - **validation_data_dir**: path to validation data directory. String, default is "".
   - **regularize_bias**: whether to regularize the intercept. Ususally we don't put regularization on intercept since it is an important feature. Boolean, default is false.
   - **l2_reg_weight**: weight of L2 regularization for each feature bag. Float, default is 0.001.
   - **optimizer**: optimizer used in the training, currently support LBFGS only. Map, default values are {"name": "LBFGS", "params": [{ "lbfgs_tolerance": 1.0e-7, "num_of_lbfgs_iterations": 100, "num_of_lbfgs_curvature_pairs": 10 }] }
   - **metric**: metric of the model. String, support "AUC" and "NDCG" Default is "AUC".
   - **position_k**: the position to compute the truncated ndcg, only needed when metric is "NDCG". Integer, default is 1.
-  - **batch_size**: batch size to iterative read data to avoid out-of-memory error. Please note this is different from the batch size for sgd, its value only impacts IO and won't impact final metrics. Integer, default is 500.
-  - **copy_to_local**: whether copy training data to local disk. Boolean, default is true.
+  - **copy_to_local**: whether copy training data to worker's local disk. Boolean, default is true.
 
 ### Random-effect config
 Required fields include all fields from fixed-effect config plus:
-  - **entity_name**: the entity column name for random effect. String.
+  - **partition_entity**: the column name used to partition data in order to improve random effect model training parallelism. String.
   - **num_partitions**: number of partitions. Integer.
 
 Optional fields include all fields from fixed-effect config plus:

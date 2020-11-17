@@ -20,71 +20,68 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         self.fixed_effect_name = self.fixed_effect_config_obj.name
         self.output_dir = path_join(gdmix_config_obj.output_dir,
                                    self.fixed_effect_config_obj.name)
-        self.model_path = path_join(self.output_dir, MODELS)
-        self.train_score_path = path_join(self.output_dir, TRAIN_SCORES)
-        self.validation_score_path = path_join(self.output_dir, VALIDATION_SCORES)
-        self.metric_path = path_join(self.output_dir, METRIC)
+        self.output_model_dir = path_join(self.output_dir, MODELS)
+        self.training_score_dir = path_join(self.output_dir, TRAINING_SCORES)
+        self.validation_score_dir = path_join(self.output_dir, VALIDATION_SCORES)
+        self.metric_file = path_join(self.output_dir, METRIC)
         self.model_type = self.fixed_effect_config_obj.model_type
 
     def get_train_job(self):
         """ Get tfjob training job.
-        Return: [job_type, job_name, "", job_params]
+        Return: (job_type, job_name, "", job_params)
         """
         params = {STAGE: FIXED_EFFECT}
         # get params from config
         flatten_config_obj(params, self.fixed_effect_config_obj)
         # adjust param keys
         params.pop("name")
-        params[PREDICTION_SCORE] = params.pop(OUTPUT_COLUMN_NAME)
+        params[PREDICTION_SCORE_COLUMN_NAME] = params.pop(PREDICTION_SCORE_COLUMN_NAME)
         # add output params
         if self.model_type == LOGISTIC_REGRESSION:
-            params[MODEL_OUTPUT_DIR] = self.model_path
-            params[TRAINING_OUTPUT_DIR] = self.train_score_path
-            params[VALIDATION_OUTPUT_DIR] = self.validation_score_path
+            params[OUTPUT_MODEL_DIR] = self.output_model_dir
+            params[TRAINING_SCORE_DIR] = self.training_score_dir
+            params[VALIDATION_SCORE_DIR] = self.validation_score_dir
         elif self.model_type == DETEXT:
-            params[DETEXT_MODEL_OUTPUT_DIR] = self.model_path
+            params[DETEXT_MODEL_OUTPUT_DIR] = self.output_model_dir
         else:
             raise ValueError('unsupported model_type: {}'.format(model_type))
 
         params = prefix_dash_dash(params)
         return (GDMIX_TFJOB, "{}-tf-train".format(self.fixed_effect_name), "", params)
 
-    def get_detext_inference_jobs(self):
+    def get_detext_inference_job(self):
         """ Get detext inference job. For LR model the inference job is included in train
         job, this job is for DeText model inference.
-        Return: two inferece jobs for training and  validation data
-        ([job_type, job_name, "", job_params], [job_type, job_name, "", job_params])
+        Return: an inferece job inferencing training and validation data
+        (job_type, job_name, "", job_params)
         """
         params = {STAGE: FIXED_EFFECT, ACTION: ACTION_INFERENCE}
         # get params from config
         flatten_config_obj(params, self.fixed_effect_config_obj)
         # adjust param keys
         params.pop("name")
-        params[PREDICTION_SCORE] = params.pop(OUTPUT_COLUMN_NAME)
-        params[DETEXT_MODEL_OUTPUT_DIR] = self.model_path
+        params[PREDICTION_SCORE_COLUMN_NAME] = params.pop(PREDICTION_SCORE_COLUMN_NAME)
+        params[DETEXT_MODEL_OUTPUT_DIR] = self.output_model_dir
         # "--dev_file" and "--validation_output_dir" are used as input and output for the detext inference job
-        inference_train_data_params = deepcopy(params)
-        inference_train_data_params[DETEXT_DEV_FILE] = self.fixed_effect_config_obj.train_file
-        inference_train_data_params[VALIDATION_OUTPUT_DIR] = self.train_score_path
-        inference_train_data_job = (GDMIX_TFJOB, "{}-tf-inference-train-data".format(
-            self.fixed_effect_name), "", prefix_dash_dash(inference_train_data_params))
+        inference_params = deepcopy(params)
+        inference_params[TRAINING_DATA_DIR] = self.fixed_effect_config_obj.train_file
+        inference_params[TRAINING_SCORE_DIR] = self.training_score_dir
+        inference_params[VALIDATION_DATA_DIR] = self.fixed_effect_config_obj.dev_file
+        inference_params[VALIDATION_SCORE_DIR] = self.validation_score_dir
+        inference_job = (GDMIX_TFJOB, "{}-tf-inference".format(
+            self.fixed_effect_name), "", prefix_dash_dash(inference_params))
 
-        inference_validation_data_params = deepcopy(params)
-        inference_validation_data_params[DETEXT_DEV_FILE] = self.fixed_effect_config_obj.dev_file
-        inference_validation_data_params[VALIDATION_OUTPUT_DIR] = self.validation_score_path
-        inference_validation_data_job = (GDMIX_TFJOB, "{}-tf-inference-validation-data".format(
-            self.fixed_effect_name), "", prefix_dash_dash(inference_validation_data_params))
-        return (inference_train_data_job, inference_validation_data_job)
+        return inference_job
 
     def get_compute_metric_job(self):
         """ Get sparkjob compute metric job.
-        Return: [job_type, job_name, class_name, job_params]
+        Return: (job_type, job_name, class_name, job_params)
         """
         params = {
-            r"\--inputPath": self.validation_score_path,
-            "--outputPath": self.metric_path,
-            "--labelName": self.fixed_effect_config_obj.input_column_names.label,
-            "--scoreName": self.fixed_effect_config_obj.output_column_name
+            r"\--metricsInputDir": self.validation_score_dir,
+            "--outputMetricFile": self.metric_file,
+            "--labelColumnName": self.fixed_effect_config_obj.input_column_names.label_column_name,
+            "--predictionColumnName": self.fixed_effect_config_obj.prediction_score_column_name
         }
         return (GDMIX_SPARKJOB,
                 "{}-compute-metric".format(self.fixed_effect_name),
@@ -96,10 +93,8 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         if self.model_type == LOGISTIC_REGRESSION:
             jobs = [self.get_train_job(), self.get_compute_metric_job()]
         elif self.model_type == DETEXT:
-            inference_train_data_job, inference_validation_data_job = self.get_detext_inference_jobs()
             jobs = [self.get_train_job(),
-                    inference_train_data_job,
-                    inference_validation_data_job,
+                    self.get_detext_inference_job(),
                     self.get_compute_metric_job()]
         else:
             raise ValueError('unsupported model_type: {}'.format(model_type))
