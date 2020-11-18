@@ -1,0 +1,37 @@
+# This workflow will install Python dependencies, run gdmix end to end on movieLens data
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Gdmix movieLens workflow
+
+on:
+  push:
+    branches-ignore:
+      - master
+jobs:
+  testbox:
+    runs-on: ubuntu-latest
+    container:
+      image: linkedin/gdmix-dev
+    steps:  
+    - uses: actions/checkout@v2
+    - name: Build gdmix-data jar 
+      run: |
+        ./gradlew shadowJar 
+    - name: Install dependencies and Test with pytest
+      run: |
+        cd gdmix-trainer 
+        python setup.py develop 
+        pytest
+        cd ../gdmix-workflow 
+        python setup.py develop 
+        pytest
+        cd ..
+    - name: Prepare movieLens data
+      run: |
+        python scripts/download_process_movieLens_data.py
+    - name: MovieLens logistic regression workflow
+      run: |
+        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config --jar build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
+    - name: MovieLens DeText workflow
+      run: |
+        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config --jar build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
