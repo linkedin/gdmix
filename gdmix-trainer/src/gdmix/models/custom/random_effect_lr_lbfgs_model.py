@@ -2,7 +2,9 @@ import dataclasses
 import itertools
 import logging
 import os
+
 from functools import partial
+from multiprocessing import Manager
 from multiprocessing import Pool, current_process
 from typing import Optional
 
@@ -65,6 +67,8 @@ class RandomEffectLRLBFGSModel(Model):
             self.training_data_dir = None
             self.passive_training_data_dir = None
         self.validation_data_dir = self.model_params.validation_data_dir
+        # A managed queue storing to be processed jobs.
+        self.job_queue = Manager().Queue(self.model_params.max_training_queue_size)
 
     def train(self, training_data_dir, validation_data_dir, metadata_file, checkpoint_path, execution_context, schema_params):
         logger.info("Kicking off random effect custom LR training")
@@ -124,7 +128,9 @@ class RandomEffectLRLBFGSModel(Model):
                                                    precision=self.model_params.lbfgs_tolerance / np.finfo(float).eps,
                                                    num_lbfgs_corrections=self.model_params.num_of_lbfgs_curvature_pairs,
                                                    max_iter=self.model_params.num_of_lbfgs_iterations)
-        consumer = TrainingJobConsumer(lr_model, name=input_path)
+        consumer = TrainingJobConsumer(lr_model, name=input_path, job_queue=self.job_queue)
+        # Make sure the queue is empty
+        assert(self.job_queue.empty())
         results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file,
                                       self.model_params.enable_local_indexing)
         model_weights.update(results)
@@ -134,13 +140,17 @@ class RandomEffectLRLBFGSModel(Model):
                          feature_file=self.feature_file)
         return model_weights
 
-    def _predict(self, pool, input_path, metadata, tensor_metadata, output_file, schema_params, num_features, metadata_file, model_weights, use_local_index):
+    def _predict(self, pool, input_path, metadata, tensor_metadata, output_file, schema_params, num_features,
+                 metadata_file, model_weights, use_local_index):
         logger.info(f"Start inference for {input_path}.")
         # Create LR model object for inference
         lr_model = BinaryLogisticRegressionTrainer(regularize_bias=True, lambda_l2=self.model_params.l2_reg_weight)
-        consumer = InferenceJobConsumer(lr_model, num_features, schema_params, use_local_index, name=input_path)
-
-        results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file, gen_index_map=False)
+        consumer = InferenceJobConsumer(lr_model, num_features, schema_params, use_local_index, name=input_path,
+                                        job_queue=self.job_queue)
+        # Make sure the queue is empty
+        assert(self.job_queue.empty())
+        results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features,
+                                      metadata_file, gen_index_map=False)
 
         # Set up output schema
         output_schema = fastavro.parse_schema(get_inference_output_avro_schema(
@@ -151,7 +161,8 @@ class RandomEffectLRLBFGSModel(Model):
         batched_write_avro(itertools.chain.from_iterable(results), output_file, output_schema)
         logger.info(f"Inference complete: {input_path}.")
 
-    def _pooled_action(self, pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file, gen_index_map):
+    def _pooled_action(self, pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file,
+                       gen_index_map):
         # Create training dataset
         def get_iterator():
             #  iterator and dataset should be created in the same thread to avoid TF failures.
@@ -166,15 +177,14 @@ class RandomEffectLRLBFGSModel(Model):
             # Create TF iterator
             return tf.compat.v1.data.make_initializable_iterator(dataset)
 
-        # Create the job generator
-        jobs = prepare_jobs(get_iterator, self.model_params, schema_params, num_features=num_features, model_weights=model_weights, gen_index_map=gen_index_map)
-        # When the number of consumers is one, use map directly, for easier debugging and for working
-        # around the pickling 2G limit.
+        # Create the job id generator
+        job_ids = prepare_jobs(get_iterator, self.model_params, schema_params, num_features=num_features,
+                               model_weights=model_weights, gen_index_map=gen_index_map, job_queue=self.job_queue)
+        # If a single consumer, use main process directly.
         if self.model_params.num_of_consumers == 1:
-            return map(consumer, jobs)
+            return map(consumer, job_ids)
         else:
-            # Jobs are pickled, so subject to 2G limit.
-            return pool.imap_unordered(consumer, jobs, self.model_params.max_training_queue_size)
+            return pool.imap_unordered(consumer, job_ids, self.model_params.max_training_queue_size)
 
     def _save_model(self, output_file, model_coefficients, num_features, feature_file):
         # Create model IDs, biases, weight indices and weight value arrays. Account for local indexing

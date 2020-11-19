@@ -61,11 +61,11 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :return: None
         """
         # test single worker training without offset
-        # self._run_single_worker(False, _PORTS[0], False, False)
+        self._run_single_worker(False, _PORTS[0], False, False)
         # test single worker training with offset
-        # self._run_single_worker(True, _PORTS[1], False, False)
+        self._run_single_worker(True, _PORTS[1], False, False)
         # test single worker training with offset and previous model
-        # self._run_single_worker(True, _PORTS[2], True, False)
+        self._run_single_worker(True, _PORTS[2], True, False)
         # test single worker training intercept only model with offset
         self._run_single_worker(True, _PORTS[3], False, True)
 

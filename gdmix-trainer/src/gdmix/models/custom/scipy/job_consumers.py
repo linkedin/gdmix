@@ -1,5 +1,6 @@
 import logging
 from collections import namedtuple
+from multiprocessing.managers import BaseProxy
 from multiprocessing.process import current_process
 
 import numpy as np
@@ -20,18 +21,20 @@ VALUES_SUFFIX = '_values'
 
 class TrainingJobConsumer:
     """Callable class to consume entity-based random effect training jobs"""
-    def __init__(self, lr_model, name):
+    def __init__(self, lr_model, name, job_queue):
         self.name = f'Training: {name}'
         self.lr_model = lr_model
         self.job_count = 0
+        self.job_queue = job_queue
 
-    def __call__(self, job: Job):
+    def __call__(self, job_id: str):
         """
         Call method to process a training job
-        :param job:      training job to be processed
-        :return: None
+        :param job_id: training job_id, a dummy input
+        :return: (entity_id, TrainingResult)
         """
         # Train model
+        job = self.job_queue.get()
         result = self.lr_model.fit(X=job.X,
                                    y=job.y,
                                    weights=job.weights,
@@ -43,13 +46,14 @@ class TrainingJobConsumer:
 
 class InferenceJobConsumer:
     """Callable class to consume entity-based random effect inference jobs"""
-    def __init__(self, lr_model, num_features, schema_params, use_local_index, name):
+    def __init__(self, lr_model, num_features, schema_params, use_local_index, name, job_queue):
         self.use_local_index = use_local_index
         self.name = f'Inference: {name}'
         self.num_features = num_features
         self.lr_model = lr_model
         self.schema_params = schema_params
         self.job_count = 0
+        self.job_queue = job_queue
         logger.info(f"InferenceJobConsumer with use_local_index = {self.use_local_index} created: {name!r}.")
 
     def _inference_results(self, labels, predicts, sample_weights, sample_ids, predicts_per_coordinate):
@@ -77,8 +81,13 @@ class InferenceJobConsumer:
             records.append(record)
         return records
 
-    def __call__(self, job: Job):
-        """ Call method to process an inference job """
+    def __call__(self, job_id: str):
+        """
+        Call method to process an inference jo
+        :param job_id: inference job_id, a dummy input
+        :return: records corresponding to an input batch
+        """
+        job = self.job_queue.get()
         if job.theta is None:
             logits = job.offsets
         else:
@@ -89,11 +98,13 @@ class InferenceJobConsumer:
                 unique_global_indices = job.unique_global_indices + 1
                 cols = np.hstack((0, unique_global_indices))
                 rows = np.zeros(cols.shape, dtype=int)
-                custom_theta = csr_matrix((locally_indexed_custom_theta, (rows, cols)), shape=(1, self.num_features + 1)).T
+                custom_theta = csr_matrix((locally_indexed_custom_theta, (rows, cols)),
+                                          shape=(1, self.num_features + 1)).T
             else:
                 custom_theta = job.theta
 
-            logits = self.lr_model.predict_proba(X=job.X, offsets=job.offsets, custom_theta=custom_theta, return_logits=True)
+            logits = self.lr_model.predict_proba(X=job.X, offsets=job.offsets, custom_theta=custom_theta,
+                                                 return_logits=True)
         logits_per_coordinate = logits - job.offsets
         inc_count(self)
         return self._inference_results(job.y, logits, job.weights.flatten(), job.ids.flatten(), logits_per_coordinate)
@@ -105,7 +116,8 @@ def inc_count(job_consumer):
         logger.info(f"{current_process()}: completed {job_consumer.job_count} jobs so far for {job_consumer.name}.")
 
 
-def prepare_jobs(batch_iterator, model_params, schema_params, num_features, model_weights: dict, gen_index_map: bool):
+def prepare_jobs(batch_iterator, model_params, schema_params, num_features, model_weights: dict,
+                 gen_index_map: bool, job_queue: BaseProxy):
     """
     Utility method to take batches of TF grouped data and convert it into one or more Jobs.
     Useful for running training and inference
@@ -115,7 +127,33 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
     :param num_features           Number of features in global space
     :param model_weights:         Model coefficients
     :param gen_index_map:         Generate local -> global index mapping if True
-    :return:
+    :param job_queue:             A managed queue containing the generated jobs
+    :return: a generator of entity_ids.
+
+    The feature_bag is represented in sparse tensor format. Take per_member feature bag for example.
+    The following batch has three records, two belonging to member #0 and one belonging to member #1.
+        member #0 has two records
+            per_member_indices = [[0, 7, 60, 80, 95], [34, 57]]
+            per_member_values = [[1.0, 2.0, 3.0, 5.0, 6.6], [1.0, 2.0]]
+        member #1 has one record
+            per_member_indices = [[10, 11]]
+            per_member_values = [[-3.5, 2.3]]
+    The batch combines both members' records:
+        per_member_indices = [[[0, 7, 60, 80, 95], [34, 57]], [[10, 11]]]
+        per_member_values = [[[1.0, 2.0, 3.0, 5.0, 6.6], [1.0, 2.0]], [[-3.5, 2.3]]]
+    Tensorflow representation of the batch above:
+        SparseTensorValue(indices=array(
+        [[0, 0, 0],
+        [0, 0, 1],
+        [0, 0, 2],
+        [0, 0, 3],
+        [0, 0, 4],
+        [0, 1, 0],
+        [0, 1, 1],
+        [1, 0, 0],
+        [1, 0, 1]]), values=array([ 1. ,  2. ,  3. ,  5. ,  6.6,  1. ,  2. , -3.5,  2.3],
+        dtype=float32), dense_shape=array([2, 2, 5]))
+        Note the first dimension is the batch dimension.
     """
     logger.info(f"Kicking off job producer with gen_index_map = {gen_index_map}.")
     for features_val, labels_val in dataset_reader(batch_iterator()):
@@ -175,8 +213,11 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
                                       and unique_global_indices is not None
                                       and result.unique_global_indices.size == unique_global_indices.size
                                       and (result.unique_global_indices == unique_global_indices).all())
-            yield Job(entity_id, X, y, offsets, weights, ids, unique_global_indices,
+            job = Job(entity_id, X, y, offsets, weights, ids, unique_global_indices,
                       theta=result.theta if prior_model_compatible else None)
+            job_queue.put(job)
+            # use entity_id as a token, it may not be unique
+            yield entity_id
 
             # Update X_index and y_index
             y_index += sample_count
