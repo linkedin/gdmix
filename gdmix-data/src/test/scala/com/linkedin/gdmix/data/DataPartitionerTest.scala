@@ -99,7 +99,7 @@ class DataPartitionerTest extends SharedSparkSession {
     val lowerBound = Some(2)
     val upperBound = Some(4)
 
-    val dfWithGroupId = DataPartitioner.getGroupId(dfAvro, lowerBound, upperBound, ENTITY_ID)
+    val dfWithGroupId = DataPartitioner.getGroupId(dfAvro, lowerBound, upperBound, ENTITY_ID, UID)
 
     // Entity 0 has 3 samples. The samples should all be active data with group id 0.
     val groupIdOfEntity0 = dfWithGroupId.filter(col(ENTITY_ID) === 0L).select(GROUP_ID).head.getInt(0)
@@ -124,7 +124,7 @@ class DataPartitionerTest extends SharedSparkSession {
     val lowerBound = Some(2)
     val upperBound = Some(4)
 
-    val dfWithGroupId = DataPartitioner.getGroupId(dfTfRecord, lowerBound, upperBound, ENTITY_ID)
+    val dfWithGroupId = DataPartitioner.getGroupId(dfTfRecord, lowerBound, upperBound, ENTITY_ID, UID)
 
     // Entity 0 has 3 samples. The samples should all be active data with group id 0.
     val groupIdOfEntity0 = dfWithGroupId.filter(col(ENTITY_ID) === 0L).select(GROUP_ID).head.getInt(0)
@@ -149,7 +149,7 @@ class DataPartitionerTest extends SharedSparkSession {
     val lowerBound = Some(2)
     val upperBound = Some(4)
     val dfGrouped = DataPartitioner
-      .boundAndGroupData(dfAvro, lowerBound, upperBound, ENTITY_ID)
+      .boundAndGroupData(dfAvro, lowerBound, upperBound, ENTITY_ID, UID)
 
     // Entity 0 has 3 samples. The samples should all be active data with group id 0.
     val entity0 = dfGrouped.filter(col(ENTITY_ID) === 0L).drop(GROUP_ID).collect()
@@ -194,7 +194,7 @@ class DataPartitionerTest extends SharedSparkSession {
     val lowerBound = Some(2)
     val upperBound = Some(4)
     val dfGrouped = DataPartitioner
-      .boundAndGroupData(dfTfRecord, lowerBound, upperBound, ENTITY_ID)
+      .boundAndGroupData(dfTfRecord, lowerBound, upperBound, ENTITY_ID, UID)
 
     // Entity 0 has 3 samples. The samples should all be active data with group id 0.
     val entity0 = dfGrouped.filter(col(ENTITY_ID) === 0L).drop(GROUP_ID).collect()
