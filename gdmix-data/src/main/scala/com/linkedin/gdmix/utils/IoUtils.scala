@@ -9,7 +9,7 @@ import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 import com.databricks.spark.avro._
 
@@ -197,4 +197,15 @@ object IoUtils {
       case Some(s) => s.trim.isEmpty
       case _ => true
     }
+
+  /**
+   * Check if the columns have expected data types
+   *
+   * @param df Input data frame.
+   * @param columnsAndTypes List of (columnName, dataType) pairs,
+   *                        the named columns are expected to have the corresponding data types.
+   * @return Boolean, true if the columns have expected data types.
+   */
+  def CheckColumnType(df: DataFrame, columnsAndTypes: Seq[(String, DataType)]): Boolean =
+    columnsAndTypes.map(x => df.schema(x._1).dataType == x._2).reduce((x,y) => (x && y))
 }

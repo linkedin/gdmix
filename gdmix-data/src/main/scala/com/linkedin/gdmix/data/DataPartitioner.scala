@@ -73,6 +73,7 @@ object DataPartitioner {
     // Partition training dataset if the training input data is provided.
     val trainOutputOpt = if (!IoUtils.isEmptyStr(trainInputDataPath)) {
       val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath.get, dataFormat, schemaOpt)
+      require(IoUtils.CheckColumnType(trainInputData, Seq((uid, LongType))))
       val trainInputScoreOpt = if (!IoUtils.isEmptyStr(trainInputScorePath)) {
         Some(spark.read.avro(trainInputScorePath.get))
       } else {
@@ -118,6 +119,7 @@ object DataPartitioner {
     // Partition validation dataset if the validation input data is provided.
     val validationOutputOpt = if (!IoUtils.isEmptyStr(validationInputDataPath)) {
       val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath.get, dataFormat, schemaOpt)
+      require(IoUtils.CheckColumnType(validationInputData, Seq((uid, LongType))))
       val validationInputScoreOpt = if (!IoUtils.isEmptyStr(validationInputScorePath)) {
         Some(spark.read.avro(validationInputScorePath.get))
       } else {
@@ -217,8 +219,7 @@ object DataPartitioner {
       uid)
 
     // Group and bound the dataset by a lower bound and an upper bound.
-    val groupedDf = boundAndGroupData(joinedDf, lowerBound, upperBound, partitionEntity)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+    val groupedDf = boundAndGroupData(joinedDf, lowerBound, upperBound, partitionEntity, uid)
 
     // Add partition Id.
     val dFWithPartitionId = groupedDf
@@ -277,16 +278,18 @@ object DataPartitioner {
    * @param lowerBound Lower bound on the number of records per entity
    * @param upperBound Upper bound on the number of records per entity
    * @param partitionEntity The entity by which the output dataset will be partitioned
+   * @param uid UID column name
    * @return The bounded and grouped data frame.
    */
   private[data] def boundAndGroupData(
     dataFrame: DataFrame,
     lowerBound: Option[Int],
     upperBound: Option[Int],
-    partitionEntity: String): DataFrame = {
+    partitionEntity: String,
+    uid: String): DataFrame = {
 
     // Get the group id for each entity.
-    val dfWithGroupId = getGroupId(dataFrame, lowerBound, upperBound, partitionEntity)
+    val dfWithGroupId = getGroupId(dataFrame, lowerBound, upperBound, partitionEntity, uid)
 
     // The columns of partitionEntity and groupId are not needed to be grouped since they are the same per-group.
     val groupedColumnNames = dfWithGroupId.columns
@@ -309,13 +312,15 @@ object DataPartitioner {
    * @param lowerBound Lower bound on the number of records per entity
    * @param upperBound Upper bound on the number of records per entity
    * @param partitionEntity The entity by which the output dataset will be partitioned
+   * @param uid UID column name
    * @return The bounded and grouped data frame.
    */
   private[data] def getGroupId(
     dataFrame: DataFrame,
     lowerBound: Option[Int],
     upperBound: Option[Int],
-    partitionEntity: String): DataFrame = {
+    partitionEntity: String,
+    uid: String): DataFrame = {
 
     // No lower bound and upper bound. All the samples are active data.
     if (lowerBound.isEmpty && upperBound.isEmpty) {
@@ -344,10 +349,10 @@ object DataPartitioner {
           dfWithGroupCounts
           .withColumn(GROUP_ID,
           when(col(PER_ENTITY_TOTAL_SAMPLE_COUNT) < lb, -1)
-            .otherwise((col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType)))
+            .otherwise(pmod(col(uid), col(PER_ENTITY_GROUP_COUNT)).cast(IntegerType)))
         case _ =>
           dfWithGroupCounts
-            .withColumn(GROUP_ID, (col(PER_ENTITY_GROUP_COUNT) * rand()).cast(IntegerType))
+            .withColumn(GROUP_ID, pmod(col(uid), col(PER_ENTITY_GROUP_COUNT)).cast(IntegerType))
       }
       dfWithGroupId.drop(PER_ENTITY_TOTAL_SAMPLE_COUNT, PER_ENTITY_GROUP_COUNT)
     }
