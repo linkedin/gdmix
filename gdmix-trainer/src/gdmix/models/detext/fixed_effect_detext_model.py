@@ -3,6 +3,7 @@ import os
 
 import detext.run_detext as detext_driver
 import tensorflow as tf
+from dataclasses import asdict
 from detext.run_detext import DetextArg
 from detext.train.data_fn import input_fn_tfrecord
 from detext.train import train_flow_helper, train_model_helper
@@ -62,7 +63,7 @@ class FixedEffectDetextModel(Model):
                                               feature_map=self.model_params.feature_map)
 
         self.model = train_model_helper.load_model_with_ckpt(
-            parsing_utils.HParams(**self.model_params._asdict()),
+            parsing_utils.HParams(**asdict(self.model_params)),
             self.best_checkpoint)
         output = train_flow_helper.predict_with_additional_info(inference_dataset,
                                                                 self.model,
