@@ -4,7 +4,7 @@ import shutil
 import tensorflow as tf
 import tempfile
 
-from gdmix.io.input_data_pipeline import per_record_input_fn
+from gdmix.io.input_data_pipeline import per_record_input_fn, GZIP, GZIP_SUFFIX, ZLIB, ZLIB_SUFFIX
 from gdmix.util import constants
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -50,7 +50,9 @@ json_string = """
 class TestPerRecordInputFn(tf.test.TestCase):
     """Test per_record_input_fn."""
     def setUp(self):
-        self.test_data_dir = tempfile.mkdtemp()
+        self.test_uncompressed_data_dir = tempfile.mkdtemp()
+        self.test_zlib_data_dir = tempfile.mkdtemp()
+        self.test_gzip_data_dir = tempfile.mkdtemp()
         self.fd, self.test_metadata_file = tempfile.mkstemp()
         self.num_shards = 2
         self.shard_index = 1
@@ -58,21 +60,25 @@ class TestPerRecordInputFn(tf.test.TestCase):
 
         # generate tf record files
         self.generate_tfrecords(labels, weight_indices, weight_values, f1,
-                                self.num_shards,
-                                self.test_data_dir)
-
+                                self.num_shards, self.test_uncompressed_data_dir)
+        self.generate_tfrecords(labels, weight_indices, weight_values, f1,
+                                self.num_shards, self.test_zlib_data_dir, ZLIB)
+        self.generate_tfrecords(labels, weight_indices, weight_values, f1,
+                                self.num_shards, self.test_gzip_data_dir, GZIP)
         # generate meatadata file
         self.generate_metadata(json_string, self.test_metadata_file)
 
     def tearDown(self):
-        shutil.rmtree(self.test_data_dir)
+        shutil.rmtree(self.test_uncompressed_data_dir)
+        shutil.rmtree(self.test_zlib_data_dir)
+        shutil.rmtree(self.test_gzip_data_dir)
         os.close(self.fd)
         os.remove(self.test_metadata_file)
 
     @staticmethod
     def generate_tfrecords(label_tensor, weight_indices_tensor,
                            weight_value_tensor, f1_tensor,
-                           num_shards, output_dir):
+                           num_shards, output_dir, compression_type=None):
         """
         Create tfrecords from a few tensors
         :param label_tensor: The tensor representing labels
@@ -81,8 +87,15 @@ class TestPerRecordInputFn(tf.test.TestCase):
         :param f1_tensor: A feature tensor
         :param num_shards: The number of shards
         :param output_dir: The output directory where the tfrecord files are saved.
+        :param compression_type: None (uncompressed), ZLIB or GZIP
         :return: None
         """
+        if compression_type == GZIP:
+            suffix = GZIP_SUFFIX
+        elif compression_type == ZLIB:
+            suffix = ZLIB_SUFFIX
+        else:
+            suffix = None
 
         def get_example(w_i, w_v, f, l):
             features = tf.train.Features(feature={
@@ -98,8 +111,12 @@ class TestPerRecordInputFn(tf.test.TestCase):
             return tf.train.Example(features=features)
 
         for s in range(num_shards):
-            output_filename = os.path.join(output_dir, 'data_{}.tfrecord'.format(s))
-            with tf.io.TFRecordWriter(output_filename) as writer:
+            if suffix:
+                filename = f'data_{s}.tfrecord{suffix}'
+            else:
+                filename = f'data_{s}.tfrecord'
+            output_filename = os.path.join(output_dir, filename)
+            with tf.io.TFRecordWriter(output_filename, options=compression_type) as writer:
                 for i in range(len(label_tensor)):
                     example = get_example(weight_indices_tensor[i],
                                           weight_value_tensor[i] + s,
@@ -148,13 +165,13 @@ class TestPerRecordInputFn(tf.test.TestCase):
                                                          dense_shape=[batch_size, shape]))
         return sparse_tensors
 
-    def test_input_fn(self):
+    def _test_input_fn(self, data_dir):
         """
         Test training dataset.
         :return: None
         """
         batch_size = self.batch_size
-        d = per_record_input_fn(self.test_data_dir,
+        d = per_record_input_fn(data_dir,
                                 self.test_metadata_file,
                                 self.num_shards,
                                 self.shard_index,
@@ -180,6 +197,15 @@ class TestPerRecordInputFn(tf.test.TestCase):
             except tf.errors.OutOfRangeError:
                 pass
         self.assertEqual(i, num_records // self.batch_size)
+
+    def test_uncompressed_input_fn(self):
+        self._test_input_fn(self.test_uncompressed_data_dir)
+
+    def test_zlib_input_fn(self):
+        self._test_input_fn(self.test_zlib_data_dir)
+
+    def test_gzip_input_fn(self):
+        self._test_input_fn(self.test_gzip_data_dir)
 
 
 if __name__ == '__main__':

@@ -198,7 +198,7 @@ class Driver(abc.ABC):
             # If passive dataset exists, add it to training context
             passive_dataset_path = self._anchor_directory(self.model.passive_training_data_dir, partition_index)
             if tf.io.gfile.exists(passive_dataset_path) and len(tf.io.gfile.glob(
-                    os.path.join(passive_dataset_path, constants.TFRECORD_GLOB_PATTERN))) != 0:
+                    os.path.join(passive_dataset_path, "[!.]*"))) != 0:
                 training_context[constants.PASSIVE_TRAINING_DATA_DIR] = passive_dataset_path
             # Add paths for inference output
             training_context[constants.ACTIVE_TRAINING_OUTPUT_FILE] = active_training_inference_output_file

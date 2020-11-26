@@ -163,16 +163,17 @@ class RandomEffectLRLBFGSModel(Model):
                        gen_index_map):
         # Create training dataset
         def get_iterator():
+            assert(self.model_params.data_format == constants.TFRECORD)
             #  iterator and dataset should be created in the same thread to avoid TF failures.
             logger.info(f"creating TF dataset and iterator on {input_path!r}.")
             dataset = per_entity_grouped_input_fn(
-                input_path=os.path.join(input_path, constants.TFRECORD_GLOB_PATTERN),
+                input_path=input_path,
                 metadata_file=metadata_file,
                 num_shards=1, shard_index=0,
                 batch_size=self.model_params.batch_size,
                 data_format=self.model_params.data_format,
                 entity_name=self.model_params.partition_entity)
-            # Create TF iterator
+            # Create dataset iterator
             return tf.compat.v1.data.make_initializable_iterator(dataset)
 
         # Create the job id generator
