@@ -6,6 +6,7 @@ import tempfile
 import tensorflow as tf
 from collections import namedtuple
 from drivers.test_helper import setup_fake_base_training_params, setup_fake_schema_params
+from gdmix.io.input_data_pipeline import GZIP, GZIP_SUFFIX, ZLIB, ZLIB_SUFFIX
 from gdmix.models.custom.fixed_effect_lr_lbfgs_model import FixedEffectLRModelLBFGS
 from gdmix.util import constants
 from gdmix.util.io_utils import load_linear_models_from_avro, export_linear_model_to_avro
@@ -79,7 +80,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         training_params = _get_params(paths, _LARGE_MAX_ITERS, False)
         datasets = self.datasets_with_offset
         _write_model(datasets['training'].coefficients, paths.feature_file, paths.output_model_dir, False)
-        _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True)
+        _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True, ZLIB)
         proc_func = _ProcFunc(0, [_PORTS[4]], training_params)
         proc_func.__call__(paths, False)
         self._check_scores(datasets['validation'], paths.validation_score_dir)
@@ -358,33 +359,44 @@ def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=N
     return result[0]
 
 
-def _write_tfrecord_datasets(data, paths, num_files, has_offset):
+def _write_tfrecord_datasets(data, paths, num_files, has_offset, compression_type=None):
     """
     Write the generated data to tfrecord files.
     :param data: A dict of input data, including training and validtion datasets.
     :param paths: An AllPaths namedtuple including all needed paths.
     :param num_files: The number of files to be generated.
     :param has_offset: Whether to use offset.
+    :param compression_type: None (uncompressed), ZLIB and GZIP
     :return: None
     """
     training, validation = data['training'], data['validation']
-    _write_single_dataset(training, paths.training_data_dir, num_files, has_offset)
-    _write_single_dataset(validation, paths.validation_data_dir, num_files, has_offset)
+    _write_single_dataset(training, paths.training_data_dir, num_files, has_offset, compression_type)
+    _write_single_dataset(validation, paths.validation_data_dir, num_files, has_offset, compression_type)
 
 
-def _write_single_dataset(data, output_path, num_files, has_offset):
+def _write_single_dataset(data, output_path, num_files, has_offset, compression_type=None):
     """
     Write a single dataset to tfrecord files.
     :param data: A dict of input data, including training and validation datasets.
     :param output_path: Output path for the generated files.
     :param num_files: The number of files to be generated.
     :param has_offset: Whether to use offset.
+    :param compression_type: None (uncompressed), ZLIB and GZIP
     :return:
     """
+    if compression_type == GZIP:
+        suffix = GZIP_SUFFIX
+    elif compression_type == ZLIB:
+        suffix = ZLIB_SUFFIX
+    else:
+        suffix = None
+
     for i in range(num_files):
         indices = np.arange(i, _NUM_SAMPLES, num_files)
         filename = os.path.join(output_path, f"part-{i:05}.tfrecord")
-        with tf.io.TFRecordWriter(filename) as writer:
+        if suffix:
+            filename = os.path.join(output_path, f"part-{i:05}.tfrecord{suffix}")
+        with tf.io.TFRecordWriter(filename, options=compression_type) as writer:
             for index in indices:
                 if data.features is None:
                     feature_indices, feature_values = None, None

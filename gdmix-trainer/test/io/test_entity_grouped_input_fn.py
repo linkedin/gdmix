@@ -2,7 +2,7 @@ import os
 import tempfile
 import tensorflow as tf
 
-from gdmix.io.input_data_pipeline import per_entity_grouped_input_fn
+from gdmix.io.input_data_pipeline import per_entity_grouped_input_fn, GZIP, GZIP_SUFFIX, ZLIB, ZLIB_SUFFIX
 from gdmix.util import constants
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -13,7 +13,9 @@ class TestPerEntityGroupedInputFn(tf.test.TestCase):
     def setUp(self):
         self._base_dir = tempfile.mkdtemp()
         self._metadata_file = os.path.join(self._base_dir, "data.json")
-        self._input_file = os.path.join(self._base_dir, "data.tfrecord")
+        self._uncompressed_input_file = os.path.join(self._base_dir, "data.tfrecord")
+        self._zlib_input_file = os.path.join(self._base_dir, f"data.tfrecord.{ZLIB_SUFFIX}")
+        self._gzip_input_file = os.path.join(self._base_dir, f"data.tfrecord.{GZIP_SUFFIX}")
         metadata = '{"features":[' \
                    '{"name": "global", "dtype": "float", "shape": [100], "isSparse": true},' \
                    '{"name": "weight", "dtype": "float", "shape": [], "isSparse": false},' \
@@ -57,36 +59,47 @@ class TestPerEntityGroupedInputFn(tf.test.TestCase):
         }
 
         # Create feature
-        with tf.io.TFRecordWriter(self._input_file) as writer:
+        examples = []
+        for i in range(2):
+            example = tf.train.SequenceExample(
+                # member_ids is a scala per entity
+                context=tf.train.Features(feature={
+                    'member_id': tf.train.Feature(int64_list=tf.train.Int64List(value=[member_ids[i]])),
+                    'weight': tf.train.Feature(float_list=tf.train.FloatList(value=weights[i])),
+                    'uid': tf.train.Feature(int64_list=tf.train.Int64List(value=uids[i])),
+                    'label': tf.train.Feature(int64_list=tf.train.Int64List(value=labels[i]))
+                }),
+                # other fields are lists of variable length (variable number of records)
+                feature_lists=tf.train.FeatureLists(feature_list={
+                    'global_values': tf.train.FeatureList(feature=[
+                        tf.train.Feature(float_list=tf.train.FloatList(value=x)) for x in global_values[i]
+                    ]),
+                    'global_indices': tf.train.FeatureList(feature=[
+                        tf.train.Feature(int64_list=tf.train.Int64List(value=x)) for x in global_indices[i]
+                    ])
+                }))
+            examples.append(example)
+        with tf.io.TFRecordWriter(self._uncompressed_input_file) as writer:
             for i in range(2):
-                example = tf.train.SequenceExample(
-                    # member_ids is a scala per entity
-                    context=tf.train.Features(feature={
-                        'member_id': tf.train.Feature(int64_list=tf.train.Int64List(value=[member_ids[i]])),
-                        'weight': tf.train.Feature(float_list=tf.train.FloatList(value=weights[i])),
-                        'uid': tf.train.Feature(int64_list=tf.train.Int64List(value=uids[i])),
-                        'label': tf.train.Feature(int64_list=tf.train.Int64List(value=labels[i]))
-                    }),
-                    # other fields are lists of variable length (variable number of records)
-                    feature_lists=tf.train.FeatureLists(feature_list={
-                        'global_values': tf.train.FeatureList(feature=[
-                            tf.train.Feature(float_list=tf.train.FloatList(value=x)) for x in global_values[i]
-                        ]),
-                        'global_indices': tf.train.FeatureList(feature=[
-                            tf.train.Feature(int64_list=tf.train.Int64List(value=x)) for x in global_indices[i]
-                        ])
-                    }))
-                writer.write(example.SerializeToString())
+                writer.write(examples[i].SerializeToString())
+
+        with tf.io.TFRecordWriter(self._zlib_input_file, options=ZLIB) as writer:
+            for i in range(2):
+                writer.write(examples[i].SerializeToString())
+
+        with tf.io.TFRecordWriter(self._gzip_input_file, options=GZIP) as writer:
+            for i in range(2):
+                writer.write(examples[i].SerializeToString())
 
     def tearDown(self):
         tf.io.gfile.rmtree(self._base_dir)
 
     def test_entity_name_not_in_features(self):
-        self.assertRaises(ValueError, per_entity_grouped_input_fn, self._input_file, self._metadata_file,
+        self.assertRaises(ValueError, per_entity_grouped_input_fn, self._uncompressed_input_file, self._metadata_file,
                           1, 0, 2, constants.TFRECORD, "random_feature")
 
-    def test_per_entity_group_input_fn(self):
-        dataset = per_entity_grouped_input_fn(self._input_file, self._metadata_file,
+    def _test_per_entity_group_input_fn(self, input_file):
+        dataset = per_entity_grouped_input_fn(input_file, self._metadata_file,
                                               num_shards=1, shard_index=0,
                                               batch_size=2, data_format=constants.TFRECORD,
                                               entity_name="member_id")
@@ -166,6 +179,15 @@ class TestPerEntityGroupedInputFn(tf.test.TestCase):
                     assert(len(expected[i]) == len(actual[i]))
                     for j in range(len(expected[i])):
                         self.assertSequenceAlmostEqual(expected[i][j], actual[i][j], places=5)
+
+    def test_uncompressed_file(self):
+        self._test_per_entity_group_input_fn(self._uncompressed_input_file)
+
+    def test_zlib_file(self):
+        self._test_per_entity_group_input_fn(self._zlib_input_file)
+
+    def test_gzip_file(self):
+        self._test_per_entity_group_input_fn(self._gzip_input_file)
 
 
 if __name__ == '__main__':

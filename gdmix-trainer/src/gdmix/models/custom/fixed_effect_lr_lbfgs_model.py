@@ -2,6 +2,7 @@ import logging
 import numpy as np
 import os
 import psutil
+import tensorflow as tf
 import tensorflow.compat.v1 as tf1
 import time
 
@@ -353,14 +354,33 @@ class FixedEffectLRModelLBFGS(Model):
         process = psutil.Process(os.getpid())
         return process.memory_info().rss / 1e9
 
-    def _get_num_iterations(self, input_files):
+    def _get_num_iterations(self, input_files, metadata_file):
         """ Get the number of samples each worker assigned.
             This works for tfrecord only.
+        :param input_files: a list of TFRecord files.
+        :param metadata_file: the metadata associated with the TFRecord files.
+        :return: number of iterations
         """
-        local_num_samples = 0
-        for fname in input_files:
-            local_num_samples += sum(1 for _ in tf1.python_io.tf_record_iterator(fname))
-        num_iterations = int(local_num_samples / self.batch_size) + (1 if local_num_samples % self.batch_size else 0)
+        start_time = time.time()
+        assert(self.data_format == constants.TFRECORD)
+        # reset the default graph, so it has been called before the main graph is built.
+        tf1.reset_default_graph()
+        num_iterations = 0
+        dataset = per_record_input_fn(input_files, metadata_file, 1, 0, self.batch_size, self.data_format,
+                                      build_features=False)
+        data_diter = tf1.data.make_initializable_iterator(dataset)
+        next_item = data_diter.get_next()
+        with tf1.device('device:CPU:0'), tf1.Session() as sess:
+            sess.run(data_diter.initializer)
+            while True:
+                try:
+                    sess.run(next_item)
+                    num_iterations += 1
+                except tf.errors.OutOfRangeError:
+                    break
+        end_time = time.time()
+        logging(f'It took {end_time - start_time} seconds to count {num_iterations} batches '
+                f'with batch size {self.batch_size}.')
         return num_iterations
 
     def train(self, training_data_dir, validation_data_dir, metadata_file, checkpoint_path,
@@ -386,7 +406,13 @@ class FixedEffectLRModelLBFGS(Model):
             train_num_shards = num_workers
             train_shard_index = task_index
 
+        # Compute the number of iterations before the main graph is built.
+        train_num_iterations = self._get_num_iterations(actual_train_files, metadata_file)
+        assigned_validation_files = self._get_assigned_files(validation_data_dir, num_workers, task_index)
+        validation_data_num_iterations = self._get_num_iterations(assigned_validation_files, metadata_file)
         # Define the graph here, keep session open to let scipy L-BFGS solver repeatly call _compute_loss_and_gradients
+        # Reset the graph.
+        tf1.reset_default_graph()
         with tf1.variable_scope('worker{}'.format(task_index)), \
                 tf1.device('job:worker/task:{}/device:CPU:0'.format(task_index)):
 
@@ -400,7 +426,6 @@ class FixedEffectLRModelLBFGS(Model):
             train_diter = tf1.data.make_initializable_iterator(train_dataset)
             init_train_dataset_op = train_diter.initializer
             train_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
-            train_num_iterations = self._get_num_iterations(actual_train_files)
             value_op, gradients_op = self._train_model_fn(train_diter,
                                                           train_x_placeholder,
                                                           num_workers,
@@ -428,8 +453,6 @@ class FixedEffectLRModelLBFGS(Model):
                     schema_params)
 
             inference_validation_data_diter = tf1.data.make_one_shot_iterator(valid_dataset)
-            assigned_validation_files = self._get_assigned_files(validation_data_dir, num_workers, task_index)
-            validation_data_num_iterations = self._get_num_iterations(assigned_validation_files)
             valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
                 valid_prediction_score_per_coordinate_op = self._inference_model_fn(
                     inference_validation_data_diter,
@@ -576,9 +599,13 @@ class FixedEffectLRModelLBFGS(Model):
         num_workers = execution_context[constants.NUM_WORKERS]
         # Prediction uses local server
         self.server = tf1.train.Server.create_local_server()
-
+        # Compute the number of iterations before the main graph is built.
+        assigned_files = self._get_assigned_files(input_data_path, num_workers, task_index)
+        data_num_iterations = self._get_num_iterations(assigned_files, metadata_file)
         # Define the graph here, keep session open to let scipy L-BFGS solver repeatly call _compute_loss_and_gradients
         # Inference is conducted in local mode.
+        # Reset the default graph.
+        tf1.reset_default_graph()
         with tf1.variable_scope('worker{}'.format(task_index)), tf1.device('device:CPU:0'):
             dataset = per_record_input_fn(input_data_path,
                                           metadata_file,
@@ -589,8 +616,6 @@ class FixedEffectLRModelLBFGS(Model):
             x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
 
             data_diter = tf1.data.make_one_shot_iterator(dataset)
-            assigned_files = self._get_assigned_files(input_data_path, num_workers, task_index)
-            data_num_iterations = self._get_num_iterations(assigned_files)
             sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op = self._inference_model_fn(
                 data_diter,
                 x_placeholder,
