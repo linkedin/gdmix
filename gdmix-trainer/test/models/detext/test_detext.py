@@ -1,14 +1,17 @@
-"""Tests for deep-match-training."""
+"""Tests for detext."""
 import os
 import shutil
+import tempfile
 import tensorflow as tf
 import pytest
 from gdmix.gdmix import run
 
 root_dir = os.path.abspath(os.path.dirname(__file__) + "/./../../resources")
-
-tfrecord_out_dir = os.path.join(root_dir, "tfrecord-output")
-score_out_dir = os.path.join(tfrecord_out_dir, "score-output")
+detext_base_dir = tempfile.mkdtemp()
+detext_model_dir = os.path.join(detext_base_dir, "detext-model")
+os.mkdir(detext_model_dir)
+inference_score_dir = os.path.join(detext_base_dir, "inference-score")
+os.mkdir(inference_score_dir)
 
 
 class TestDetextModel(tf.test.TestCase):
@@ -17,25 +20,27 @@ class TestDetextModel(tf.test.TestCase):
         if os.path.exists(tf_out_dir):
             shutil.rmtree(tf_out_dir, ignore_errors=True)
 
-    @pytest.mark.skip(reason="no way of currently testing this")
-    def test_run_dm_tfrecord(self):
+    @pytest.mark.skip(reason="DeText outer training loop requires TF eager mode while GDMix linear models disable "
+                             "eager mode. Once eager mode is set globally and once turned off, it can't be turned "
+                             "on again. Therefore the unit tests of detext and linear models can not be combined. "
+                             "To run a standalone local test of detext: uncomment this annotation and type: "
+                             "ligradle python --file gdmix-trainer/test/models/detext/test_detext.py")
+    def test_run_detext(self):
         """
-        This method test the entire model in run_dm using LocalExecutor.
+        This method tests running the detext model using LocalExecutor.
         """
         config = '{"cluster":{"chief":["localhost:2222"], "worker":["localhost:2224"]}, "job_name":"worker", ' \
                  '"task": {"index":0, "type": "worker"}, "is_chief":"True", "num_shards":1, "shard_index":0} '
         os.environ["TF_CONFIG"] = config
-        args = ["--action", 'train',
+        args = ["--action", "train",
                 "--stage", "fixed_effect",
                 "--model_type", "detext",
-                "--label", "label",
                 "--batch_size", "2",
                 "--data_format", "tfrecord",
-                "--sample_id", "uid",
-                "--sample_weight", "weight",
-                "--prediction_score", "prediction_score",
+                "--uid_column_name", "uid",
+                "--prediction_score_column_name", "prediction_score",
                 "--l2", "2",
-                "--all_metrics", "precision@1,ndcg@10",
+                "--all_metrics", "precision@1", "ndcg@10",
                 "--use_tfr_loss", "True",
                 "--tfr_loss_fn", "softmax_loss",
                 "--emb_sim_func", "inner",
@@ -43,12 +48,15 @@ class TestDetextModel(tf.test.TestCase):
                 "--explicit_empty", "False",
                 "--filter_window_size", "3",
                 "--ftr_ext", "cnn",
+                "--label", "label",
                 "--query", "query",
-                "--wide_ftrs", "wide_ftrs",
-                "--doc_text", "doc_title",
-                "--usr_text", "usr_headline",
-                "--wide_ftrs_sp_idx", "wide_ftrs_sp_idx",
-                "--wide_ftrs_sp_val", "wide_ftrs_sp_val",
+                "--doc_text", "doc_completedQuery",
+                "--usr_text", "usr_headline", "usr_skills", "usr_currTitles",
+                "--usr_id", "usrId_currTitles",
+                "--doc_id", "docId_completedQuery",
+                "--wide_ftrs", "wide_ftrs", "one_more_wide_ftrs",
+                "--weight", "weight",
+                "--num_wide", "3", "3",
                 "--init_weight", "0.1",
                 "--lambda_metric", "None",
                 "--learning_rate", "0.002",
@@ -60,9 +68,8 @@ class TestDetextModel(tf.test.TestCase):
                 "--num_hidden", "10",
                 "--num_train_steps", "4",  # set to >=4 to test robustness of serving_input_fn
                 "--num_units", "4",
-                "--num_wide", "3",
                 "--optimizer", "bert_adam",
-                "--out_dir", tfrecord_out_dir,
+                "--out_dir", detext_model_dir,
                 "--pmetric", "ndcg@10",
                 "--random_seed", "11",
                 "--steps_per_stats", "1",
@@ -76,24 +83,24 @@ class TestDetextModel(tf.test.TestCase):
                 "--use_deep", "True",
                 "--vocab_file", os.path.join(root_dir, "vocab.txt"),
                 "--vocab_file_for_id_ftr", os.path.join(root_dir, "vocab.txt"),
-                "--metadata_path", os.path.join(root_dir, "train", "dataset", "tensor_metadata.json"),
-                "--resume_training", "False"]
+                "--resume_training", "False",
+                "--num_gpu", "0",
+                "--distribution_strategy", "one_device",
+                "--run_eagerly", "True"]
         run(args)
         config = '{"cluster":{"chief":["localhost:2222"], "worker":["localhost:2224"]}, "job_name":"worker", ' \
                  '"task": {"index":0, "type": "worker"}, "is_chief":"True", "num_shards":1, "shard_index":0} '
         os.environ["TF_CONFIG"] = config
-        args = ["--action", 'validate',
+        args = ["--action", "inference",
+                "--validation_score_dir", inference_score_dir,
                 "--stage", "fixed_effect",
                 "--model_type", "detext",
-                "--label", "label",
                 "--batch_size", "2",
                 "--data_format", "tfrecord",
-                "--sample_id", "uid",
-                "--sample_weight", "weight",
-                "--prediction_score", "prediction_score",
+                "--uid_column_name", "uid",
+                "--prediction_score_column_name", "prediction_score",
                 "--l2", "2",
-                "--validation_output_dir", score_out_dir,
-                "--all_metrics", "precision@1,ndcg@10",
+                "--all_metrics", "precision@1", "ndcg@10",
                 "--use_tfr_loss", "True",
                 "--tfr_loss_fn", "softmax_loss",
                 "--emb_sim_func", "inner",
@@ -101,12 +108,15 @@ class TestDetextModel(tf.test.TestCase):
                 "--explicit_empty", "False",
                 "--filter_window_size", "3",
                 "--ftr_ext", "cnn",
+                "--label", "label",
                 "--query", "query",
-                "--wide_ftrs", "wide_ftrs",
-                "--doc_text", "doc_title",
-                "--usr_text", "usr_headline",
-                "--wide_ftrs_sp_idx", "wide_ftrs_sp_idx",
-                "--wide_ftrs_sp_val", "wide_ftrs_sp_val",
+                "--doc_text", "doc_completedQuery",
+                "--usr_text", "usr_headline", "usr_skills", "usr_currTitles",
+                "--usr_id", "usrId_currTitles",
+                "--doc_id", "docId_completedQuery",
+                "--wide_ftrs", "wide_ftrs", "one_more_wide_ftrs",
+                "--weight", "weight",
+                "--num_wide", "3", "3",
                 "--init_weight", "0.1",
                 "--lambda_metric", "None",
                 "--learning_rate", "0.002",
@@ -118,9 +128,8 @@ class TestDetextModel(tf.test.TestCase):
                 "--num_hidden", "10",
                 "--num_train_steps", "4",  # set to >=4 to test robustness of serving_input_fn
                 "--num_units", "4",
-                "--num_wide", "3",
                 "--optimizer", "bert_adam",
-                "--out_dir", tfrecord_out_dir,
+                "--out_dir", detext_model_dir,
                 "--pmetric", "ndcg@10",
                 "--random_seed", "11",
                 "--steps_per_stats", "1",
@@ -134,7 +143,9 @@ class TestDetextModel(tf.test.TestCase):
                 "--use_deep", "True",
                 "--vocab_file", os.path.join(root_dir, "vocab.txt"),
                 "--vocab_file_for_id_ftr", os.path.join(root_dir, "vocab.txt"),
-                "--metadata_path", os.path.join(root_dir, "train", "dataset", "tensor_metadata.json"),
-                "--resume_training", "False"]
+                "--resume_training", "False",
+                "--num_gpu", "0",
+                "--distribution_strategy", "one_device",
+                "--run_eagerly", "True"]
         run(args)
-        self._cleanUp(tfrecord_out_dir)
+        self._cleanUp(detext_base_dir)
