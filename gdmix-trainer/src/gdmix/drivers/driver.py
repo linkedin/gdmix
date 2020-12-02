@@ -155,7 +155,7 @@ class Driver(abc.ABC):
             self.execution_context[constants.PARTITION_INDEX] = partition_index
             for input_path, output_path in ((self.model.training_data_dir, self.base_training_params.training_score_dir),
                                             (self.model.validation_data_dir, self.base_training_params.validation_score_dir)):
-                if input_path:
+                if input_path and output_path:
                     # Resolve partitioned data path from raw path params from user
                     data_path = self._anchor_directory(input_path, partition_index)
                     output_dir = os.path.join(self._anchor_directory(output_path, partition_index))
