@@ -1,9 +1,12 @@
-from copy import deepcopy
+from dataclasses import replace
 from os.path import join as path_join
-import os
-from gdmixworkflow.workflow_generator import WorkflowGenerator
-from gdmixworkflow.common.utils import *
+
+from detext.run_detext import DetextArg
+from gdmix.models.custom.fixed_effect_lr_lbfgs_model import FixedLRParams
+from gdmix.params import Params
+
 from gdmixworkflow.common.constants import *
+from gdmixworkflow.workflow_generator import WorkflowGenerator
 
 
 class FixedEffectWorkflowGenerator(WorkflowGenerator):
@@ -16,38 +19,30 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
                  secret_name="", image="", service_account="", job_suffix=""):
         """ Init to generate gdmix fixed effect workflow. """
         super().__init__(gdmix_config_obj, jar_path, namespace, secret_name, image, service_account, job_suffix)
-        self.fixed_effect_config_obj = self.gdmix_config_obj.fixed_effect_config
-        self.fixed_effect_name = self.fixed_effect_config_obj.name
-        self.output_dir = path_join(gdmix_config_obj.output_dir,
-                                   self.fixed_effect_config_obj.name)
+
+        self.fixed_effect_name, self.fixed_effect_config = tuple(self.gdmix_config_obj.fixed_effect_config.items())[0]
+        self.output_dir = path_join(gdmix_config_obj.output_dir, self.fixed_effect_name)
         self.output_model_dir = path_join(self.output_dir, MODELS)
-        self.training_score_dir = path_join(self.output_dir, TRAINING_SCORES)
         self.validation_score_dir = path_join(self.output_dir, VALIDATION_SCORES)
-        self.metric_file = path_join(self.output_dir, METRIC)
-        self.model_type = self.fixed_effect_config_obj.model_type
+
+        self.gdmix_params: Params = Params(**gdmix_config_obj.gdmix_config,
+                                           training_score_dir=path_join(self.output_dir, TRAINING_SCORES),
+                                           validation_score_dir=self.validation_score_dir)
+
+        self.model_type = self.gdmix_params.model_type
 
     def get_train_job(self):
         """ Get tfjob training job.
         Return: (job_type, job_name, "", job_params)
         """
-        params = {STAGE: FIXED_EFFECT}
-        # get params from config
-        flatten_config_obj(params, self.fixed_effect_config_obj)
-        # adjust param keys
-        params.pop("name")
-        params[PREDICTION_SCORE_COLUMN_NAME] = params.pop(PREDICTION_SCORE_COLUMN_NAME)
-        # add output params
         if self.model_type == LOGISTIC_REGRESSION:
-            params[OUTPUT_MODEL_DIR] = self.output_model_dir
-            params[TRAINING_SCORE_DIR] = self.training_score_dir
-            params[VALIDATION_SCORE_DIR] = self.validation_score_dir
+            params = self.gdmix_params, FixedLRParams(**self.fixed_effect_config, output_model_dir=self.output_model_dir)
         elif self.model_type == DETEXT:
-            params[DETEXT_MODEL_OUTPUT_DIR] = self.output_model_dir
+            params = replace(self.gdmix_params, training_score_dir=None, validation_score_dir=None), \
+                     DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
         else:
-            raise ValueError('unsupported model_type: {}'.format(model_type))
-
-        params = prefix_dash_dash(params)
-        return (GDMIX_TFJOB, "{}-tf-train".format(self.fixed_effect_name), "", params)
+            raise ValueError(f'unsupported model_type: {self.model_type}')
+        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-train", "", params
 
     def get_detext_inference_job(self):
         """ Get detext inference job. For LR model the inference job is included in train
@@ -55,23 +50,9 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         Return: an inferece job inferencing training and validation data
         (job_type, job_name, "", job_params)
         """
-        params = {STAGE: FIXED_EFFECT, ACTION: ACTION_INFERENCE}
-        # get params from config
-        flatten_config_obj(params, self.fixed_effect_config_obj)
-        # adjust param keys
-        params.pop("name")
-        params[PREDICTION_SCORE_COLUMN_NAME] = params.pop(PREDICTION_SCORE_COLUMN_NAME)
-        params[DETEXT_MODEL_OUTPUT_DIR] = self.output_model_dir
-        # "--dev_file" and "--validation_output_dir" are used as input and output for the detext inference job
-        inference_params = deepcopy(params)
-        inference_params[TRAINING_DATA_DIR] = self.fixed_effect_config_obj.train_file
-        inference_params[TRAINING_SCORE_DIR] = self.training_score_dir
-        inference_params[VALIDATION_DATA_DIR] = self.fixed_effect_config_obj.dev_file
-        inference_params[VALIDATION_SCORE_DIR] = self.validation_score_dir
-        inference_job = (GDMIX_TFJOB, "{}-tf-inference".format(
-            self.fixed_effect_name), "", prefix_dash_dash(inference_params))
-
-        return inference_job
+        detext_arg = DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
+        gdmix_params = replace(self.gdmix_params, action=ACTION_INFERENCE, training_score_dir=None, validation_score_dir=None)
+        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-inference", "", (gdmix_params, detext_arg)
 
     def get_compute_metric_job(self):
         """ Get sparkjob compute metric job.
@@ -79,12 +60,12 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         """
         params = {
             r"\--metricsInputDir": self.validation_score_dir,
-            "--outputMetricFile": self.metric_file,
-            "--labelColumnName": self.fixed_effect_config_obj.input_column_names.label_column_name,
-            "--predictionColumnName": self.fixed_effect_config_obj.prediction_score_column_name
+            "--outputMetricFile": path_join(self.output_dir, METRIC),
+            "--labelColumnName": self.gdmix_params.label_column_name,
+            "--predictionColumnName": self.gdmix_params.prediction_score_column_name
         }
         return (GDMIX_SPARKJOB,
-                "{}-compute-metric".format(self.fixed_effect_name),
+                f"{self.fixed_effect_name}-compute-metric",
                 "com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator",
                 params)
 
@@ -97,5 +78,5 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
                     self.get_detext_inference_job(),
                     self.get_compute_metric_job()]
         else:
-            raise ValueError('unsupported model_type: {}'.format(model_type))
+            raise ValueError(f'unsupported model_type: {self.model_type}')
         return jobs

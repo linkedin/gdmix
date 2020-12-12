@@ -6,9 +6,9 @@ def get_param_list(params):
     """ transform params from dict to list.
     """
     if isinstance(params, dict):
-        kvList = [(str(k), str(v)) for (k, v) in params.items()]
-        paramList = [elem for tupl in kvList for elem in tupl]
-        return paramList
+        for (k, v) in params.items():
+            yield str(k)
+            yield str(v)
     else:
         raise ValueError("job params can only be dict")
 
@@ -17,7 +17,8 @@ def get_tfjob_cmd(params):
     """ get tfjob command for local execution
     """
     cmd = ['python', '-m', 'gdmix.gdmix']
-    cmd.extend(get_param_list(params))
+    for param in params:
+        cmd.extend(param.__to_argv__())
     return cmd
 
 

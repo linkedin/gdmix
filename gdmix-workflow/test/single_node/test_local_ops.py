@@ -8,8 +8,8 @@ class TestLocalOps(unittest.TestCase):
     """
 
     def test_get_tfjob_cmd(self):
-        params = {"--a": "b"}
-        expected = ['python', '-m', 'gdmix.gdmix', "--a", "b"]
+        params = ()
+        expected = ['python', '-m', 'gdmix.gdmix']
         actual = get_tfjob_cmd(params)
         self.assertEqual(actual, expected)
 

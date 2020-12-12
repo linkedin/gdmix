@@ -7,7 +7,7 @@ import shutil
 
 
 def load_launcher_from_file(src_file, name_placeholder, name):
-    """ Load launcher's commponent yaml file and update launcher name """
+    """ Load launcher's component yaml file and update launcher name """
     dest_file = shutil.copyfile(src_file, gen_random_string(20) + ".tmp.yaml")
     with fileinput.FileInput(dest_file, inplace=True) as f:
         for line in f:
@@ -41,18 +41,17 @@ def gdmix_tfjob_op(
     The launch_tfjob.py assemble all params to form a deployable YAML file to
     launch the actual TFJob.
     """
-    componentPath = path_join(resource.__path__[0],
-                             "tfjob_component.yaml")
+    componentPath = path_join(resource.__path__[0], "tfjob_component.yaml")
     name_placeholder = "TFJob-launcher-name"
     tfjob_launcher_op = load_launcher_from_file(
         componentPath, name_placeholder, name)
 
     # Container spec of a TFJob worker
     containerSpec = {
-        "command": ["sh", "-c", "{}".format(cmd)],
-        "image": "{}".format(image),
-        "resources": {"limits": {"memory": "{}i".format(memorySize.upper())},
-                      "requests": {"memory": "{}i".format(memorySize.upper())}},
+        "command": ["sh", "-c", f"{cmd}"],
+        "image": f"{image}",
+        "resources": {"limits": {"memory": f"{memorySize.upper()}i"},
+                      "requests": {"memory": f"{memorySize.upper()}i"}},
         "name": "tensorflow",
         "volumeMounts": [{"name": "shared-data",
                           "mountPath": "/var/tmp"},
@@ -69,7 +68,7 @@ def gdmix_tfjob_op(
                              "defaultMode": 256}
                   }]
 
-    if (workerType == "gpu"):
+    if workerType == "gpu":
         containerSpec["resources"]["limits"]["nvidia.com/gpu"] = 1
 
     workerSpecTemplate = {
@@ -138,8 +137,7 @@ def gdmix_sparkjob_op(
     In the container, the launch_tfjob.py assemble all params to form a deployable
     YAML file to launch the actual spark application.
     """
-    componentPath = path_join(resource.__path__[0],
-                             "sparkapplication_component.yaml")
+    componentPath = path_join(resource.__path__[0], "sparkapplication_component.yaml")
     name_placeholder = "SparkApplication-launcher-name"
     spark_application_launcher_op = load_launcher_from_file(
         componentPath, name_placeholder, name)
@@ -152,7 +150,7 @@ def gdmix_sparkjob_op(
         "secrets": [
             {
                 "name": secretName,
-                "path": "/var/tmp/{}".format(secretName),
+                "path": f"/var/tmp/{secretName}",
                 "secretType": "HadoopDelegationToken"
             }
         ],
@@ -185,8 +183,8 @@ def no_op(msg):
     """
     from kfp import dsl
     return dsl.ContainerOp(
-        name="{}-{}".format(msg, gen_random_string()),
+        name=f"{msg}-{gen_random_string()}",
         image="alpine",
         command=['sh', '-c'],
-        arguments=["echo {}".format(msg)]
+        arguments=[f"echo {msg}"]
     )

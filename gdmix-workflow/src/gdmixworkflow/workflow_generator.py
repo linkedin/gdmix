@@ -1,9 +1,9 @@
 from abc import abstractmethod
+
 from gdmixworkflow.common.constants import *
 from gdmixworkflow.common.utils import rm_backslash, join_params
 from gdmixworkflow.distributed.container_ops import gdmix_tfjob_op, gdmix_sparkjob_op
 from gdmixworkflow.single_node.local_ops import get_tfjob_cmd, get_sparkjob_cmd, run_cmd
-from os.path import join as path_join
 
 
 class WorkflowGenerator(object):
@@ -22,14 +22,13 @@ class WorkflowGenerator(object):
         self.jar_path = jar_path
 
     def tip(self, job_name, cmd):
-        """ single-node: show message for current job.
-        """
-        print("""
+        """ single-node: show message for current job."""
+        print(f"""
 ------------------------
-    {}
+    {self.get_name(job_name)}
 ------------------------
-              """.format(self.get_name(job_name)))
-        print("Executing cmd:\n  {}\n".format(' '.join(cmd)))
+Executing cmd:\n  {' '.join(cmd)}\n
+              """)
 
     def get_name(self, name):
         """ Append suffix to name and transform to lowercase. k8s requires
@@ -38,7 +37,7 @@ class WorkflowGenerator(object):
         suffix for subsequent jobs.
         """
         LENGTH = 40
-        full_name = "{}-{}".format(name, self.suffix) if self.suffix else name
+        full_name = f"{name}-{self.suffix}" if self.suffix else name
         return full_name.lower()[:LENGTH]
 
     def get_tfjob_config(self, extra_config):
@@ -100,7 +99,7 @@ class WorkflowGenerator(object):
                 sparkjob_config = self.get_sparkjob_config(extra_config)
                 current_op = gdmix_sparkjob_op(**sparkjob_config)
             elif job_type == GDMIX_TFJOB:
-                cmd = "python -m gdmix.gdmix {}".format(join_params(params))
+                cmd = f"python -m gdmix.gdmix {join_params(params)}"
                 extra_config = {
                     "name": self.get_name(job_name),
                     "cmd": cmd,
@@ -114,7 +113,7 @@ class WorkflowGenerator(object):
                 current_op.after(prev_op)
                 prev_op = current_op
 
-        return (start_op, current_op)
+        return start_op, current_op
 
     def run(self):
         """ Run all gdmix fixed/random effect jobs at local from given job sequence.

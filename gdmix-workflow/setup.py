@@ -11,7 +11,7 @@ with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 if _platform not in ["linux", "linux2", "darwin"]:
-    print("ERROR: platform {} isn't supported".format(_platform))
+    print(f"ERROR: platform {_platform} isn't supported")
     sys.exit(1)
 
 setup(
@@ -24,7 +24,7 @@ setup(
                  "Intended Audience :: Developers",
                  "License :: OSI Approved"],
     license='BSD-2-CLAUSE',
-    version=f'{VERSION}',
+    version=VERSION,
     package_dir={'': 'src'},
     packages=find_namespace_packages(where='src'),
     package_data={'': ['*.yaml']},
@@ -32,6 +32,7 @@ setup(
     install_requires=[
         "setuptools>=41.0.0",
         f"gdmix-trainer=={VERSION}",
+        "smart-arg",
         "google-auth==1.21.1",
         "kfp==0.2.5"
     ],
