@@ -36,23 +36,23 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         Return: (job_type, job_name, "", job_params)
         """
         if self.model_type == LOGISTIC_REGRESSION:
-            params = self.gdmix_params, FixedLRParams(**self.fixed_effect_config, output_model_dir=self.output_model_dir)
+            params = FixedLRParams(**self.fixed_effect_config, output_model_dir=self.output_model_dir)
         elif self.model_type == DETEXT:
             detext_arg = DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
-            params = self.gdmix_params, detext_arg._replace(feature_names=[','.join(detext_arg.feature_names)])
+            params = detext_arg._replace(feature_names=[','.join(detext_arg.feature_names)])
         else:
             raise ValueError(f'unsupported model_type: {self.model_type}')
-        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-train", "", params
+        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-train", "", (self.gdmix_params, params)
 
     def get_detext_inference_job(self):
         """ Get detext inference job. For LR model the inference job is included in train
         job, this job is for DeText model inference.
-        Return: an inferece job inferencing training and validation data
+        Return: an inference job inferencing training and validation data
         (job_type, job_name, "", job_params)
         """
         detext_arg = DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
-        gdmix_params = replace(self.gdmix_params, action=ACTION_INFERENCE)
-        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-inference", "", (gdmix_params, detext_arg._replace(feature_names=[','.join(detext_arg.feature_names)]))
+        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-inference", "", \
+            ((replace(self.gdmix_params, action=ACTION_INFERENCE)), detext_arg._replace(feature_names=[','.join(detext_arg.feature_names)]))
 
     def get_compute_metric_job(self):
         """ Get sparkjob compute metric job.
