@@ -19,13 +19,12 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
                  secret_name="", image="", service_account="", job_suffix=""):
         """ Init to generate gdmix fixed effect workflow. """
         super().__init__(gdmix_config_obj, jar_path, namespace, secret_name, image, service_account, job_suffix)
-
         self.fixed_effect_name, self.fixed_effect_config = tuple(self.gdmix_config_obj.fixed_effect_config.items())[0]
         self.output_dir = path_join(gdmix_config_obj.output_dir, self.fixed_effect_name)
         self.output_model_dir = path_join(self.output_dir, MODELS)
         self.validation_score_dir = path_join(self.output_dir, VALIDATION_SCORES)
 
-        self.gdmix_params: Params = Params(**gdmix_config_obj.gdmix_config,
+        self.gdmix_params: Params = Params(**self.fixed_effect_config.pop('gdmix_config'),
                                            training_score_dir=path_join(self.output_dir, TRAINING_SCORES),
                                            validation_score_dir=self.validation_score_dir)
 
