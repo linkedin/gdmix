@@ -1,9 +1,9 @@
 from abc import abstractmethod
 
 from gdmixworkflow.common.constants import *
-from gdmixworkflow.common.utils import rm_backslash, join_params
+from gdmixworkflow.common.utils import rm_backslash
 from gdmixworkflow.distributed.container_ops import gdmix_tfjob_op, gdmix_sparkjob_op
-from gdmixworkflow.single_node.local_ops import get_tfjob_cmd, get_sparkjob_cmd, run_cmd
+from gdmixworkflow.single_node.local_ops import get_tfjob_cmd, get_sparkjob_cmd, run_cmd, get_param_list
 
 
 class WorkflowGenerator(object):
@@ -94,15 +94,14 @@ Executing cmd:\n  {' '.join(cmd)}\n
                 extra_config = {
                     "name": self.get_name(job_name),
                     "mainClass": class_name,
-                    "arguments": join_params(params)
+                    "arguments": ' '.join(get_param_list(params))
                 }
                 sparkjob_config = self.get_sparkjob_config(extra_config)
                 current_op = gdmix_sparkjob_op(**sparkjob_config)
             elif job_type == GDMIX_TFJOB:
-                cmd = f"python -m gdmix.gdmix {join_params(params)}"
                 extra_config = {
                     "name": self.get_name(job_name),
-                    "cmd": cmd,
+                    "cmd": ' '.join(get_tfjob_cmd(params)),
                 }
                 tfjob_config = self.get_tfjob_config(extra_config)
                 current_op = gdmix_tfjob_op(**tfjob_config)

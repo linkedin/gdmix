@@ -1,5 +1,4 @@
-from gdmixworkflow.common.constants import *
-from subprocess import Popen,PIPE,STDOUT
+from subprocess import Popen, PIPE
 
 
 def get_param_list(params):
@@ -18,6 +17,10 @@ def get_tfjob_cmd(params):
     """
     cmd = ['python', '-m', 'gdmix.gdmix']
     for param in params:
+        # Workaround for DetextArg until it's update with proper serialization override
+        from detext.run_detext import DetextArg
+        if type(param) is DetextArg:
+            param = param._replace(feature_names=[','.join(param.feature_names)])
         cmd.extend(param.__to_argv__())
     return cmd
 
@@ -28,7 +31,7 @@ def get_sparkjob_cmd(class_name, params, jar='gdmix-data-all_2.11.jar'):
     cmd = ['spark-submit',
            '--class', class_name,
            '--master', 'local[*]',
-           '--num-executors','1',
+           '--num-executors', '1',
            '--driver-memory', '1G',
            '--executor-memory', '1G',
            '--conf', 'spark.sql.avro.compression.codec=deflate',
@@ -49,7 +52,6 @@ def run_cmd(cmd):
     returnCode = process.returncode
     print(out.decode("utf-8"))
     if returnCode != 0:
-        raise RuntimeError("ERROR in executing commnd: {}\n\nError message:\n{}".format(
-            str(' '.join(cmd)), err.decode("utf-8")))
+        raise RuntimeError(f"ERROR in executing commnd: {str(' '.join(cmd))}\n\nError message:\n{err.decode('utf-8')}")
     else:
         print(err.decode("utf-8"))

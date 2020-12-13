@@ -38,8 +38,7 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         if self.model_type == LOGISTIC_REGRESSION:
             params = FixedLRParams(**self.fixed_effect_config, output_model_dir=self.output_model_dir)
         elif self.model_type == DETEXT:
-            detext_arg = DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
-            params = detext_arg._replace(feature_names=[','.join(detext_arg.feature_names)])
+            params = DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
         else:
             raise ValueError(f'unsupported model_type: {self.model_type}')
         return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-train", "", (self.gdmix_params, params)
@@ -50,9 +49,8 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         Return: an inference job inferencing training and validation data
         (job_type, job_name, "", job_params)
         """
-        detext_arg = DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
-        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-inference", "", \
-            ((replace(self.gdmix_params, action=ACTION_INFERENCE)), detext_arg._replace(feature_names=[','.join(detext_arg.feature_names)]))
+        params = replace(self.gdmix_params, action=ACTION_INFERENCE), DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
+        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-inference", "", params
 
     def get_compute_metric_job(self):
         """ Get sparkjob compute metric job.
