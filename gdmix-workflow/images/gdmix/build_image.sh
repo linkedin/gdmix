@@ -1,6 +1,6 @@
 #!/bin/sh
 
-rsync -arvp ../../examples/movielens-100k/*single-node*.config .
+rsync -arvp ../../examples/movielens-100k/*.config .
 rsync -arvp ../../../scripts/download_process_movieLens_data.py .
 
 REGISTROY=linkedin

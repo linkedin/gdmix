@@ -23,12 +23,12 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
     def setUp(self):
         lr_config_file = path_join(
             os.getcwd(),
-            "test/resources/lr-single-node-movieLens.config")
+            "test/resources/lr-movieLens.config")
         self.lr_config_obj = json_config_file_to_obj(lr_config_file)
 
         detext_config_file = path_join(
             os.getcwd(),
-            "test/resources/detext-single-node-movieLens.config")
+            "test/resources/detext-movieLens.config")
         self.detext_config_obj = json_config_file_to_obj(detext_config_file)
 
         # Set self.maxDiff to None to see diff for long text

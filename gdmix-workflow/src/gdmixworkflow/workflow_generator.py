@@ -42,37 +42,22 @@ Executing cmd:\n  {' '.join(cmd)}\n
 
     def get_tfjob_config(self, extra_config):
         """ get tf job config for tf job container. """
-        tfjob_resource_config = self.gdmix_config_obj.tfjob_config
-        tfjob_config = {
+        return {
             "namespace": self.namespace,
             "secretName": self.secret_name,
             "image": self.image,
-            "workerType": tfjob_resource_config.worker_type,
-            "memorySize": tfjob_resource_config.memory_size,
-            "needChief": tfjob_resource_config.need_chief,
-            "psNum": tfjob_resource_config.num_ps,
-            "evaluatorNum": tfjob_resource_config.num_evaluator,
-            "workerNum": tfjob_resource_config.num_worker
-        }
-
-        tfjob_config.update(extra_config)
-        return tfjob_config
+            **self.gdmix_config_obj.tfjob_config,
+            **extra_config}
 
     def get_sparkjob_config(self, extra_config):
         """ get spark job config for spark job container. """
-        spark_resource_config = self.gdmix_config_obj.spark_config
-        spark_job_config = {
+        return {
             "namespace": self.namespace,
             "secretName": self.secret_name,
             "image": self.image,
             "serviceAccount": self.service_account,
-            "driverMemory": spark_resource_config.driver_memory_size,
-            "executorCores": spark_resource_config.num_executor_core,
-            "executorInstances": spark_resource_config.num_cxecutor,
-            "executorMemory": spark_resource_config.executor_memory_size
-        }
-        spark_job_config.update(extra_config)
-        return spark_job_config
+            **self.gdmix_config_obj.spark_config,
+            **extra_config}
 
     @abstractmethod
     def get_job_sequence(self):

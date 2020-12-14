@@ -5,7 +5,7 @@ def get_param_list(params):
     """ transform params from dict to list.
     """
     if isinstance(params, dict):
-        for (k, v) in params.items():
+        for k, v in params.items():
             yield str(k)
             yield str(v)
     else:
@@ -17,10 +17,8 @@ def get_tfjob_cmd(params):
     """
     cmd = ['python', '-m', 'gdmix.gdmix']
     for param in params:
-        # Workaround for DetextArg until it's update with proper serialization override
-        from detext.run_detext import DetextArg
-        if type(param) is DetextArg:
-            param = param._replace(feature_names=[','.join(param.feature_names)])
+        # Workaround for DetextArg until it's updated with proper serialization override for 'feature_names'
+        param = param._replace(feature_names=[','.join(param.feature_names)]) if type(param).__name__ == 'DetextArg' else param
         cmd.extend(param.__to_argv__())
     return cmd
 
@@ -49,9 +47,8 @@ def run_cmd(cmd):
     process = Popen(cmd, stdout=PIPE, stderr=PIPE)
     # wait for the process to terminate
     out, err = process.communicate()
-    returnCode = process.returncode
     print(out.decode("utf-8"))
-    if returnCode != 0:
-        raise RuntimeError(f"ERROR in executing commnd: {str(' '.join(cmd))}\n\nError message:\n{err.decode('utf-8')}")
+    if process.returncode:
+        raise RuntimeError(f"ERROR in executing command: {str(' '.join(cmd))}\n\nError message:\n{err.decode('utf-8')}")
     else:
         print(err.decode("utf-8"))
