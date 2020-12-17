@@ -31,7 +31,7 @@ jobs:
         python scripts/download_process_movieLens_data.py
     - name: MovieLens logistic regression workflow
       run: |
-        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml --jar build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
+        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
     - name: MovieLens DeText workflow
       run: |
-        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
+        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
