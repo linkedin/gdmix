@@ -17,8 +17,7 @@ def get_tfjob_cmd(params):
     """
     cmd = ['python', '-m', 'gdmix.gdmix']
     for param in params:
-        # Workaround for DetextArg until it's updated with proper serialization override for 'feature_names'
-        param = param._replace(feature_names=[','.join(param.feature_names)]) if type(param).__name__ == 'DetextArg' else param
+        # smart-arg serialization for parameters'
         cmd.extend(param.__to_argv__())
     return cmd
 

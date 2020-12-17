@@ -31,7 +31,7 @@ setup(
     install_requires=[
         "setuptools>=41.0.0",
         "gdmix-trainer==0.3.0",
-        "smart-arg",
+        "smart-arg==0.4",
         "google-auth==1.21.1",
         "kfp==0.2.5"
     ],

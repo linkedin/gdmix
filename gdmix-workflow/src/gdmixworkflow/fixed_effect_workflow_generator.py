@@ -32,7 +32,7 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
 
     def get_train_job(self):
         """ Get tfjob training job.
-        Return: (job_type, job_name, "", job_params)
+        :return (job_type, job_name, "", job_params) where job_params are typed param containers supported by smart-arg
         """
         if self.model_type == LOGISTIC_REGRESSION:
             params = FixedLRParams(**self.fixed_effect_config, output_model_dir=self.output_model_dir)
