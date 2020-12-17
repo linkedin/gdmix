@@ -8,8 +8,7 @@ SHELL ["/bin/bash", "-cu"]
 ENV GDMIX_VERSION=0.3.0
 
 # Install GDMix trainer and workflow packages
-RUN pip install gdmix-trainer==${GDMIX_VERSION} \
-                gdmix-workflow==${GDMIX_VERSION} \
+RUN pip install gdmix-workflow==${GDMIX_VERSION} \
                 pandas \
                 notebook \
                 jupyter_contrib_nbextensions

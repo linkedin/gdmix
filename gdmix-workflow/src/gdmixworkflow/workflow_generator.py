@@ -1,9 +1,9 @@
 from abc import abstractmethod
+
 from gdmixworkflow.common.constants import *
-from gdmixworkflow.common.utils import rm_backslash, join_params
+from gdmixworkflow.common.utils import rm_backslash
 from gdmixworkflow.distributed.container_ops import gdmix_tfjob_op, gdmix_sparkjob_op
-from gdmixworkflow.single_node.local_ops import get_tfjob_cmd, get_sparkjob_cmd, run_cmd
-from os.path import join as path_join
+from gdmixworkflow.single_node.local_ops import get_tfjob_cmd, get_sparkjob_cmd, run_cmd, get_param_list
 
 
 class WorkflowGenerator(object):
@@ -22,14 +22,13 @@ class WorkflowGenerator(object):
         self.jar_path = jar_path
 
     def tip(self, job_name, cmd):
-        """ single-node: show message for current job.
-        """
-        print("""
+        """ single-node: show message for current job."""
+        print(f"""
 ------------------------
-    {}
+    {self.get_name(job_name)}
 ------------------------
-              """.format(self.get_name(job_name)))
-        print("Executing cmd:\n  {}\n".format(' '.join(cmd)))
+Executing cmd:\n  {' '.join(cmd)}\n
+              """)
 
     def get_name(self, name):
         """ Append suffix to name and transform to lowercase. k8s requires
@@ -38,42 +37,27 @@ class WorkflowGenerator(object):
         suffix for subsequent jobs.
         """
         LENGTH = 40
-        full_name = "{}-{}".format(name, self.suffix) if self.suffix else name
+        full_name = f"{name}-{self.suffix}" if self.suffix else name
         return full_name.lower()[:LENGTH]
 
     def get_tfjob_config(self, extra_config):
         """ get tf job config for tf job container. """
-        tfjob_resource_config = self.gdmix_config_obj.tfjob_config
-        tfjob_config = {
+        return {
             "namespace": self.namespace,
             "secretName": self.secret_name,
             "image": self.image,
-            "workerType": tfjob_resource_config.worker_type,
-            "memorySize": tfjob_resource_config.memory_size,
-            "needChief": tfjob_resource_config.need_chief,
-            "psNum": tfjob_resource_config.num_ps,
-            "evaluatorNum": tfjob_resource_config.num_evaluator,
-            "workerNum": tfjob_resource_config.num_worker
-        }
-
-        tfjob_config.update(extra_config)
-        return tfjob_config
+            **self.gdmix_config_obj.tfjob_config,
+            **extra_config}
 
     def get_sparkjob_config(self, extra_config):
         """ get spark job config for spark job container. """
-        spark_resource_config = self.gdmix_config_obj.spark_config
-        spark_job_config = {
+        return {
             "namespace": self.namespace,
             "secretName": self.secret_name,
             "image": self.image,
             "serviceAccount": self.service_account,
-            "driverMemory": spark_resource_config.driver_memory_size,
-            "executorCores": spark_resource_config.num_executor_core,
-            "executorInstances": spark_resource_config.num_cxecutor,
-            "executorMemory": spark_resource_config.executor_memory_size
-        }
-        spark_job_config.update(extra_config)
-        return spark_job_config
+            **self.gdmix_config_obj.spark_config,
+            **extra_config}
 
     @abstractmethod
     def get_job_sequence(self):
@@ -95,15 +79,14 @@ class WorkflowGenerator(object):
                 extra_config = {
                     "name": self.get_name(job_name),
                     "mainClass": class_name,
-                    "arguments": join_params(params)
+                    "arguments": ' '.join(get_param_list(params))
                 }
                 sparkjob_config = self.get_sparkjob_config(extra_config)
                 current_op = gdmix_sparkjob_op(**sparkjob_config)
             elif job_type == GDMIX_TFJOB:
-                cmd = "python -m gdmix.gdmix {}".format(join_params(params))
                 extra_config = {
                     "name": self.get_name(job_name),
-                    "cmd": cmd,
+                    "cmd": ' '.join(get_tfjob_cmd(params)),
                 }
                 tfjob_config = self.get_tfjob_config(extra_config)
                 current_op = gdmix_tfjob_op(**tfjob_config)
@@ -114,7 +97,7 @@ class WorkflowGenerator(object):
                 current_op.after(prev_op)
                 prev_op = current_op
 
-        return (start_op, current_op)
+        return start_op, current_op
 
     def run(self):
         """ Run all gdmix fixed/random effect jobs at local from given job sequence.

@@ -18,26 +18,23 @@ def gdmix_distributed_workflow(gdmix_config_file, namespace, secret_name, image,
     current_op = no_op("GDMix-training-start")
     suffix = gen_random_string()
 
-    if hasattr(gdmix_config_obj, FIXED_EFFECT_CONFIG):
-        fe_tip_op = no_op("fixed-effect-training-start")
-        fe_tip_op.after(current_op)
-        fe_workflow = FixedEffectWorkflowGenerator(gdmix_config_obj,
-                                                   namespace=namespace,
-                                                   secret_name=secret_name,
-                                                   image=image,
-                                                   service_account=service_account,
-                                                   job_suffix=suffix)
-        fe_start_op, current_op = fe_workflow.gen_workflow()
-        fe_start_op.after(fe_tip_op)
+    if not hasattr(gdmix_config_obj, FIXED_EFFECT_CONFIG):
+        raise ValueError(f"Need to define {FIXED_EFFECT_CONFIG}")
+    fe_tip_op = no_op("fixed-effect-training-start")
+    fe_tip_op.after(current_op)
+    fe_workflow = FixedEffectWorkflowGenerator(gdmix_config_obj,
+                                               namespace=namespace,
+                                               secret_name=secret_name,
+                                               image=image,
+                                               service_account=service_account,
+                                               job_suffix=suffix)
+    fe_start_op, current_op = fe_workflow.gen_workflow()
+    fe_start_op.after(fe_tip_op)
 
     if hasattr(gdmix_config_obj, RANDOM_EFFECT_CONFIG):
         re_tip_op = no_op("random-effect-training-start")
         re_tip_op.after(current_op)
-        re_workflow = RandomEffectWorkflowGenerator(gdmix_config_obj,
-                                                   namespace=namespace,
-                                                   secret_name=secret_name,
-                                                   image=image,
-                                                   service_account=service_account,
-                                                   job_suffix=suffix)
+        re_workflow = RandomEffectWorkflowGenerator(gdmix_config_obj, namespace=namespace, secret_name=secret_name, image=image,
+                                                    service_account=service_account, job_suffix=suffix, prev_model_name=fe_workflow.fixed_effect_name)
         re_start_op, _ = re_workflow.gen_workflow()
         re_start_op.after(re_tip_op)

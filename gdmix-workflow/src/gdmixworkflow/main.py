@@ -1,116 +1,64 @@
-import argparse
+import sys
 from functools import partial, update_wrapper
+from typing import NamedTuple
+
+from smart_arg import arg_suite
+
 from gdmixworkflow.common.constants import SINGLE_NODE, DISTRIBUTED
 from gdmixworkflow.distributed_workflow import gdmix_distributed_workflow
 from gdmixworkflow.single_node_workflow import run_gdmix_single_node
-import os
-import sys
 
 
-def str2bool(v):
-    """
-    handle argparse can't parse boolean well.
-    ref: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse/36031646
-    """
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, str):
-        return v.lower() == 'true'
-    else:
-        raise argparse.ArgumentTypeError('Boolean or string value expected.')
+@arg_suite
+class FlowArgs(NamedTuple):
+    """ Creates gdmix workflow.  """
+    config_path: str  # path to gdmix config
+    mode: str = SINGLE_NODE  # distributed or single_node
+    jar_path: str = "gdmix-data-all_2.11.jar"  # local path to the gdmix-data jar for GDMix processing intermediate data, single_node only
+    workflow_name: str = "gdmix-workflow"  # name for the generated zip file to upload to Kubeflow Pipeline, distributed mode only
+    namespace: str = "default"  # Kubernetes namespace, distributed mode only
+    secret_name: str = "default"  # secret name to access storage, distributed mode only
+    image: str = "linkedin/gdmix"  # image used to launch gdmix jobs on Kubernetes, distributed mode only
+    service_account: str = "default"  # service account to launch spark job, distributed mode only
 
 
-def get_parser():
-    """ Creates an argument parser.  """
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--config_path',
-        type=str,
-        required=True,
-        help='path to gdmix config')
-    parser.add_argument(
-        '--mode',
-        type=str,
-        default=SINGLE_NODE,
-        help='distributed or single_node')
-    parser.add_argument(
-        '--jar_path',
-        type=str,
-        default="gdmix-data-all_2.11.jar",
-        help='local path to the gdmix-data jar for GDMix processing'
-        'intermediate data, single_node only')
-    parser.add_argument(
-        '--workflow_name',
-        type=str,
-        default="gdmix-workflow",
-        help='name for the generated zip file to upload to'
-        'Kubeflow Pipeline, distributed mode only')
-    parser.add_argument(
-        '--namespace',
-        type=str,
-        default="default",
-        help='Kubernetes namespace, distributed mode only')
-    parser.add_argument(
-        '--secret_name',
-        type=str,
-        default="default",
-        help='secret name to access storage, distributed mode only')
-    parser.add_argument(
-        '--image',
-        type=str,
-        default="linkedin/gdmix",
-        help='image used to launch gdmix jobs on Kubernetes, '
-        'distributed mode only')
-    parser.add_argument(
-        '--service_account',
-        type=str,
-        default="default",
-        help='service account to launch spark job, distributed mode only')
-    return parser
-
-
-def main(args=None):
-    parser = get_parser()
-    args = parser.parse_args(args)
+def main():
+    args: FlowArgs = FlowArgs.__from_argv__()
 
     if args.mode == SINGLE_NODE:
         try:
-            outputDir = run_gdmix_single_node(args.config_path, args.jar_path)
+            output_dir = run_gdmix_single_node(args.config_path, args.jar_path)
         except RuntimeError as err:
             print(str(err))
             sys.exit(1)
 
-        print("""
+        print(f"""
 ------------------------
-GDMix training is finished, results are saved to {}.
-            """.format(outputDir))
+GDMix training is finished, results are saved to {output_dir}.
+            """)
 
     elif args.mode == DISTRIBUTED:
         if not args.namespace:
             print("ERROR: --namespace is required for distributed mode")
             sys.exit(1)
 
-        def wrapped_partial(func, *args, **kwargs):
-            partial_func = partial(func, *args, **kwargs)
-            update_wrapper(partial_func, func)
-            return partial_func
-
-        func = wrapped_partial(
+        wrapper = partial(
             gdmix_distributed_workflow,
             args.config_path,
             args.namespace,
             args.secret_name,
             args.image,
             args.service_account)
+        update_wrapper(wrapper, gdmix_distributed_workflow)
 
-        outputFileName = args.workflow_name + ".zip"
+        output_file_name = args.workflow_name + ".zip"
 
         import kfp.compiler as compiler
-        compiler.Compiler().compile(func, outputFileName)
-        print("Workflow file is saved to {}".format(outputFileName))
+        compiler.Compiler().compile(wrapper, output_file_name)
+        print(f"Workflow file is saved to {output_file_name}")
 
     else:
-        print("ERROR: --mode={} isn't supported.".format(args.mode))
+        print(f"ERROR: --mode={args.mode} isn't supported.")
         sys.exit(1)
 
 

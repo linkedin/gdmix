@@ -4,8 +4,7 @@ from sys import platform as _platform
 
 import sys
 
-
-VERSION="0.3.0"
+VERSION = "0.3.0"
 current_dir = Path(__file__).resolve().parent
 with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
@@ -24,7 +23,7 @@ setup(
                  "Intended Audience :: Developers",
                  "License :: OSI Approved"],
     license='BSD-2-CLAUSE',
-    version=f'{VERSION}',
+    version=VERSION,
     package_dir={'': 'src'},
     packages=find_namespace_packages(where='src'),
     include_package_data=True,
@@ -34,11 +33,11 @@ setup(
         "tensorflow_ranking==0.1.4",
         "fastavro==0.21.22",
         "decorator==4.4.2",
-        "detext-nodep==2.0.9",
+        "detext-nodep==2.1.1",
         "psutil==5.7.0",
         "scipy==1.3.2",
         "scikit-learn==0.21.2",
-        "smart-arg==0.2.12"
+        "smart-arg==0.4"
     ],
     tests_require=['pytest']
 )

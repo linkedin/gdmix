@@ -14,13 +14,11 @@
 
 import argparse
 import datetime
-from distutils.util import strtobool
-import json
-import os
 import logging
-import yaml
-import launch_crd
+from distutils.util import strtobool
 
+import launch_crd
+import yaml
 from kubernetes import client as k8s_client
 from kubernetes import config
 
@@ -59,8 +57,7 @@ def main(argv=None):
     parser.add_argument(
         '--activeDeadlineSeconds',
         type=int,
-        default=-
-        1,
+        default=-1,
         help='Specifies the duration (in seconds) since startTime during which the job can remain active before it is terminated. Must be a positive integer. This setting applies only to pods where restartPolicy is OnFailure or Always.')
     parser.add_argument(
         '--backoffLimit',

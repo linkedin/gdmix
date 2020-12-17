@@ -36,15 +36,8 @@ class TestUtils(unittest.TestCase):
 
     def test_json_config_file_to_obj(self):
         config_obj = json_config_file_to_obj(self.config_file_name)
-        self.assertEqual(config_obj.a.b1, "b2")
+        self.assertEqual(config_obj.a['b1'], "b2")
         self.assertEqual(config_obj.c, "d")
-
-    def test_flatten_config_obj(self):
-        config_obj = json_config_file_to_obj(self.config_file_name)
-        actual = {}
-        flatten_config_obj(actual, config_obj)
-        expected = {"b1": "b2", "c": "d"}
-        self.assertEqual(actual, expected)
 
 
 if __name__ == '__main__':

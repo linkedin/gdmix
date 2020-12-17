@@ -1,0 +1,96 @@
+{
+  "output_dir": "lr-training",
+  "fixed_effect_config": {
+    "global": {
+      # LRParams
+      "training_data_dir": "movieLens/global/trainingData",
+      "validation_data_dir": "movieLens/global/validationData",
+      "feature_file": "movieLens/global/featureList/global",
+      "feature_bag": "global",
+      "metadata_file": "movieLens/global/metadata/tensor_metadata.json",
+      "l2_reg_weight": 1.0,
+      "regularize_bias": false,
+
+      "lbfgs_tolerance": 1.0e-12,
+      "num_of_lbfgs_iterations": 100,
+      "num_of_lbfgs_curvature_pairs": 10,
+
+      # FixedLRParams(LRParams)
+      "copy_to_local": false,
+
+      # Params
+      gdmix_config: &g {
+        # GDMixParams
+        "model_type": "logistic_regression",
+
+        # SchemaParams
+        "label_column_name": "response",
+        "uid_column_name": "uid",
+        "prediction_score_column_name": "predictionScore",
+        "weight_column_name": "weight"
+      },
+    }
+  },
+  "random_effect_config": {
+    "per-user": {
+      "partition_entity": "user_id",
+      "training_data_dir": "movieLens/per_user/trainingData",
+      "validation_data_dir": "movieLens/per_user/validationData",
+      "feature_file": "movieLens/per_user/featureList/per_user",
+
+      "feature_bag": "per_user",
+      "metadata_file": "movieLens/per_user/metadata/tensor_metadata.json",
+      "l2_reg_weight": 1.0,
+      "regularize_bias": false,
+
+      "lbfgs_tolerance": 1.0e-12,
+      "num_of_lbfgs_iterations": 100,
+      "num_of_lbfgs_curvature_pairs": 10,
+      "max_training_queue_size": 10,
+      "num_of_consumers": 1,
+      "enable_local_indexing": false,
+
+      # extra params
+      "num_partitions": 1,
+      "gdmix_config": *g,
+    },
+    "per-movie": {
+      "partition_entity": "movie_id",
+      "training_data_dir": "movieLens/per_movie/trainingData",
+      "validation_data_dir": "movieLens/per_movie/validationData",
+      "feature_file": "movieLens/per_movie/featureList/per_movie",
+
+      "feature_bag": "per_movie"
+      ,
+      "metadata_file": "movieLens/per_movie/metadata/tensor_metadata.json",
+      "l2_reg_weight": 1.0,
+      "regularize_bias": false,
+
+      "lbfgs_tolerance": 1.0e-12,
+      "num_of_lbfgs_iterations": 100,
+      "num_of_lbfgs_curvature_pairs": 10,
+
+      "max_training_queue_size": 10,
+      "num_of_consumers": 1,
+      "enable_local_indexing": false,
+
+      "num_partitions": 1,
+      gdmix_config: *g
+    }
+  },
+  # configs for dstributed runs, will be ignored by single-node runs
+  "spark_config":{
+    "executorInstances":2,
+    "executorCores":1,
+    "driverMemory":"1g",
+    "executorMemory":"1g"
+  },
+  "tfjob_config":{
+    "workerType":"cpu",
+    "needChief":false,
+    "psNum":0,
+    "evaluatorNum":0,
+    "workerNum":2,
+    "memorySize":"1g"
+  }
+}
