@@ -145,7 +145,40 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
             self.assertEqual(theta[1], 0.0)
             self.assertEqual(indices, [0])
 
-    def _run_warm_start(self, intercept_only):
+    def _create_dataset_with_string_entity_id(self, filename):
+        bytes_member_ids = [b'abc102', b'zyz234']
+        member_ids = ['abc102', 'zyz234']
+        offsets = [[1.0, 2.0], [-1.0, -2.0]]
+        responses = [[1, 0], [0, 0]]
+        uids = [[1234, 5678], [1345, 3214]]
+        weights = [[1.0, 0.8], [0.5, 0.74]]
+        per_member_indices = [[[1, 5, 10], [1, 50, 99]], [[1, 3], [2, 20]]]
+        per_member_values = [[[0.3, -2.3, 0.9], [1.4, 99.8, -1.2]], [[1.23, 4.5], [-1.0, 3.0]]]
+
+        with tf.io.TFRecordWriter(filename) as file_writer:
+            for i in range(len(bytes_member_ids)):
+                context = tf.train.Features(feature={
+                    'memberId': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bytes_member_ids[i]])),
+                    'offset': tf.train.Feature(float_list=tf.train.FloatList(value=offsets[i])),
+                    'response': tf.train.Feature(int64_list=tf.train.Int64List(value=responses[i])),
+                    'uid': tf.train.Feature(int64_list=tf.train.Int64List(value=uids[i])),
+                    'weight': tf.train.Feature(float_list=tf.train.FloatList(value=weights[i]))
+                })
+
+                feature_lists = tf.train.FeatureLists(feature_list={
+                    'per_member_indices': tf.train.FeatureList(feature=[
+                        tf.train.Feature(int64_list=tf.train.Int64List(value=per_member_indices[i][0])),
+                        tf.train.Feature(int64_list=tf.train.Int64List(value=per_member_indices[i][1]))]),
+                    'per_member_values': tf.train.FeatureList(feature=[
+                        tf.train.Feature(float_list=tf.train.FloatList(value=per_member_values[i][0])),
+                        tf.train.Feature(float_list=tf.train.FloatList(value=per_member_values[i][1]))])
+                })
+
+                sequence_example = tf.train.SequenceExample(context=context, feature_lists=feature_lists)
+                file_writer.write(sequence_example.SerializeToString())
+        return member_ids
+
+    def _run_warm_start(self, string_entity_id, intercept_only):
 
         # Step 1: train an initial model
         # Create and add AVRO model output directory to raw parameters
@@ -153,10 +186,21 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         avro_model_output_dir = tempfile.mkdtemp()
         raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
 
-        if intercept_only:
-            metadata_file = os.path.join(test_dataset_path, "data_intercept_only.json")
+        train_data_dir = test_dataset_path
+        if string_entity_id:
+            train_tfrecord_dir = tempfile.mkdtemp()
+            train_tfrecord_file = os.path.join(train_tfrecord_dir, 'train.tfrecord')
+            # create dataset with string entity id
+            model_ids = self._create_dataset_with_string_entity_id(train_tfrecord_file)
+            train_data_dir = train_tfrecord_dir
+            # set up metadata file
+            metadata_file = os.path.join(test_dataset_path, "data_with_string_entity_id.json")
+
+            pass
+        elif intercept_only:
+            metadata_file = os.path.join(train_data_dir, "data_intercept_only.json")
         else:
-            metadata_file = os.path.join(test_dataset_path, "data.json")
+            metadata_file = os.path.join(train_data_dir, "data.json")
 
         # Create random effect LR LBFGS Model
         re_lr_model = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
@@ -168,15 +212,15 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         training_context = {constants.ACTIVE_TRAINING_OUTPUT_FILE: active_train_output_file,
                             constants.PASSIVE_TRAINING_OUTPUT_FILE: passive_train_output_file,
                             constants.PARTITION_INDEX: 0,
-                            constants.PASSIVE_TRAINING_DATA_DIR: test_dataset_path}
+                            constants.PASSIVE_TRAINING_DATA_DIR: train_data_dir}
         schema_params = setup_fake_schema_params()
-        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
+        re_lr_model.train(training_data_dir=train_data_dir, validation_data_dir=train_data_dir,
                           metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
 
         avro_model_output_file = os.path.join(avro_model_output_dir, f"part-{0:05d}.avro")
         # Read back the model as the warm start initial point.
-        initial_model = re_lr_model._load_weights(avro_model_output_file, 0)
+        initial_model = re_lr_model._load_weights(avro_model_output_file, False)
         if intercept_only:
             self._check_intercept_only_model(initial_model)
 
@@ -188,17 +232,19 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         re_lr_model = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
 
         schema_params = setup_fake_schema_params()
-        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
+        re_lr_model.train(training_data_dir=train_data_dir, validation_data_dir=train_data_dir,
                           metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
-        final_model = re_lr_model._load_weights(avro_model_output_file, 0)
+        final_model = re_lr_model._load_weights(avro_model_output_file, False)
 
         if intercept_only:
             self._check_intercept_only_model(final_model)
-
         # Check the model has already converged.
         self.assertEqual(len(initial_model), len(final_model))
         for model_id in initial_model:
+            if string_entity_id:
+                # make sure the model is is string not bytes.
+                self.assertTrue(model_id in model_ids)
             self.assertAllClose(initial_model[model_id].theta,
                                 final_model[model_id].theta,
                                 msg='models mismatch')
@@ -209,10 +255,10 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         for f in model_files:
             tf.io.gfile.remove(f)
         # Train for 1 l-bfgs step.
-        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=test_dataset_path,
+        re_lr_model.train(training_data_dir=train_data_dir, validation_data_dir=train_data_dir,
                           metadata_file=metadata_file, checkpoint_path=checkpoint_dir,
                           execution_context=training_context, schema_params=schema_params)
-        cold_model = re_lr_model._load_weights(avro_model_output_file, 0)
+        cold_model = re_lr_model._load_weights(avro_model_output_file, False)
 
         if intercept_only:
             self._check_intercept_only_model(cold_model)
@@ -220,11 +266,16 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         # Check the models are different.
         self.assertEqual(len(cold_model), len(final_model))
         for model_id in cold_model:
+            if string_entity_id:
+                # make sure the model is is string not bytes.
+                self.assertTrue(model_id in model_ids)
             self.assertNotAllClose(cold_model[model_id].theta,
                                    final_model[model_id].theta,
                                    msg='models should not be close')
 
         # remove the temp dir(s) and file(s).
+        if string_entity_id:
+            tf.io.gfile.rmtree(train_tfrecord_dir)
         os.close(active_train_fd)
         tf.io.gfile.remove(active_train_output_file)
         os.close(passive_train_fd)
@@ -233,7 +284,10 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         tf.io.gfile.rmtree(checkpoint_dir)
 
     def test_warm_start(self):
-        self._run_warm_start(intercept_only=False)
+        self._run_warm_start(string_entity_id=False, intercept_only=False)
 
     def test_warm_start_intercept_only(self):
-        self._run_warm_start(intercept_only=True)
+        self._run_warm_start(string_entity_id=False, intercept_only=True)
+
+    def test_warm_start_string_entity_id(self):
+        self._run_warm_start(string_entity_id=True, intercept_only=False)

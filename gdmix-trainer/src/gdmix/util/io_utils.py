@@ -244,10 +244,10 @@ def namedtuple_with_defaults(typename, field_names, defaults=()):
 
 
 def batched_write_avro(records: Iterator, output_file, schema, write_frequency=1000, batch_size=1024):
-    """ For the first block, the file needs to be open in âwâ mode, while the
-        rest of the blocks needs the âaâ mode. This restriction makes it
+    """ For the first block, the file needs to be open in 'w' mode, while the
+        rest of the blocks needs the 'a' mode. This restriction makes it
         necessary to open the files at least twice, one for the first block,
-        one for the remaining. So itâs not possible to put them into the
+        one for the remaining. So it's not possible to put them into the
         while loop within a file context.  """
     f = None
     t0 = time.time()

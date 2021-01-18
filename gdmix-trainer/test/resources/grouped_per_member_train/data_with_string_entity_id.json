@@ -1,0 +1,44 @@
+{
+  "features": [
+    {
+      "dtype": "float",
+      "isSparse": true,
+      "name": "per_member",
+      "shape": [
+        100
+      ]
+    },
+    {
+      "dtype": "float",
+      "isSparse": false,
+      "name": "weight",
+      "shape": []
+    },
+    {
+      "dtype": "float",
+      "isSparse": false,
+      "name": "offset",
+      "shape": []
+    },
+    {
+      "dtype": "int",
+      "isSparse": false,
+      "name": "uid",
+      "shape": []
+    },
+    {
+      "dtype": "string",
+      "isSparse": false,
+      "name": "memberId",
+      "shape": []
+    }
+  ],
+  "labels": [
+    {
+      "dtype": "int",
+      "isSparse": false,
+      "name": "response",
+      "shape": []
+    }
+  ]
+}
