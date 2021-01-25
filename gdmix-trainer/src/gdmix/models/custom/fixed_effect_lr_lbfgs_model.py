@@ -21,6 +21,7 @@ from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
 from gdmix.util.io_utils import add_dummy_weight, read_json_file, try_write_avro_blocks,\
     export_linear_model_to_avro, load_linear_models_from_avro, copy_files, get_inference_output_avro_schema
+from gdmix.util.model_utils import threshold_coefficients
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -83,6 +84,7 @@ class FixedEffectLRModelLBFGS(Model):
         self.is_regularize_bias = self.model_params.regularize_bias
         self.max_iteration = self.model_params.num_of_lbfgs_iterations
         self.l2_reg_weight = self.model_params.l2_reg_weight
+        self.sparsity_threshold = self.model_params.sparsity_threshold
 
         self.metadata = self._load_metadata()
         self.tensor_metadata = DatasetMetadata(self.metadata_file)
@@ -514,6 +516,9 @@ class FixedEffectLRModelLBFGS(Model):
         logging("\n------------------------------\nf_min: {}\nnum of funcalls: {}\ntask msg:"
                 "{}\n------------------------------".format(f_min, info['funcalls'], info['task']))
 
+        logging(f"Zeroing coefficients equal to or below {self.sparsity_threshold}")
+        self.model_coefficients = threshold_coefficients(self.model_coefficients, self.sparsity_threshold)
+
         logging("Inference training data starts...")
         inference_training_data_ops = (train_sample_ids_op, train_labels_op, train_weights_op,
                                        train_prediction_score_op, train_prediction_score_per_coordinate_op)
@@ -567,7 +572,8 @@ class FixedEffectLRModelLBFGS(Model):
                                     list_of_weight_values=list_of_weight_values,
                                     biases=np.expand_dims(bias, axis=0),
                                     feature_file=self.feature_file,
-                                    output_file=output_file)
+                                    output_file=output_file,
+                                    sparsity_threshold=self.sparsity_threshold)
 
     def _load_model(self, catch_exception=False):
         """ Load model from avro file. """

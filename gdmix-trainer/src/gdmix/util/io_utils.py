@@ -93,7 +93,8 @@ def add_dummy_weight(models):
     return tuple(process_one_model(m) for m in models)
 
 
-def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bias, feature_list):
+def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bias, feature_list,
+                       sparsity_threshold):
     """
     generate the record for one LR model in photon-ml avro format
     :param model_id: model id
@@ -102,16 +103,20 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     :param weight_values: LR weight vector values
     :param bias: the bias/offset/intercept
     :param feature_list: corresponding feature names
+    :param sparsity_threshold: The coefficient will be treated as zero if the absolute value
+    is less than or equal to this threshold.
     :return: a model in avro format
     """
+    # Output the intercept regardless of its value.
     record = {u'name': INTERCEPT, u'term': '', u'value': bias}
     records = {u'modelId': model_id, u'modelClass': model_class, u'means': [record], u'lossFunction': ""}
     if weight_indices is not None and weight_values is not None:
         for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
-            feat = feature_list[w_i]
-            name, term = feat[0], feat[1]
-            record = {u'name': name, u'term': term, u'value': w_v}
-            records[u'means'].append(record)
+            if abs(w_v) > sparsity_threshold:  # Only store the coefficient that is larger than the threshold.
+                feat = feature_list[w_i]
+                name, term = feat[0], feat[1]
+                record = {u'name': name, u'term': term, u'value': w_v}
+                records[u'means'].append(record)
     return records
 
 
@@ -122,7 +127,8 @@ def export_linear_model_to_avro(model_ids,
                                 feature_file,
                                 output_file,
                                 model_log_interval=1000,
-                                model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"):
+                                model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel",
+                                sparsity_threshold=1.0e-4):
     """
     Export random effect logistic regression model in avro format for photon-ml to consume
     :param model_ids:               a list of model ids used in generated avro file
@@ -133,6 +139,8 @@ def export_linear_model_to_avro(model_ids,
     :param output_file:             full file path for the generated avro file.
     :param model_log_interval:      write model every model_log_interval models.
     :param model_class:             the model class defined by photon-ml.
+    :param sparsity_threshold:      The coefficient will be treated as zero if the absolute value
+    is less than or equal to this threshold.
     :return: None
     """
     # STEP [1] - Read feature list
@@ -150,11 +158,12 @@ def export_linear_model_to_avro(model_ids,
     def gen_records():
         if list_of_weight_indices is None or list_of_weight_values is None or feature_list is None:
             for i in range(num_models):
-                yield gen_one_avro_model(str(model_ids[i]), model_class, None, None, biases[i], feature_list)
+                yield gen_one_avro_model(str(model_ids[i]), model_class, None, None, biases[i], feature_list,
+                                         sparsity_threshold)
         else:
             for i in range(num_models):
                 yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i],
-                                         list_of_weight_values[i], biases[i], feature_list)
+                                         list_of_weight_values[i], biases[i], feature_list, sparsity_threshold)
     batched_write_avro(gen_records(), output_file, schema, model_log_interval)
     logger.info(f"dumped {num_models} models to avro file at {output_file}.")
 

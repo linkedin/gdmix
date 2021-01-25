@@ -7,6 +7,7 @@ import numpy as np
 from scipy.sparse import csr_matrix, coo_matrix, issparse
 
 from gdmix.util.io_utils import dataset_reader
+from gdmix.util.model_utils import threshold_coefficients
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -21,12 +22,13 @@ VALUES_SUFFIX = '_values'
 
 class TrainingJobConsumer:
     """Callable class to consume entity-based random effect training jobs"""
-    def __init__(self, lr_model, name, job_queue, enable_local_indexing):
+    def __init__(self, lr_model, name, job_queue, enable_local_indexing, sparsity_threshold):
         self.name = f'Training: {name}'
         self.lr_model = lr_model
         self.job_count = 0
         self.job_queue = job_queue
         self.enable_local_indexing = enable_local_indexing
+        self.sparsity_threshold = sparsity_threshold
 
     def __call__(self, job_id: str):
         """
@@ -49,6 +51,7 @@ class TrainingJobConsumer:
         else:
             # extract the values from result according to unique_global_indices.
             theta = self._sparsify_theta(result[0], job.unique_global_indices)
+        theta = threshold_coefficients(theta, self.sparsity_threshold)
         return job.entity_id, TrainingResult(theta, job.unique_global_indices)
 
     def _densify_theta(self, theta, length):
