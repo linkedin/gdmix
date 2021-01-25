@@ -24,7 +24,10 @@ class LRParams:
     num_of_lbfgs_curvature_pairs: int = 10  # Number of curvature pairs for LBFGS training.
     num_of_lbfgs_iterations: int = 100  # Number of LBFGS iterations.
 
+    # model related parameters
     offset: str = "offset"  # Score from previous model.
+    # The model coefficients are treated as zero if their absolute values are less than or equal to sparsity_threshold.
+    sparsity_threshold = 1.0e-4  # coefficients less than or equal to the threshold are ignored.
 
     # Dataset parameters
     batch_size: int = 16

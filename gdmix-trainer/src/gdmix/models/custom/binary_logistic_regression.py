@@ -162,7 +162,6 @@ class BinaryLogisticRegressionTrainer:
         X_with_intercept = self._add_column_of_ones(X)
         if theta_initial is None:
             theta_initial = np.zeros(X_with_intercept.shape[1])
-
         # Run minimization
         result = fmin_l_bfgs_b(func=self._loss,
                                x0=theta_initial,

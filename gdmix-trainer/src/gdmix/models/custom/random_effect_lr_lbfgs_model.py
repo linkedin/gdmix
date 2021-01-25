@@ -128,7 +128,8 @@ class RandomEffectLRLBFGSModel(Model):
                                                    num_lbfgs_corrections=self.model_params.num_of_lbfgs_curvature_pairs,
                                                    max_iter=self.model_params.num_of_lbfgs_iterations)
         consumer = TrainingJobConsumer(lr_model, name=input_path, job_queue=self.job_queue,
-                                       enable_local_indexing=self.model_params.enable_local_indexing)
+                                       enable_local_indexing=self.model_params.enable_local_indexing,
+                                       sparsity_threshold=self.model_params.sparsity_threshold)
         # Make sure the queue is empty
         assert(self.job_queue.empty())
         results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file,
@@ -222,7 +223,7 @@ class RandomEffectLRLBFGSModel(Model):
         tf.io.gfile.exists(output_dir) or tf.io.gfile.makedirs(output_dir)
         # Delegate to export function
         export_linear_model_to_avro(model_ids, list_of_weight_indices, list_of_weight_values,
-                                    biases, feature_file, output_file)
+                                    biases, feature_file, output_file, self.model_params.sparsity_threshold)
 
     def _load_weights(self, model_file, catch_exception=False):
         logger.info(f"Loading model from {model_file}")

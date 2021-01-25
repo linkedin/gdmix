@@ -75,11 +75,32 @@ class TestIoUtils(tf.test.TestCase):
         bias = 7.8
         feature_list = [('f1,2', 't1'), ('f2', ''), ('f3', 't3,3')]
 
-        records_avro = gen_one_avro_model(model_id, model_class, weight_indices, weights, bias, feature_list)
+        records_avro = gen_one_avro_model(model_id, model_class, weight_indices, weights, bias, feature_list, 0.0)
         records = {u'modelId': model_id, u'modelClass': model_class, u'means': [
             {u'name': '(INTERCEPT)', u'term': '', u'value': 7.8},
             {u'name': 'f1,2', u'term': 't1', u'value': 1.2},
             {u'name': 'f2', u'term': '', u'value': 3.4},
             {u'name': 'f3', u'term': 't3,3', u'value': 5.6}
+        ], u'lossFunction': ""}
+        self.assertDictEqual(records_avro, records)
+
+    def testGenOneAvroModelwithThreshold(self):
+        """
+        Test avro model generation.
+        :return: None
+        """
+        model_id = '1234'
+        model_class = 'com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel'
+        weights = np.array([[1.2, 3.4, -5.6]])
+        weight_indices = np.arange(3)
+        bias = 0.8
+        threshold = 3.4
+        feature_list = [('f1,2', 't1'), ('f2', ''), ('f3', 't3,3')]
+
+        records_avro = gen_one_avro_model(model_id, model_class, weight_indices,
+                                          weights, bias, feature_list, threshold)
+        records = {u'modelId': model_id, u'modelClass': model_class, u'means': [
+            {u'name': '(INTERCEPT)', u'term': '', u'value': 0.8},
+            {u'name': 'f3', u'term': 't3,3', u'value': -5.6}
         ], u'lossFunction': ""}
         self.assertDictEqual(records_avro, records)
