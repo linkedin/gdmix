@@ -272,6 +272,12 @@ class FixedEffectLRModelLBFGS(Model):
                                                             logits=tf1.reshape(tf1.cast(logits, tf1.float64), [-1]))
             weighted_loss = tf1.cast(weights, tf1.float64) * loss
             # regularzer has the option to include or exclude bias
+            # Note: The L2 is computed on the entire weight vector, this is fine if the dataset has
+            # all the features. In some cases, e.g incremental learning, the incremental dataset
+            # may only have a subset of the entire features, so the L2 should not be applied to those
+            # weights that are not in the dataset. Revisit it when we implement incremental learning.
+            # Alternatively, the features that are in the prior models but not the current dataset
+            # should not be copied to initial coefficients for warm-start, but needed for inference.
             regularizer = tf1.nn.l2_loss(x_placeholder) if is_regularize_bias else tf1.nn.l2_loss(w)
             batch_value = tf1.reduce_sum(weighted_loss) + regularizer * self.l2_reg_weight \
                 * tf1.cast(current_batch_size, tf1.float64) / global_num_samples

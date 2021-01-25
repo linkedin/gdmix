@@ -18,6 +18,8 @@ class BinaryLogisticRegressionTrainer:
 
     The loss and the gradient assume l2-regularization. Users can use the "regularize_bias" switch to regularize the
     intercept term or not.
+
+    In this implementation, we assume the first element of the model vector is the intercept.
     """
 
     def __init__(self, lambda_l2=1.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10, max_iter=100, regularize_bias=False):
@@ -52,7 +54,7 @@ class BinaryLogisticRegressionTrainer:
         if isinstance(theta, np.ndarray):
             z = X.dot(theta) + offsets
         elif scipy.sparse.issparse(theta):
-            z = np.array(X.dot(theta).todense()).squeeze() + offsets
+            z = X.dot(theta).toarray().squeeze() + offsets
         else:
             raise Exception(f"Unknown type: {type(theta)!r} for model weights. Accepted types are Numpy ndarray and Scipy sparse matrices")
         return z if return_logits else self._sigmoid(z)
@@ -141,7 +143,7 @@ class BinaryLogisticRegressionTrainer:
         :param y:               vector of binary sample labels; of dimensions (n x 1)  where n is the number of samples
         :param weights:         vector of sample weights; of dimensions (n x 1)  where n is the number of samples
         :param offsets:         vector of sample offsets; of dimensions (n x 1)  where n is the number of samples
-        :param theta_initial:   initial value for the coefficients, useful in warm start.
+        :param theta_initial:   a numpy vector, initial value for the coefficients, useful in warm start.
         :return:    training results dictionary, including learned parameters
         """
 
@@ -161,7 +163,6 @@ class BinaryLogisticRegressionTrainer:
         if theta_initial is None:
             theta_initial = np.zeros(X_with_intercept.shape[1])
 
-        assert theta_initial.shape == (X_with_intercept.shape[1],), "Initial model should have the same shape as input data"
         # Run minimization
         result = fmin_l_bfgs_b(func=self._loss,
                                x0=theta_initial,
@@ -174,7 +175,6 @@ class BinaryLogisticRegressionTrainer:
                                disp=0)
         # Extract learned parameters from result
         self.theta = result[0]
-
         return result
 
     def predict_proba(self, X, offsets=None, custom_theta=None, return_logits=False):

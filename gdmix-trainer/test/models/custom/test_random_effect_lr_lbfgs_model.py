@@ -178,13 +178,15 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
                 file_writer.write(sequence_example.SerializeToString())
         return member_ids
 
-    def _run_warm_start(self, string_entity_id, intercept_only):
+    def _run_warm_start(self, string_entity_id, intercept_only, enable_local_index):
 
         # Step 1: train an initial model
         # Create and add AVRO model output directory to raw parameters
         base_training_params, raw_params = self.get_raw_params(intercept_only=intercept_only)
         avro_model_output_dir = tempfile.mkdtemp()
         raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
+        if enable_local_index:
+            raw_params.extend(['--' + constants.ENABLE_LOCAL_INDEXING, 'True'])
 
         train_data_dir = test_dataset_path
         if string_entity_id:
@@ -227,6 +229,8 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         # Step 2: Train for 1 l-bfgs step with warm start
         base_training_params, raw_params = self.get_raw_params('memberId', 1, intercept_only)
         raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
+        if enable_local_index:
+            raw_params.extend(['--' + constants.ENABLE_LOCAL_INDEXING, 'True'])
 
         # Create random effect LR LBFGS Model
         re_lr_model = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
@@ -283,11 +287,20 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         tf.io.gfile.rmtree(avro_model_output_dir)
         tf.io.gfile.rmtree(checkpoint_dir)
 
-    def test_warm_start(self):
-        self._run_warm_start(string_entity_id=False, intercept_only=False)
+    def test_warm_start_global_indexing(self):
+        self._run_warm_start(string_entity_id=False, intercept_only=False, enable_local_index=False)
 
-    def test_warm_start_intercept_only(self):
-        self._run_warm_start(string_entity_id=False, intercept_only=True)
+    def test_warm_start_local_indexing(self):
+        self._run_warm_start(string_entity_id=False, intercept_only=False, enable_local_index=True)
 
-    def test_warm_start_string_entity_id(self):
-        self._run_warm_start(string_entity_id=True, intercept_only=False)
+    def test_warm_start_intercept_only_global_indexing(self):
+        self._run_warm_start(string_entity_id=False, intercept_only=True, enable_local_index=False)
+
+    def test_warm_start_intercept_only_local_indexing(self):
+        self._run_warm_start(string_entity_id=False, intercept_only=True, enable_local_index=True)
+
+    def test_warm_start_string_entity_id_global_indexing(self):
+        self._run_warm_start(string_entity_id=True, intercept_only=False, enable_local_index=False)
+
+    def test_warm_start_string_entity_id_local_indexing(self):
+        self._run_warm_start(string_entity_id=True, intercept_only=False, enable_local_index=True)

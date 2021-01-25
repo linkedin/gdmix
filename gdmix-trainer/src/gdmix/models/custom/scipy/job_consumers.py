@@ -4,7 +4,7 @@ from multiprocessing.managers import BaseProxy
 from multiprocessing.process import current_process
 
 import numpy as np
-from scipy.sparse import csr_matrix, coo_matrix
+from scipy.sparse import csr_matrix, coo_matrix, issparse
 
 from gdmix.util.io_utils import dataset_reader
 
@@ -21,11 +21,12 @@ VALUES_SUFFIX = '_values'
 
 class TrainingJobConsumer:
     """Callable class to consume entity-based random effect training jobs"""
-    def __init__(self, lr_model, name, job_queue):
+    def __init__(self, lr_model, name, job_queue, enable_local_indexing):
         self.name = f'Training: {name}'
         self.lr_model = lr_model
         self.job_count = 0
         self.job_queue = job_queue
+        self.enable_local_indexing = enable_local_indexing
 
     def __call__(self, job_id: str):
         """
@@ -35,26 +36,63 @@ class TrainingJobConsumer:
         """
         # Train model
         job = self.job_queue.get()
+        theta_length = job.X.shape[1] + 1  # +1 due to intercept
         result = self.lr_model.fit(X=job.X,
                                    y=job.y,
                                    weights=job.weights,
                                    offsets=job.offsets,
-                                   theta_initial=None if job.theta is None else job.theta)
+                                   theta_initial=self._densify_theta(job.theta, theta_length))
         inc_count(self)
-        return job.entity_id, TrainingResult(result[0], job.unique_global_indices)
+
+        if self.enable_local_indexing:
+            theta = result[0]
+        else:
+            # extract the values from result according to unique_global_indices.
+            theta = self._sparsify_theta(result[0], job.unique_global_indices)
+        return job.entity_id, TrainingResult(theta, job.unique_global_indices)
+
+    def _densify_theta(self, theta, length):
+        """
+        Convert theta to dense vector if it is not so already.
+        It will be used as initial value for the L-BFGS optimizer.
+        If the input theta is None, an all-zero vector will be returned.
+        :param theta: input theta, can be None, sparse or dense vector.
+        :param length: expect length of the return vector.
+        :return: a dense numpy array representing the initial coefficients.
+        """
+        if theta is None:
+            return np.zeros(length)
+
+        if issparse(theta):
+            theta = theta.toarray().squeeze()
+        elif not isinstance(theta, np.ndarray):
+            raise ValueError("Unknown data type, expecting sparse matrix or numpy array")
+
+        assert theta.shape == (length,), f"Dimension mismatch, theta " \
+                                         f"shape: {theta.shape}, expected shape ({length},)"
+        return theta
+
+    def _sparsify_theta(self, theta, indices_without_intercept):
+        """
+        Exract the relevant values from theta according to the indices.
+        This undoes the densification at the input to L-BFGS optimizer.
+        :param theta: input coefficient vector
+        :param indices_without_intercept: indices for the relevant (non-padding) elements.
+        :return: a numpy array containing the elements specified by the input indices.
+        """
+        indices = [0] + [x+1 for x in indices_without_intercept]  # account for the intercept.
+        return np.array([theta[u] for u in indices])
 
 
 class InferenceJobConsumer:
     """Callable class to consume entity-based random effect inference jobs"""
-    def __init__(self, lr_model, num_features, schema_params, use_local_index, name, job_queue):
-        self.use_local_index = use_local_index
+    def __init__(self, lr_model, num_features, schema_params, name, job_queue):
         self.name = f'Inference: {name}'
         self.num_features = num_features
         self.lr_model = lr_model
         self.schema_params = schema_params
         self.job_count = 0
         self.job_queue = job_queue
-        logger.info(f"InferenceJobConsumer with use_local_index = {self.use_local_index} created: {name!r}.")
 
     def _inference_results(self, labels, predicts, sample_weights, sample_ids, predicts_per_coordinate):
         """
@@ -73,7 +111,8 @@ class InferenceJobConsumer:
         params = self.schema_params
         records = []
         for i in range(batch_size):
-            record = {params.prediction_score_column_name: predicts[i], params.weight_column_name: sample_weights[i], params.uid_column_name: sample_ids[i]}
+            record = {params.prediction_score_column_name: predicts[i], params.weight_column_name: sample_weights[i],
+                      params.uid_column_name: sample_ids[i]}
             if labels is not None:
                 record[params.label_column_name] = labels[i]
             if predicts_per_coordinate is not None:
@@ -91,19 +130,7 @@ class InferenceJobConsumer:
         if job.theta is None:
             logits = job.offsets
         else:
-            if self.use_local_index:
-                # Convert locally indexed weights to global space. Since global indices are shifted by one because of
-                # the bias term, increase global index values by 1
-                locally_indexed_custom_theta = job.theta
-                unique_global_indices = job.unique_global_indices + 1
-                cols = np.hstack((0, unique_global_indices))
-                rows = np.zeros(cols.shape, dtype=int)
-                custom_theta = csr_matrix((locally_indexed_custom_theta, (rows, cols)),
-                                          shape=(1, self.num_features + 1)).T
-            else:
-                custom_theta = job.theta
-
-            logits = self.lr_model.predict_proba(X=job.X, offsets=job.offsets, custom_theta=custom_theta,
+            logits = self.lr_model.predict_proba(X=job.X, offsets=job.offsets, custom_theta=job.theta,
                                                  return_logits=True)
         logits_per_coordinate = logits - job.offsets
         inc_count(self)
@@ -117,7 +144,7 @@ def inc_count(job_consumer):
 
 
 def prepare_jobs(batch_iterator, model_params, schema_params, num_features, model_weights: dict,
-                 gen_index_map: bool, job_queue: BaseProxy):
+                 enable_local_indexing: bool, job_queue: BaseProxy):
     """
     Utility method to take batches of TF grouped data and convert it into one or more Jobs.
     Useful for running training and inference
@@ -126,7 +153,7 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
     :param schema_params:         schema parameters to aid in converting to Job objects
     :param num_features           Number of features in global space
     :param model_weights:         Model coefficients
-    :param gen_index_map:         Generate local -> global index mapping if True
+    :param enable_local_indexing: Whether to index the features locally instead of use global indices
     :param job_queue:             A managed queue containing the generated jobs
     :return: a generator of entity_ids.
 
@@ -155,7 +182,7 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
         dtype=float32), dense_shape=array([2, 2, 5]))
         Note the first dimension is the batch dimension.
     """
-    logger.info(f"Kicking off job producer with gen_index_map = {gen_index_map}.")
+    logger.info(f"Kicking off job producer with enable_local_indexing = {enable_local_indexing}.")
     for features_val, labels_val in dataset_reader(batch_iterator()):
         # Extract number of entities in batch
         num_entities = features_val[model_params.partition_entity].shape[0]
@@ -194,12 +221,15 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
             else:
                 entity_id = str(raw_entity_id)
             result = model_weights.get(entity_id, None)
-            if gen_index_map:
-                # Locally index the column values, and preserve mapping to global space
-                unique_global_indices, locally_indexed_cols = np.unique(cols, return_inverse=True)
+
+            # generate index map
+            unique_global_indices, locally_indexed_cols = np.unique(cols, return_inverse=True)
+
+            if enable_local_indexing:
+                # Use local indices to represent the data matrix.
                 X = coo_matrix((values, (rows, locally_indexed_cols)))
             else:
-                unique_global_indices = result.unique_global_indices if result else None
+                # Use global indices to represent the data matrix.
                 X = coo_matrix((values, (rows, cols)), shape=(sample_count, num_features))
 
             # Construct y, offsets, weights and ids. Slice portion of arrays from y_index through sample_count
@@ -209,16 +239,26 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
                        if schema_params.weight_column_name in features_val else np.ones(sample_count))
 
             ids = features_val[schema_params.uid_column_name].values[y_index: y_index + sample_count]
-            # Check if the prior model is compatible with the current model
-            # Pick up the prior model only if it has the same size of the model to be trained, and the global indices
-            # from the prior model are identical to the current one.
-            prior_model_compatible = (result is not None
-                                      and result.unique_global_indices is not None
-                                      and unique_global_indices is not None
-                                      and result.unique_global_indices.size == unique_global_indices.size
-                                      and (result.unique_global_indices == unique_global_indices).all())
-            job = Job(entity_id, X, y, offsets, weights, ids, unique_global_indices,
-                      theta=result.theta if prior_model_compatible else None)
+
+            # If a prior model exists, get the coefficients to warm start the training.
+            # Note the prior model may have fewer or more features than the current dataset.
+            theta = None
+            if result:
+                prior_model = {u: v for u, v in zip(result.unique_global_indices, result.theta[1:])}
+                model_rows = [0]  # intercept index
+                model_values = [result.theta[0]]  # intercept value
+                for i, u in enumerate(unique_global_indices):
+                    if u in prior_model:
+                        r = i if enable_local_indexing else u
+                        model_rows.append(1 + r)  # +1 since intercept is the first element.
+                        model_values.append(prior_model[u])
+                model_cols = [0]*len(model_rows)
+                if enable_local_indexing:
+                    theta = csr_matrix((model_values, (model_rows, model_cols)),
+                                       shape=(len(unique_global_indices) + 1, 1))
+                else:
+                    theta = csr_matrix((model_values, (model_rows, model_cols)), shape=(num_features + 1, 1))
+            job = Job(entity_id, X, y, offsets, weights, ids, unique_global_indices, theta=theta)
             job_queue.put(job)
             # use entity_id as a token, it may not be unique
             yield entity_id
