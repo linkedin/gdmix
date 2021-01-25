@@ -92,9 +92,9 @@ class RandomEffectLRLBFGSModel(Model):
             if action == constants.ACTION_INFERENCE:
                 output_dir, input_data_path = action_context
                 model_weights = self._load_weights(os.path.join(checkpoint_path, avro_filename))
-                self._predict(pool=pool, input_path=input_data_path, metadata=metadata, tensor_metadata=tensor_metadata, metadata_file=metadata_file,
-                              output_file=os.path.join(output_dir, avro_filename), model_weights=model_weights,
-                              schema_params=schema_params, use_local_index=True, num_features=num_features)
+                self._predict(pool=pool, input_path=input_data_path, metadata=metadata, tensor_metadata=tensor_metadata,
+                              metadata_file=metadata_file, output_file=os.path.join(output_dir, avro_filename),
+                              model_weights=model_weights, schema_params=schema_params, num_features=num_features)
             elif action == constants.ACTION_TRAIN:
                 training_data_dir, validation_data_dir = action_context
                 model_file = os.path.join(self.model_params.output_model_dir, avro_filename)
@@ -104,8 +104,9 @@ class RandomEffectLRLBFGSModel(Model):
                 model_weights = self._train(pool, training_data_dir, metadata_file, model_weights, num_features, schema_params, model_file)
 
                 # shorthand for self._predict
-                predict = partial(self._predict, use_local_index=self.model_params.enable_local_indexing, metadata=metadata, tensor_metadata=tensor_metadata,
-                                  pool=pool, schema_params=schema_params, num_features=num_features, metadata_file=metadata_file, model_weights=model_weights)
+                predict = partial(self._predict, metadata=metadata, tensor_metadata=tensor_metadata, pool=pool,
+                                  schema_params=schema_params, num_features=num_features, metadata_file=metadata_file,
+                                  model_weights=model_weights)
                 # Run inference on validation set
                 o = execution_context.get(constants.VALIDATION_OUTPUT_FILE, None)
                 o and predict(input_path=validation_data_dir, output_file=o)
@@ -126,11 +127,19 @@ class RandomEffectLRLBFGSModel(Model):
                                                    precision=self.model_params.lbfgs_tolerance / np.finfo(float).eps,
                                                    num_lbfgs_corrections=self.model_params.num_of_lbfgs_curvature_pairs,
                                                    max_iter=self.model_params.num_of_lbfgs_iterations)
-        consumer = TrainingJobConsumer(lr_model, name=input_path, job_queue=self.job_queue)
+        consumer = TrainingJobConsumer(lr_model, name=input_path, job_queue=self.job_queue,
+                                       enable_local_indexing=self.model_params.enable_local_indexing)
         # Make sure the queue is empty
         assert(self.job_queue.empty())
         results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file,
                                       self.model_params.enable_local_indexing)
+        # The trained model should be updated by the prior model to cover the following two cases:
+        # (1) the prior model has extra features that are not present in the current datasets.
+        # (2) the prior model has extra model_ids that are not present in the current datasets.
+        # In both cases, the extra features/model_id needs to be copied to the current models.
+        # This is needed especially incremental learning is implemented.
+        # It is not needed when the prior model and current model share the same features / model_ids.
+        # Revisit this when we start working on more advanced warm start.
         model_weights.update(results)
         logger.info(f"{len(model_weights)} models in total after training/refreshing.")
         # Dump results to model output directory.
@@ -139,16 +148,17 @@ class RandomEffectLRLBFGSModel(Model):
         return model_weights
 
     def _predict(self, pool, input_path, metadata, tensor_metadata, output_file, schema_params, num_features,
-                 metadata_file, model_weights, use_local_index):
+                 metadata_file, model_weights):
         logger.info(f"Start inference for {input_path}.")
         # Create LR model object for inference
         lr_model = BinaryLogisticRegressionTrainer(regularize_bias=True, lambda_l2=self.model_params.l2_reg_weight)
-        consumer = InferenceJobConsumer(lr_model, num_features, schema_params, use_local_index, name=input_path,
+        consumer = InferenceJobConsumer(lr_model, num_features, schema_params, name=input_path,
                                         job_queue=self.job_queue)
         # Make sure the queue is empty
         assert(self.job_queue.empty())
+        # Prediction does not use local indexing since it can work on sparse coefficients directly.
         results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features,
-                                      metadata_file, gen_index_map=False)
+                                      metadata_file, enable_local_indexing=False)
 
         # Set up output schema
         output_schema = fastavro.parse_schema(get_inference_output_avro_schema(
@@ -160,7 +170,7 @@ class RandomEffectLRLBFGSModel(Model):
         logger.info(f"Inference complete: {input_path}.")
 
     def _pooled_action(self, pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file,
-                       gen_index_map):
+                       enable_local_indexing):
         # Create training dataset
         def get_iterator():
             assert(self.model_params.data_format == constants.TFRECORD)
@@ -178,7 +188,8 @@ class RandomEffectLRLBFGSModel(Model):
 
         # Create the job id generator
         job_ids = prepare_jobs(get_iterator, self.model_params, schema_params, num_features=num_features,
-                               model_weights=model_weights, gen_index_map=gen_index_map, job_queue=self.job_queue)
+                               model_weights=model_weights, enable_local_indexing=enable_local_indexing,
+                               job_queue=self.job_queue)
         # If a single consumer, use main process directly.
         if self.model_params.num_of_consumers == 1:
             return map(consumer, job_ids)
@@ -188,7 +199,6 @@ class RandomEffectLRLBFGSModel(Model):
     def _save_model(self, output_file, model_coefficients, num_features, feature_file):
         # Create model IDs, biases, weight indices and weight value arrays. Account for local indexing
         model_ids = list(model_coefficients.keys())
-        global_indices = None if self.model_params.enable_local_indexing else np.arange(num_features)
         biases = []
         if feature_file is None:
             # intercept only model.
@@ -202,9 +212,9 @@ class RandomEffectLRLBFGSModel(Model):
             biases.append(training_result[0])
             if list_of_weight_indices is not None and list_of_weight_values is not None:
                 list_of_weight_values.append(training_result[1:])
-                # Indices map to strictly increasing sequence of global indices or range from 0 to d-1,
-                # where d is the number of features in the global space
-                indices = unique_global_indices if global_indices is None else global_indices
+                # unique_global_indices is always present, even when local indexing is not used.
+                # It is needed for update from the prior models.
+                indices = unique_global_indices
                 list_of_weight_indices.append(indices)
 
         # Create output file
