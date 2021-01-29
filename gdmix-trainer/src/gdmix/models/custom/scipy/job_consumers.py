@@ -1,10 +1,12 @@
 import logging
 from collections import namedtuple
+from dataclasses import asdict
 from multiprocessing.managers import BaseProxy
 from multiprocessing.process import current_process
 
 import numpy as np
 from scipy.sparse import csr_matrix, coo_matrix, issparse
+from types import SimpleNamespace
 
 from gdmix.util.io_utils import dataset_reader
 from gdmix.util.model_utils import threshold_coefficients
@@ -93,7 +95,7 @@ class InferenceJobConsumer:
         self.name = f'Inference: {name}'
         self.num_features = num_features
         self.lr_model = lr_model
-        self.schema_params = schema_params
+        self.schema_params = SimpleNamespace(**asdict(schema_params))
         self.job_count = 0
         self.job_queue = job_queue
 
