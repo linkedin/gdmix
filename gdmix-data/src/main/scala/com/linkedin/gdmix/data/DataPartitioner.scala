@@ -216,7 +216,7 @@ object DataPartitioner {
       predictionScore,
       predictionScorePerCoordinate,
       offset,
-      uid)
+      uid).cache()
 
     // Group and bound the dataset by a lower bound and an upper bound.
     val groupedDf = boundAndGroupData(joinedDf, lowerBound, upperBound, partitionEntity, uid)
@@ -332,7 +332,7 @@ object DataPartitioner {
         .groupBy(partitionEntity)
         .count()
         .select(col(partitionEntity), col(COUNT).alias(PER_ENTITY_TOTAL_SAMPLE_COUNT))
-      val dfWithEntityCount = dataFrame.join(perEntityCounts, partitionEntity)
+      val dfWithEntityCount = dataFrame.join(broadcast(perEntityCounts), partitionEntity)
 
       // If there's an upper bound, calculate the number of groups needed to bound the data.
       val dfWithGroupCounts = if (!upperBound.isEmpty) {
