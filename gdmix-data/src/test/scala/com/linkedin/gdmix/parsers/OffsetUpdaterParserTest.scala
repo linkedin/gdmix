@@ -20,7 +20,8 @@ class OffsetUpdaterParserTest {
           "--validationDataDir", "fixed-effect/validationData",
           "--validationScoreDir", "jymbii_lr/per-job/validationScore",
           "--validationScorePerCoordinateDir", "jymbii_lr/global/validationScore",
-          "--outputValidationDataDir", "jymbii_lr/global/updatedValidationData")))
+          "--outputValidationDataDir", "jymbii_lr/global/updatedValidationData",
+          "--numPartitions", "10")))
   }
 
   @DataProvider
@@ -54,6 +55,21 @@ class OffsetUpdaterParserTest {
     )
   }
 
+  @DataProvider
+  def dataIncorrectArgs(): Array[Array[Any]] = {
+
+    Array(
+      // negative numPartitions
+      Array(
+        Seq(
+          "--trainingDataDir", "fixed-effect/trainingData",
+          "--trainingScoreDir", "jymbii_lr/per-job/trainingScore",
+          "--trainingScorePerCoordinateDir", "jymbii_lr/global/trainingScore",
+          "--outputTrainingDataDir", "jymbii_lr/global/updatedTrainingData",
+          "--numPartitions", "-10"))
+    )
+  }
+
   @Test(dataProvider = "dataCompleteArgs")
   def testParseCompleteArguments(completeArgs: Seq[String]): Unit = {
 
@@ -66,7 +82,8 @@ class OffsetUpdaterParserTest {
       validationDataDir = Some("fixed-effect/validationData"),
       validationScoreDir = Some("jymbii_lr/per-job/validationScore"),
       validationScorePerCoordinateDir = Some("jymbii_lr/global/validationScore"),
-      outputValidationDataDir = Some("jymbii_lr/global/updatedValidationData")
+      outputValidationDataDir = Some("jymbii_lr/global/updatedValidationData"),
+      numPartitions = 10
     )
     assertEquals(params, expectedParams)
   }
@@ -74,5 +91,10 @@ class OffsetUpdaterParserTest {
   @Test(dataProvider = "dataIncompleteArgs", expectedExceptions = Array(classOf[IllegalArgumentException]))
   def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
     OffsetUpdaterParser.parse(inCompleteArgs)
+  }
+
+  @Test(dataProvider = "dataIncorrectArgs", expectedExceptions = Array(classOf[IllegalArgumentException]))
+  def testIncorrectArgs(inCorrectArgs: Seq[String]): Unit = {
+    OffsetUpdaterParser.parse(inCorrectArgs)
   }
 }

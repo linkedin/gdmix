@@ -18,7 +18,8 @@ case class OffsetUpdaterParams(
   predictionScorePerCoordinateColumnName: String = PREDICTION_SCORE_PER_COORDINATE,
   dataFormat: String = AVRO,
   offsetColumnName: String = OFFSET,
-  uidColumnName: String = UID
+  uidColumnName: String = UID,
+  numPartitions: Int = 0
 )
 
 /**
@@ -106,6 +107,14 @@ object OffsetUpdaterParser {
       .text(
         """Optional.
           |Column name of unique id.""".stripMargin)
+
+    opt[Int]("numPartitions").action((x, p) => p.copy(numPartitions = x))
+      .optional
+      .validate(
+        x => if (x >= 0) success else failure("Option --numPartitions must be >= 0"))
+      .text(
+        """Optional.
+          |Number of partitions.""".stripMargin)
 
   }
 
