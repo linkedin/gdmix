@@ -41,6 +41,7 @@ object OffsetUpdater {
     val offset = params.offsetColumnName
     val uid = params.uidColumnName
     val dataFormat = params.dataFormat
+    val numPartitions = params.numPartitions
 
     // Create a Spark session.
     val spark = SparkSession.builder().appName(getClass.getName).getOrCreate()
@@ -57,7 +58,7 @@ object OffsetUpdater {
       predictionScorePerCoordinate,
       offset,
       uid)
-    IoUtils.saveDataFrame(trainOutputData, trainOutputDataPath, dataFormat)
+    IoUtils.saveDataFrame(trainOutputData, trainOutputDataPath, dataFormat, numPartitions)
 
     // Update offset in validation data.
     if (!IoUtils.isEmptyStr(validationInputDataPath)
@@ -75,7 +76,7 @@ object OffsetUpdater {
         predictionScorePerCoordinate,
         offset,
         uid)
-      IoUtils.saveDataFrame(validationOutputData, validationOutputDataPath.get, dataFormat)
+      IoUtils.saveDataFrame(validationOutputData, validationOutputDataPath.get, dataFormat, numPartitions)
     }
   }
 

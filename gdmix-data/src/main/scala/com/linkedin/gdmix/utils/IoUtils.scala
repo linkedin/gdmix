@@ -128,13 +128,19 @@ object IoUtils {
     partitionColumn: String = null,
     recordType: String = TF_EXAMPLE
   ): Unit = {
-    val dataFrameWriter = if ((numPartitions > 0)
-      && (partitionColumn != null)) {
+    val dataFrameWriter = if (numPartitions > 0) {
+      if (partitionColumn != null) {
       dataFrame
         .repartition(numPartitions, col(partitionColumn))
         .write
         .mode(SaveMode.Overwrite)
         .partitionBy(partitionColumn)
+      } else {
+      dataFrame
+        .repartition(numPartitions)
+        .write
+        .mode(SaveMode.Overwrite)
+      }
     } else {
       dataFrame.write.mode(SaveMode.Overwrite)
     }
