@@ -2,6 +2,8 @@ import os
 import logging
 import tensorflow as tf
 
+from gdmix.util.io_utils import low_rpc_call_glob
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -27,9 +29,9 @@ def shard_input_files(input_path, num_shards, shard_index):
     """
     assert((shard_index >= 0) and (num_shards >= 1) and (num_shards > shard_index))
     if tf.compat.v1.gfile.IsDirectory(input_path):
-        input_files = tf.io.gfile.glob(os.path.join(input_path, '*'))
+        input_files = low_rpc_call_glob(os.path.join(input_path, '*'))
     else:  # This is a file or file pattern
-        input_files = tf.io.gfile.glob(input_path)
+        input_files = low_rpc_call_glob(input_path)
     # sort the file so that all workers see the same order.
     input_files = sorted(input_files)
     n = len(input_files)

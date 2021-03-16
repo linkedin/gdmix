@@ -6,6 +6,7 @@ from drivers.test_helper import setup_fake_raw_model_params, \
     setup_fake_base_training_params, setup_fake_schema_params
 from fastavro import reader
 from gdmix.util import constants
+from gdmix.util.io_utils import low_rpc_call_glob
 from gdmix.models.custom.random_effect_lr_lbfgs_model import RandomEffectLRLBFGSModel
 
 test_dataset_path = os.path.join(os.getcwd(), "test/resources/grouped_per_member_train")
@@ -255,7 +256,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
 
         # Step 3: Train for 1 l-bfgs step with cold start
         # Remove the model file to stop the warm start
-        model_files = tf.io.gfile.glob(os.path.join(avro_model_output_dir, '*.avro'))
+        model_files = low_rpc_call_glob(os.path.join(avro_model_output_dir, '*.avro'))
         for f in model_files:
             tf.io.gfile.remove(f)
         # Train for 1 l-bfgs step.

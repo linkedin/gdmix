@@ -12,6 +12,7 @@ import numpy as np
 import tensorflow as tf
 
 from gdmix.models.schemas import BAYESIAN_LINEAR_MODEL_SCHEMA
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -223,7 +224,7 @@ def copy_files(input_files, output_dir):
     :return: the list of copied files
     """
 
-    logger.info("Copy files to local")
+    logger.info(f"Copy files to {output_dir}")
     if not tf.io.gfile.exists(output_dir):
         tf.io.gfile.mkdir(output_dir)
     start_time = time.time()
@@ -232,7 +233,7 @@ def copy_files(input_files, output_dir):
         fname = os.path.join(output_dir, os.path.basename(f))
         tf.io.gfile.copy(f, fname, overwrite=True)
         copied_files.append(fname)
-    logger.info(f"Files copied to Local: {copied_files}")
+    logger.info(f"Files copied: {copied_files}")
     logger.info(f"--- {time.time() - start_time} seconds ---")
     return copied_files
 
@@ -257,29 +258,36 @@ def batched_write_avro(records: Iterator, output_file, schema, write_frequency=1
         rest of the blocks needs the 'a' mode. This restriction makes it
         necessary to open the files at least twice, one for the first block,
         one for the remaining. So it's not possible to put them into the
-        while loop within a file context.  """
+        while loop within a file context.
+        https://fastavro.readthedocs.io/en/latest/writer.html#fastavro._write_py.writer  """
+    # Check if the output_file is on HDFS or not.
+    remote_is_hdfs = output_file.startswith("hdfs://")
+    # If remote is hdfs, we generate the file locally first
+    local_file = os.path.basename(output_file) if remote_is_hdfs else output_file
     f = None
     t0 = time.time()
     n_batch = 0
-    logger.info(f"Writing to {output_file} with batch size of {batch_size}.")
+    logger.info(f"Writing to {local_file} with batch size of {batch_size}.")
     try:
         for batch in _chunked_iterator(records, batch_size):
             if n_batch == 0:
-                with tf.io.gfile.GFile(output_file, 'wb') as f0:  # Create the file in 'w' mode
-                    f0.seekable = lambda: False
+                with open(local_file, 'wb') as f0:  # Create the file in 'w' mode
                     try_write_avro_blocks(f0, schema, batch, None, create_error_message(n_batch, output_file))
-                f = tf.io.gfile.GFile(output_file, 'ab+')  # reopen the file in 'a' mode for later writes
-                f.seekable = f.readable = lambda: True
-                f.seek(0, 2)  # seek to the end of the file, 0 is offset, 2 means the end of file
+                f = open(local_file, 'ab+')  # reopen the file in 'a' mode for later writes
             else:
                 try_write_avro_blocks(f, schema, batch, None, create_error_message(n_batch, output_file))
             n_batch += 1
             if n_batch % write_frequency == 0:
                 delta_time = time.time() - t0
                 logger.info(f"nbatch = {n_batch}, deltaT = {delta_time:0.2f} seconds, speed = {n_batch / delta_time :0.2f} batches/sec")
-        logger.info(f"Finished writing to {output_file}.")
+        logger.info(f"Finished writing to {local_file}.")
     finally:
         f and f.close()
+    if remote_is_hdfs:
+        # If remote is hdfs, copy the local file to hdfs, then delete the local file.
+        remote_dir = os.path.dirname(output_file)
+        copy_files([local_file], remote_dir)
+        os.remove(local_file)
 
 
 def _chunked_iterator(iterator: Iterator, chuck_size):
@@ -320,3 +328,20 @@ def get_inference_output_avro_schema(metadata, has_logits_per_coordinate, schema
     if has_logits_per_coordinate:
         fields.append({'name': schema_params.prediction_score_per_coordinate_column_name, 'type': 'float'})
     return {'name': 'validation_result', 'type': 'record', 'fields': fields}
+
+
+def low_rpc_call_glob(file_pattern):
+    """
+    This function replaces tf.io.gfile.glob, which sends millions of RPC calls
+    to the Hadoop namenodes in our flow, causing HDFS slowdown.
+    In this implementation, we get the list of files in the directory by
+    tf.io.gfile.listdir(), which does not emit numerous RPC calls. Then we use
+    pattern match to find the desired files.
+    :param file_pattern: a glob file pattern.
+    :return: the matched file. It returns [] if no matched file is found.
+    """
+
+    input_dir = os.path.dirname(file_pattern)
+    file_list = tf.io.gfile.listdir(input_dir)
+    full_path_file_list = [os.path.join(input_dir, f) for f in file_list]
+    return [f for f in full_path_file_list if Path(f).match(file_pattern)]

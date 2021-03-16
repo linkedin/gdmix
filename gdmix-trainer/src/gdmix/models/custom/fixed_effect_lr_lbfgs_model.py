@@ -2,6 +2,7 @@ import logging
 import numpy as np
 import os
 import psutil
+import shutil
 import tensorflow as tf
 import tensorflow.compat.v1 as tf1
 import time
@@ -20,7 +21,8 @@ from gdmix.params import SchemaParams, Params
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
 from gdmix.util.io_utils import add_dummy_weight, read_json_file, try_write_avro_blocks,\
-    export_linear_model_to_avro, load_linear_models_from_avro, copy_files, get_inference_output_avro_schema
+    export_linear_model_to_avro, load_linear_models_from_avro, copy_files,\
+    get_inference_output_avro_schema, low_rpc_call_glob
 from gdmix.util.model_utils import threshold_coefficients
 
 logger = logging.getLogger(__name__)
@@ -103,6 +105,14 @@ class FixedEffectLRModelLBFGS(Model):
         assert self.feature_file is None or \
             (self.feature_file and tf1.io.gfile.exists(self.feature_file)), \
             "feature file {} doesn't exist".format(self.feature_file)
+
+    def _create_local_cache(self):
+        """ Create a local cache directory to store temporary files. """
+        os.makedirs(self.local_training_input_dir, exist_ok=True)
+
+    def _remove_local_cache(self):
+        """ Clean up the local cache. """
+        shutil.rmtree(self.local_training_input_dir)
 
     def _load_metadata(self):
         """ Read metadata file from json format. """
@@ -404,6 +414,7 @@ class FixedEffectLRModelLBFGS(Model):
         assigned_train_files = self._get_assigned_files(training_data_dir, num_workers, task_index)
         if self.copy_to_local:
             train_input_dir = self.local_training_input_dir
+            self._create_local_cache()
             actual_train_files = copy_files(assigned_train_files, train_input_dir)
             # After copy the worker's shard to local, we don't shard the local files any more.
             train_num_shards = 1
@@ -552,7 +563,7 @@ class FixedEffectLRModelLBFGS(Model):
 
         # remove the cached training input files
         if self.copy_to_local:
-            tf1.gfile.DeleteRecursively(self.local_training_input_dir)
+            self._remove_local_cache()
 
     def _save_model(self):
         """ Save the trained linear model in avro format. """
@@ -581,7 +592,7 @@ class FixedEffectLRModelLBFGS(Model):
         logging("Loading model from {}".format(self.checkpoint_path))
         model_exist = self.checkpoint_path and tf1.io.gfile.exists(self.checkpoint_path)
         if model_exist:
-            model_file = tf1.io.gfile.glob("{}/*.avro".format(self.checkpoint_path))
+            model_file = low_rpc_call_glob("{}/*.avro".format(self.checkpoint_path))
             if len(model_file) == 1:
                 model = load_linear_models_from_avro(model_file[0], self.feature_file)[0]
             elif not catch_exception:

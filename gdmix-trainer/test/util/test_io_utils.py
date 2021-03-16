@@ -5,7 +5,7 @@ import tempfile
 import tensorflow as tf
 
 from gdmix.util.io_utils import export_linear_model_to_avro, get_feature_map, gen_one_avro_model,\
-    load_linear_models_from_avro, read_feature_list
+    load_linear_models_from_avro, read_feature_list, low_rpc_call_glob
 
 
 class TestIoUtils(tf.test.TestCase):
@@ -42,6 +42,14 @@ class TestIoUtils(tf.test.TestCase):
                                     biases=self.biases,
                                     feature_file=self.feature_file,
                                     output_file=self.model_file)
+
+        for i in range(3):
+            file_name = os.path.join(self.base_dir, f'test_{i}.avro')
+            with open(file_name, 'w') as f:
+                f.write('\n')
+            file_name = os.path.join(self.base_dir, f'test_{i}.tfrecord')
+            with open(file_name, 'w') as f:
+                f.write('\n')
 
     def tearDown(self):
         tf.io.gfile.rmtree(self.base_dir)
@@ -104,3 +112,28 @@ class TestIoUtils(tf.test.TestCase):
             {u'name': 'f3', u'term': 't3,3', u'value': -5.6}
         ], u'lossFunction': ""}
         self.assertDictEqual(records_avro, records)
+
+    def testLowRpcCallGlob(self):
+        """
+        Test low_rpc_call_glob.
+        :return: None
+        """
+        pattern = os.path.join(self.base_dir, 'test*.avro')
+        expected = [os.path.join(self.base_dir, f'test_{i}.avro') for i in range(3)]
+        actual = sorted(low_rpc_call_glob(pattern))
+        self.assertAllEqual(expected, actual)
+
+        pattern = os.path.join(self.base_dir, '*.tfrecord')
+        expected = [os.path.join(self.base_dir, f'test_{i}.tfrecord') for i in range(3)]
+        actual = sorted(low_rpc_call_glob(pattern))
+        self.assertAllEqual(expected, actual)
+
+        pattern = os.path.join(self.base_dir, 'test_1.avro')
+        expected = [os.path.join(self.base_dir, 'test_1.avro')]
+        actual = low_rpc_call_glob(pattern)
+        self.assertAllEqual(expected, actual)
+
+        pattern = os.path.join(self.base_dir, 'abc.avro')
+        expected = []
+        actual = low_rpc_call_glob(pattern)
+        self.assertAllEqual(expected, actual)

@@ -6,6 +6,7 @@ from functools import partial
 from gdmix.io.dataset_metadata import DatasetMetadata
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
+from gdmix.util.io_utils import low_rpc_call_glob
 
 GZIP = "GZIP"
 ZLIB = "ZLIB"
@@ -55,7 +56,7 @@ def _if_files_exist(file_pattern):
     :param file_pattern: the file pattern to be searched for
     :return: True if files exist, False otherwise.
     """
-    num_files = len(tf.io.gfile.glob(file_pattern))
+    num_files = len(low_rpc_call_glob(file_pattern))
     return num_files > 0
 
 

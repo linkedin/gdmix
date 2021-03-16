@@ -9,7 +9,7 @@ from drivers.test_helper import setup_fake_base_training_params, setup_fake_sche
 from gdmix.io.input_data_pipeline import GZIP, GZIP_SUFFIX, ZLIB, ZLIB_SUFFIX
 from gdmix.models.custom.fixed_effect_lr_lbfgs_model import FixedEffectLRModelLBFGS
 from gdmix.util import constants
-from gdmix.util.io_utils import load_linear_models_from_avro, export_linear_model_to_avro
+from gdmix.util.io_utils import load_linear_models_from_avro, export_linear_model_to_avro, low_rpc_call_glob
 from scipy.optimize import fmin_l_bfgs_b
 from scipy.special import expit
 
@@ -549,7 +549,7 @@ def _read_scores(score_path):
     :return: Per_coordinate_scores and total_scores.
     """
     records = []
-    for avro_file in tf.io.gfile.glob("{}/*.avro".format(score_path)):
+    for avro_file in low_rpc_call_glob("{}/*.avro".format(score_path)):
         with open(avro_file, 'rb') as fo:
             avro_reader = fastavro.reader(fo)
             for rec in avro_reader:
