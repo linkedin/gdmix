@@ -3,6 +3,7 @@ import os
 import logging
 import tensorflow as tf
 from gdmix.util import constants
+from gdmix.util.io_utils import low_rpc_call_glob
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -197,7 +198,7 @@ class Driver(abc.ABC):
 
             # If passive dataset exists, add it to training context
             passive_dataset_path = self._anchor_directory(self.model.passive_training_data_dir, partition_index)
-            if tf.io.gfile.exists(passive_dataset_path) and len(tf.io.gfile.glob(
+            if tf.io.gfile.exists(passive_dataset_path) and len(low_rpc_call_glob(
                     os.path.join(passive_dataset_path, "[!.]*"))) != 0:
                 training_context[constants.PASSIVE_TRAINING_DATA_DIR] = passive_dataset_path
             # Add paths for inference output
