@@ -346,11 +346,18 @@ class FixedEffectLRModelLBFGS(Model):
                 rec[schema_params.weight_column_name] = int(rec_weight)
             records.append(rec)
 
-        output_file = os.path.join(output_dir, f"part-{task_index:05d}.avro")
+        # Write to a local file then copy to the destination directory
+        remote_is_hdfs = output_dir.startswith("hdfs://")
+        local_file_name = f"part-{task_index:05d}.avro"
+        output_file = local_file_name if remote_is_hdfs else os.path.join(output_dir, local_file_name)
         error_msg = f"worker {task_index} encountered error in writing inference results"
-        with tf1.gfile.GFile(output_file, 'wb') as f:
+        with open(output_file, 'wb') as f:
             try_write_avro_blocks(f, parsed_schema, records, None, error_msg)
-        logging(f"Worker {task_index} saved inference result to {output_file}")
+        logging(f"Worker {task_index} has written inference result to local file {output_file}")
+        if remote_is_hdfs:
+            copy_files([output_file], output_dir)
+            os.remove(output_file)
+            logging(f"Worker {task_index} has copied inference result to directory {output_dir}")
 
     # TODO(mizhou): All inference results are saved to memory and then write once, give the observation
     # of small inference result size (each sample size is only 24 bytes), may need revisiting.
