@@ -4,6 +4,8 @@ from scipy.optimize import fmin_l_bfgs_b
 from scipy.special import expit
 from sklearn import metrics
 
+from gdmix.util import constants
+
 
 class BinaryLogisticRegressionTrainer:
     """
@@ -22,7 +24,8 @@ class BinaryLogisticRegressionTrainer:
     In this implementation, we assume the first element of the model vector is the intercept.
     """
 
-    def __init__(self, lambda_l2=1.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10, max_iter=100, regularize_bias=False):
+    def __init__(self, lambda_l2=0.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10,
+                 max_iter=100, regularize_bias=False):
         self.lambda_l2 = lambda_l2
         assert solver in ("lbfgs",)
         self.solver = solver
@@ -36,6 +39,7 @@ class BinaryLogisticRegressionTrainer:
 
         # Set the model parameters to None
         self.theta = None
+        self.epsilon = 1.0e-12
 
     def _sigmoid(self, z):
         """
@@ -135,7 +139,55 @@ class BinaryLogisticRegressionTrainer:
             X_with_intercept = scipy.sparse.hstack((np.ones((X.shape[0], 1)), X))
         return X_with_intercept
 
-    def fit(self, X, y, weights=None, offsets=None, theta_initial=None):
+    def _compute_variance(self, X, y, theta, weights=None, offsets=None, mode=constants.SIMPLE):
+        """
+        Compute the variance of the coefficients
+        :param X:       Feature matrix of dimension n x (d + 1), where n is number of samples
+                        and d is the number of features.
+        :param y:       Binary label vector of dimension n x 1, entries are either 0 or 1.
+        :param weights: Float vector of dimension n x 1, entries are the weight of each sample.
+        :param offsets: Float vector of dimension n x 1, entries are the offset for each sample.
+                        It gets added to the computed logit.
+        :return:        Float vector of length n, entries are the variance of each coefficients.
+
+        For logistic regression, Hessian matrix H = X^t * D * X + \\lambda_2 * I,
+        where D = diagonal(\\rho_i (1-\\rho_i)), i = 1, ..., n. \\lambda_2 is the l2 regularizer
+        When the mode is SIMPLE:
+          variance = inverse(diagonal(H)) = inverse([X_j^t * D * X_j]) = inverse([sum(X_ij^2 * d_i)]).
+        When the mode is FULL:
+          variance = diagonal(inverse(H))
+        """
+        # Convert to dense
+        if scipy.sparse.issparse(theta):
+            theta = theta.toarray()
+        if scipy.sparse.issparse(X):
+            X = X.toarray()
+        # Compute probability
+        rho = self._predict(theta, X, offsets, False)
+        d = rho*(1-rho)
+        n, p = X.shape
+        if weights is not None:
+            d = d * weights
+        # D * X
+        dX = np.diag(d).dot(X)
+        if mode == constants.SIMPLE:
+            H_diag = np.array([X[:, i].dot(dX[:, i]) for i in range(p)]) + self.lambda_l2
+            if not self.regularize_bias:
+                # First element of the vector corresponds to the intercept
+                H_diag[0] -= self.lambda_l2
+            return 1.0 / (H_diag + self.epsilon)
+        elif mode == constants.FULL:
+            H = np.transpose(X).dot(dX) + (self.lambda_l2 + self.epsilon) * np.eye(p)
+            if not self.regularize_bias:
+                # First element corresponds to the intercept
+                H[0][0] -= self.lambda_l2
+            V = np.linalg.inv(H)
+            return np.diagonal(V)
+        else:
+            raise ValueError(f"Unknown variance computation mode, either SIMPLE or FULL, got {mode}!")
+
+    def fit(self, X, y, weights=None, offsets=None, theta_initial=None,
+            variance_mode=None):
         """
         Fit a binary logistic regression model
         :param X:               a dense or sparse matrix of dimensions (n x d), where n is the number of samples,
@@ -144,6 +196,9 @@ class BinaryLogisticRegressionTrainer:
         :param weights:         vector of sample weights; of dimensions (n x 1)  where n is the number of samples
         :param offsets:         vector of sample offsets; of dimensions (n x 1)  where n is the number of samples
         :param theta_initial:   a numpy vector, initial value for the coefficients, useful in warm start.
+        :param variance_mode:   String; None, SIMPLE or FULL. None means no variance computation.
+                                SIMPLE means variance approximation by taking inverse of Hessian diagonals.
+                                FULL means taking diagonal of the inverse of full Hessian matrix.
         :return:    training results dictionary, including learned parameters
         """
 
@@ -174,7 +229,12 @@ class BinaryLogisticRegressionTrainer:
                                disp=0)
         # Extract learned parameters from result
         self.theta = result[0]
-        return result
+        # Compute variance if requested.
+        if variance_mode is not None:
+            variance = self._compute_variance(X_with_intercept, y, self.theta, weights, offsets, variance_mode)
+        else:
+            variance = None
+        return result, variance
 
     def predict_proba(self, X, offsets=None, custom_theta=None, return_logits=False):
         """

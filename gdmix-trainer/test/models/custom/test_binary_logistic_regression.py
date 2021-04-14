@@ -1,9 +1,13 @@
+import numpy as np
 import os
 import pickle
 import tensorflow as tf
 from scipy import sparse
 from sklearn.model_selection import train_test_split
+
 from gdmix.models.custom.binary_logistic_regression import BinaryLogisticRegressionTrainer
+from gdmix.util import constants
+from models.custom.test_optimizer_helper import compute_coefficients_and_variance
 
 sample_dataset_path = os.path.join(os.getcwd(), "test/resources/custom")
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -25,11 +29,11 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
                                                                                 test_size=0.25,
                                                                                 random_state=0)
 
-        self.binary_lr_trainer = BinaryLogisticRegressionTrainer(max_iter=500)
+        self.binary_lr_trainer = BinaryLogisticRegressionTrainer(max_iter=1000)
         self.custom_weights = self.binary_lr_trainer.fit(X=self.x_train,
                                                          y=self.y_train,
                                                          weights=None,
-                                                         offsets=None)[0]
+                                                         offsets=None)[0][0]
 
     def test_on_dense_dataset(self):
         """
@@ -158,19 +162,61 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
                                                         y=self.y_train,
                                                         weights=None,
                                                         offsets=None,
-                                                        theta_initial=self.custom_weights)[0]
+                                                        theta_initial=self.custom_weights)[0][0]
         # Warm start.
         # The trained model should be close to initial value
         # since the solution should have already converged.
         self.assertAllClose(coefficients_warm_start, self.custom_weights,
                             rtol=_TOLERANCE, atol=_TOLERANCE, msg='models mismatch')
 
-        coefficients_code_start = binary_lr_trainer.fit(X=self.x_train,
+        coefficients_cold_start = binary_lr_trainer.fit(X=self.x_train,
                                                         y=self.y_train,
                                                         weights=None,
                                                         offsets=None,
-                                                        theta_initial=None)[0]
-        # Code start
+                                                        theta_initial=None)[0][0]
+        # Cold start
         # The trained model should be far from initial value since we only train 1 step,
         # while the initial model was trained for 100 steps.
-        self.assertNotAllClose(coefficients_code_start, self.custom_weights, msg='models are too close')
+        self.assertNotAllClose(coefficients_cold_start, self.custom_weights, msg='models are too close')
+
+    def test_fit_with_variance_computation(self):
+        """
+        Test fit when the variance computation is required
+        """
+        # Generate the dataset
+        num_features = 10
+        num_samples = 100
+        X = np.random.randn(num_samples, num_features)
+        y = np.random.randint(2, size=num_samples)
+        weights = np.random.rand(num_samples)
+        offsets = np.random.randn(num_samples)
+        lambda_l2 = 0.0
+        binary_lr_trainer = BinaryLogisticRegressionTrainer(lambda_l2=lambda_l2,
+                                                            max_iter=1000, regularize_bias=True)
+        expected_simple = compute_coefficients_and_variance(X=X, y=y, weights=weights, offsets=offsets,
+                                                            variance_mode=constants.SIMPLE,
+                                                            lambda_l2=lambda_l2)
+
+        expected_full = compute_coefficients_and_variance(X=X, y=y, weights=weights, offsets=offsets,
+                                                          variance_mode=constants.FULL,
+                                                          lambda_l2=lambda_l2)
+
+        actual_simple = binary_lr_trainer.fit(X=sparse.csr_matrix(X),
+                                              y=y,
+                                              weights=weights,
+                                              offsets=offsets,
+                                              variance_mode=constants.SIMPLE)
+
+        actual_full = binary_lr_trainer.fit(X=sparse.csr_matrix(X),
+                                            y=y,
+                                            weights=weights,
+                                            offsets=offsets,
+                                            variance_mode=constants.FULL)
+        self.assertAllClose(expected_simple[0], actual_simple[0][0], rtol=1e-02, atol=1e-02,
+                            msg='simple mean mismatch')
+        self.assertAllClose(expected_simple[1], actual_simple[1], rtol=1e-02, atol=1e-02,
+                            msg='simple variance mismatch')
+        self.assertAllClose(expected_full[0], actual_full[0][0], rtol=1e-02, atol=1e-02,
+                            msg='full mean mismatch')
+        self.assertAllClose(expected_full[1], actual_full[1], rtol=1e-02, atol=1e-02,
+                            msg='full variance mismatch')

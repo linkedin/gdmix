@@ -77,3 +77,7 @@ ACTION_TRAIN = "train"
 # Supported models
 LOGISTIC_REGRESSION = "logistic_regression"
 DETEXT = "detext"
+
+# Variance computation
+SIMPLE = "simple"
+FULL = "full"
