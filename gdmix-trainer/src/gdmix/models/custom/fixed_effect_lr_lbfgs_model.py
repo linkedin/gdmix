@@ -76,7 +76,7 @@ class FixedEffectLRModelLBFGS(Model):
         self.metadata_file = self.model_params.metadata_file
         self.checkpoint_path = self.model_params.output_model_dir
         self.data_format = self.model_params.data_format
-        self.offset_column_name = self.model_params.offset
+        self.offset_column_name = self.model_params.offset_column_name
         self.feature_bag_name = self.model_params.feature_bag
         self.feature_file = self.model_params.feature_file if self.feature_bag_name else None
         self.batch_size = int(self.model_params.batch_size)

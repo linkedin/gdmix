@@ -239,7 +239,7 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
 
             # Construct y, offsets, weights and ids. Slice portion of arrays from y_index through sample_count
             y = labels_val[schema_params.label_column_name].values[y_index: y_index + sample_count]
-            offsets = features_val[model_params.offset].values[y_index: y_index + sample_count]
+            offsets = features_val[model_params.offset_column_name].values[y_index: y_index + sample_count]
             weights = (features_val[schema_params.weight_column_name].values[y_index: y_index + sample_count]
                        if schema_params.weight_column_name in features_val else np.ones(sample_count))
 
