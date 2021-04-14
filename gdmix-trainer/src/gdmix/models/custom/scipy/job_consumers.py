@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Create a named tuple to represent training result
-TrainingResult = namedtuple('TrainingResult', ('theta', 'unique_global_indices'))
+TrainingResult = namedtuple('TrainingResult', ('theta', 'variance', 'unique_global_indices'))
 Job = namedtuple('Job', 'entity_id X y offsets weights ids unique_global_indices theta')
 _CONSUMER_LOGGING_FREQUENCY = 1000
 INDICES_SUFFIX = '_indices'
@@ -24,13 +24,14 @@ VALUES_SUFFIX = '_values'
 
 class TrainingJobConsumer:
     """Callable class to consume entity-based random effect training jobs"""
-    def __init__(self, lr_model, name, job_queue, enable_local_indexing, sparsity_threshold):
+    def __init__(self, lr_model, name, job_queue, enable_local_indexing, sparsity_threshold, variance_mode):
         self.name = f'Training: {name}'
         self.lr_model = lr_model
         self.job_count = 0
         self.job_queue = job_queue
         self.enable_local_indexing = enable_local_indexing
         self.sparsity_threshold = sparsity_threshold
+        self.variance_mode = variance_mode
 
     def __call__(self, job_id: str):
         """
@@ -41,11 +42,12 @@ class TrainingJobConsumer:
         # Train model
         job = self.job_queue.get()
         theta_length = job.X.shape[1] + 1  # +1 due to intercept
-        result = self.lr_model.fit(X=job.X,
-                                   y=job.y,
-                                   weights=job.weights,
-                                   offsets=job.offsets,
-                                   theta_initial=self._densify_theta(job.theta, theta_length))
+        result, variance = self.lr_model.fit(X=job.X,
+                                             y=job.y,
+                                             weights=job.weights,
+                                             offsets=job.offsets,
+                                             theta_initial=self._densify_theta(job.theta, theta_length),
+                                             variance_mode=self.variance_mode)
         inc_count(self)
 
         if self.enable_local_indexing:
@@ -53,8 +55,10 @@ class TrainingJobConsumer:
         else:
             # extract the values from result according to unique_global_indices.
             theta = self._sparsify_theta(result[0], job.unique_global_indices)
+            if variance is not None:
+                variance = self._sparsify_theta(variance, job.unique_global_indices)
         theta = threshold_coefficients(theta, self.sparsity_threshold)
-        return job.entity_id, TrainingResult(theta, job.unique_global_indices)
+        return job.entity_id, TrainingResult(theta, variance, job.unique_global_indices)
 
     def _densify_theta(self, theta, length):
         """
@@ -157,7 +161,7 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
     :param model_params:          model parameters to aid in converting to Job objects
     :param schema_params:         schema parameters to aid in converting to Job objects
     :param num_features           Number of features in global space
-    :param model_weights:         Model coefficients
+    :param model_weights:         Model coefficients, dict of {model_id: TrainingResult}
     :param enable_local_indexing: Whether to index the features locally instead of use global indices
     :param job_queue:             A managed queue containing the generated jobs
     :return: a generator of entity_ids.

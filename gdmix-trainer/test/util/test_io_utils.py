@@ -137,3 +137,29 @@ class TestIoUtils(tf.test.TestCase):
         expected = []
         actual = low_rpc_call_glob(pattern)
         self.assertAllEqual(expected, actual)
+
+    def testGenOneAvroModelwithVariance(self):
+        """
+        Test avro model generation.
+        :return: None
+        """
+        model_id = '1234'
+        model_class = 'com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel'
+        weights = (np.array([[1.2, 3.4, 5.6]]), np.array([[7.8, 9.0, 10.1]]))
+        weight_indices = np.arange(3)
+        bias = (-7.8, 1.2)
+        feature_list = [('f1,2', 't1'), ('f2', ''), ('f3', 't3,3')]
+
+        records_avro = gen_one_avro_model(model_id, model_class, weight_indices, weights, bias, feature_list, 0.0)
+        records = {u'modelId': model_id, u'modelClass': model_class, u'means': [
+            {u'name': '(INTERCEPT)', u'term': '', u'value': -7.8},
+            {u'name': 'f1,2', u'term': 't1', u'value': 1.2},
+            {u'name': 'f2', u'term': '', u'value': 3.4},
+            {u'name': 'f3', u'term': 't3,3', u'value': 5.6}
+        ], 'variances': [
+            {u'name': '(INTERCEPT)', u'term': '', u'value': 1.2},
+            {u'name': 'f1,2', u'term': 't1', u'value': 7.8},
+            {u'name': 'f2', u'term': '', u'value': 9.0},
+            {u'name': 'f3', u'term': 't3,3', u'value': 10.1}
+        ], u'lossFunction': ""}
+        self.assertDictEqual(records_avro, records)

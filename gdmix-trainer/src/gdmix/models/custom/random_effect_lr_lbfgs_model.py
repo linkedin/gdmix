@@ -26,6 +26,8 @@ from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+_VARIANCE_MODE = (constants.FULL, constants.SIMPLE)
+
 
 @arg_suite
 @dataclasses.dataclass
@@ -38,9 +40,14 @@ class REParams(LRParams):
     max_training_queue_size: int = 10  # Maximum size of training job queue
     training_queue_timeout_in_seconds: int = 300  # Training queue put timeout in seconds.
     num_of_consumers: int = 2  # Number of consumer processes that will train RE models in parallel.
+    variance_mode: Optional[str] = None  # How to compute variance. None, FULL or SIMPLE
 
     def __post_init__(self):
-        assert self.max_training_queue_size > self.num_of_consumers, "queue size limit must be larger than the number of consumers"
+        assert self.max_training_queue_size > self.num_of_consumers, \
+            "queue size limit must be larger than the number of consumers"
+        assert self.variance_mode is None \
+            or self.variance_mode in _VARIANCE_MODE, \
+            f"Action: {self.variance_mode} must be in {_VARIANCE_MODE}"
 
 
 class RandomEffectLRLBFGSModel(Model):
@@ -129,7 +136,8 @@ class RandomEffectLRLBFGSModel(Model):
                                                    max_iter=self.model_params.num_of_lbfgs_iterations)
         consumer = TrainingJobConsumer(lr_model, name=input_path, job_queue=self.job_queue,
                                        enable_local_indexing=self.model_params.enable_local_indexing,
-                                       sparsity_threshold=self.model_params.sparsity_threshold)
+                                       sparsity_threshold=self.model_params.sparsity_threshold,
+                                       variance_mode=self.model_params.variance_mode)
         # Make sure the queue is empty
         assert(self.job_queue.empty())
         results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file,
@@ -209,10 +217,16 @@ class RandomEffectLRLBFGSModel(Model):
         else:
             list_of_weight_indices = []
             list_of_weight_values = []
-        for entity_id, (training_result, unique_global_indices) in model_coefficients.items():
-            biases.append(training_result[0])
+        for entity_id, (mean, variance, unique_global_indices) in model_coefficients.items():
+            if self.model_params.variance_mode is None:
+                biases.append(mean[0])
+            else:
+                biases.append((mean[0], variance[0]))
             if list_of_weight_indices is not None and list_of_weight_values is not None:
-                list_of_weight_values.append(training_result[1:])
+                if self.model_params.variance_mode is None:
+                    list_of_weight_values.append(mean[1:])
+                else:
+                    list_of_weight_values.append((mean[1:], variance[1:]))
                 # unique_global_indices is always present, even when local indexing is not used.
                 # It is needed for update from the prior models.
                 indices = unique_global_indices
@@ -251,6 +265,7 @@ class RandomEffectLRLBFGSModel(Model):
         # Extract model coefficients and global indices
         model_coefficients = []
         unique_global_indices = []
+        model_variance = []
         for idx, ntv in enumerate(model_record["means"]):
             model_coefficients.append(np.float64(ntv["value"]))
             # verify the first element is intercept
@@ -259,6 +274,15 @@ class RandomEffectLRLBFGSModel(Model):
             else:
                 # Add global index for non-intercept features
                 unique_global_indices.append(feature2global_id[(ntv["name"], ntv["term"])])
+        if model_record["variances"]:
+            for idx, ntv in enumerate(model_record["variances"]):
+                model_variance.append(np.float64(ntv["value"]))
+                # verify the first element is intercept
+                if idx == 0:
+                    assert(ntv["name"] == INTERCEPT and ntv["term"] == '')
+                else:
+                    # The ordering of variance should match the coefficients.
+                    assert(unique_global_indices[idx-1] == feature2global_id[(ntv["name"], ntv["term"])])
         if feature2global_id is None:
             # intercept-only model, add one dummy feature
             # sanity check unique_global_indices.
@@ -266,6 +290,7 @@ class RandomEffectLRLBFGSModel(Model):
             model_coefficients.append(np.float64(0.0))
             unique_global_indices.append(0)
         return model_id, TrainingResult(theta=np.array(model_coefficients),
+                                        variance=np.array(model_variance) if model_variance else None,
                                         unique_global_indices=np.array(unique_global_indices))
 
     def export(self, output_model_dir):

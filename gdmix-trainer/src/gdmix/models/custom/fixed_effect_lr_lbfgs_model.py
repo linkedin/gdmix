@@ -320,7 +320,7 @@ class FixedEffectLRModelLBFGS(Model):
         init_dataset_op, value_op, gradients_op = ops
         tf_session.run(init_dataset_op)
         value, gradients = tf_session.run([value_op, gradients_op], feed_dict={x_placeholder: x})
-        logging(f"Funcall #{self.lbfgs_iteration:4}, total lose = {value}, "
+        logging(f"Funcall #{self.lbfgs_iteration:4}, total loss = {value}, "
                 f"memory used: {self._check_memory()} GB, took {time.time() - start_time} seconds")
         return value, gradients
 

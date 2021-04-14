@@ -101,23 +101,46 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     :param model_id: model id
     :param model_class: model class
     :param weight_indices: LR weight vector indices
-    :param weight_values: LR weight vector values
-    :param bias: the bias/offset/intercept
+    :param weight_values: LR weight vector values, a single list of floats if mean only
+                          or a tuple of two lists of floats if mean and variance are present.
+    :param bias: the bias/offset/intercept, a single float if mean only
+                 or a tuple of two floats if mean and variance are present.
     :param feature_list: corresponding feature names
     :param sparsity_threshold: The coefficient will be treated as zero if the absolute value
     is less than or equal to this threshold.
     :return: a model in avro format
     """
     # Output the intercept regardless of its value.
-    record = {u'name': INTERCEPT, u'term': '', u'value': bias}
+    # Check if it has variance. Variance exists if all the following are true:
+    # bias is a tuple of length 2 and the second element (variance) is not None
+    # Note this function is shared by fixed effects and random effects.
+    if isinstance(bias, tuple) and len(bias) == 2 and bias[1] is not None:
+        has_variance = True
+    else:
+        has_variance = False
+    if has_variance:
+        record = {u'name': INTERCEPT, u'term': '', u'value': bias[0]}
+    else:
+        record = {u'name': INTERCEPT, u'term': '', u'value': bias}
     records = {u'modelId': model_id, u'modelClass': model_class, u'means': [record], u'lossFunction': ""}
+    if has_variance:
+        record = {u'name': INTERCEPT, u'term': '', u'value': bias[1]}
+        records[u'variances'] = [record]
     if weight_indices is not None and weight_values is not None:
-        for w_i, w_v in zip(weight_indices.flatten(), weight_values.flatten()):
+        if has_variance:
+            mean, variance = weight_values
+            variance = variance.flatten()
+        else:
+            mean = weight_values
+        for i, (w_i, w_v) in enumerate(zip(weight_indices.flatten(), mean.flatten())):
             if abs(w_v) > sparsity_threshold:  # Only store the coefficient that is larger than the threshold.
                 feat = feature_list[w_i]
                 name, term = feat[0], feat[1]
                 record = {u'name': name, u'term': term, u'value': w_v}
                 records[u'means'].append(record)
+                if has_variance:
+                    record = {u'name': name, u'term': term, u'value': variance[i]}
+                    records[u'variances'].append(record)
     return records
 
 
