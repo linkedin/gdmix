@@ -169,7 +169,7 @@ class BinaryLogisticRegressionTrainer:
         if weights is not None:
             d = d * weights
         # D * X
-        dX = np.diag(d).dot(X)
+        dX = np.multiply(X, d[:, np.newaxis])
         if mode == constants.SIMPLE:
             H_diag = np.array([X[:, i].dot(dX[:, i]) for i in range(p)]) + self.lambda_l2
             if not self.regularize_bias:
