@@ -3,9 +3,10 @@ import itertools
 import logging
 import os
 
+from concurrent.futures.process import ProcessPoolExecutor as Pool
 from functools import partial
 from multiprocessing import Manager
-from multiprocessing import Pool, current_process
+from multiprocessing import current_process
 from typing import Optional
 
 import fastavro
@@ -203,7 +204,7 @@ class RandomEffectLRLBFGSModel(Model):
         if self.model_params.num_of_consumers == 1:
             return map(consumer, job_ids)
         else:
-            return pool.imap_unordered(consumer, job_ids, self.model_params.max_training_queue_size)
+            return pool.map(consumer, job_ids, chunksize=self.model_params.max_training_queue_size)
 
     def _save_model(self, output_file, model_coefficients, num_features, feature_file):
         # Create model IDs, biases, weight indices and weight value arrays. Account for local indexing

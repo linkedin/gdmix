@@ -21,6 +21,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
     Test for random effect custom LR model
     """
     def setUp(self):
+        tf.compat.v1.reset_default_graph()
         self.base_dir = tempfile.mkdtemp()
 
     def tearDown(self):
