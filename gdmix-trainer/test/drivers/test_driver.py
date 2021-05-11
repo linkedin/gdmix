@@ -22,13 +22,18 @@ class TestDriver(tf.test.TestCase):
         set_fake_tf_config(task_type=self.task_type, worker_index=self.worker_index)
         self.base_training_params = setup_fake_base_training_params()
         self.schema_params = setup_fake_schema_params()
-        self.output_dir = tempfile.mkdtemp()
+        self.base_dir = tempfile.mkdtemp()
+        self.output_dir = tempfile.mkdtemp(dir=self.base_dir)
+        self.input_dir = tempfile.mkdtemp(dir=self.base_dir)
+        # Create a dummy folder inside input_dir
+        # This is to make sure the input_dir is not empty
+        tempfile.mkdtemp(dir=self.input_dir)
 
         self.mock_model = Mock()
         self.mock_model.metadata_file = os.path.join(os.getcwd(), "test/resources/metadata/tensor_metadata.json")
-        self.mock_model.validation_data_dir = os.path.join(os.getcwd(), "test/resources/validate")
+        self.mock_model.validation_data_dir = self.input_dir
         self.mock_model.checkpoint_path = self.output_dir
-        self.mock_model.training_data_dir = os.path.join(os.getcwd(), "test/resources/train")
+        self.mock_model.training_data_dir = self.input_dir
 
         self.fixed_effect_driver = FixedEffectDriver(base_training_params=self.base_training_params,
                                                      model=self.mock_model)
@@ -37,7 +42,7 @@ class TestDriver(tf.test.TestCase):
 
     def tearDown(self):
         # Clean up the checkpoint dir created by the driver
-        tf.io.gfile.rmtree(self.output_dir)
+        tf.io.gfile.rmtree(self.base_dir)
 
     def test_drivers_without_tfconfig(self):
         """
@@ -113,9 +118,6 @@ class TestDriver(tf.test.TestCase):
         Test the random effect driver during training
         :return: None
         """
-        # Run training
-        self.random_effect_driver.run_training(schema_params=self.schema_params, export_model=False, output_model_dir=None)
-
         # Read dummy partition index list. Parse the partitions random effect worker should work on
         with tf.io.gfile.GFile(self.base_training_params.partition_list_file) as f:
             line = f.readline()
@@ -132,12 +134,18 @@ class TestDriver(tf.test.TestCase):
             checkpoint_path = self.random_effect_driver._anchor_directory(self.mock_model.checkpoint_path, partition_index)
             training_data_dir = self.random_effect_driver._anchor_directory(self.mock_model.training_data_dir, partition_index)
             validation_data_dir = self.random_effect_driver._anchor_directory(self.mock_model.validation_data_dir, partition_index)
+            # Create training_data_dir
+            os.mkdir(training_data_dir)
+            # Make sure training_data_dir is not empty
+            tempfile.mkdtemp(dir=training_data_dir)
             train_calls.append(mock.call(training_data_dir=training_data_dir,
                                          validation_data_dir=validation_data_dir,
                                          metadata_file=self.mock_model.metadata_file,
                                          checkpoint_path=checkpoint_path,
                                          execution_context=self.random_effect_driver.execution_context,
                                          schema_params=self.schema_params))
+        # Run training
+        self.random_effect_driver.run_training(schema_params=self.schema_params, export_model=False, output_model_dir=None)
 
         # Assert model was called with the right calls
         self.mock_model.train.assert_has_calls(train_calls)

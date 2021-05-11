@@ -5,7 +5,7 @@ import tempfile
 import tensorflow as tf
 
 from gdmix.util.io_utils import export_linear_model_to_avro, get_feature_map, gen_one_avro_model,\
-    load_linear_models_from_avro, read_feature_list, low_rpc_call_glob
+    load_linear_models_from_avro, read_feature_list, low_rpc_call_glob, is_empty_directory
 
 
 class TestIoUtils(tf.test.TestCase):
@@ -163,3 +163,12 @@ class TestIoUtils(tf.test.TestCase):
             {u'name': 'f3', u'term': 't3,3', u'value': 10.1}
         ], u'lossFunction': ""}
         self.assertDictEqual(records_avro, records)
+
+    def testIsEmptyDirectory(self):
+        """
+        Test is_empty_directory().
+        :return: None
+        """
+        self.assertFalse(is_empty_directory(self.base_dir))
+        empty_dir = tempfile.mkdtemp(dir=self.base_dir)
+        self.assertTrue(is_empty_directory(empty_dir))
