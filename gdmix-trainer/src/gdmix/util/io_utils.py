@@ -368,3 +368,15 @@ def low_rpc_call_glob(file_pattern):
     file_list = tf.io.gfile.listdir(input_dir)
     full_path_file_list = [os.path.join(input_dir, f) for f in file_list]
     return [f for f in full_path_file_list if Path(f).match(file_pattern)]
+
+
+def is_empty_directory(input_dir):
+    """
+    Check if a directory is empty. It throws if the directory does not exist.
+    :param input_dir: The path of the input directory
+    :return: True if the directory empty, False otherwise.
+    """
+    if not tf.io.gfile.isdir(input_dir):
+        raise ValueError(f"Directory expected, but {input_dir} is not a directory")
+    file_list = tf.io.gfile.listdir(input_dir)
+    return len(file_list) == 0

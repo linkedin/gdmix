@@ -3,7 +3,7 @@ import os
 import logging
 import tensorflow as tf
 from gdmix.util import constants
-from gdmix.util.io_utils import low_rpc_call_glob
+from gdmix.util.io_utils import low_rpc_call_glob, is_empty_directory
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -113,6 +113,9 @@ class Driver(abc.ABC):
             validation_data_dir = self._anchor_directory(self.model.validation_data_dir,
                                                          partition_index)
 
+            if is_empty_directory(training_data_dir):
+                logger.info(f"{training_data_dir} is empty, no dataset to train on.")
+                continue
             # Train model
             self.execution_context[constants.PARTITION_INDEX] = partition_index
             self.model.train(training_data_dir=training_data_dir,
@@ -161,6 +164,9 @@ class Driver(abc.ABC):
                     data_path = self._anchor_directory(input_path, partition_index)
                     output_dir = os.path.join(self._anchor_directory(output_path, partition_index))
 
+                    if is_empty_directory(input_path):
+                        logger.info(f"{input_path} is empty, no dataset to inference on.")
+                        continue
                     # Run inference
                     self.model.predict(output_dir=output_dir,
                                        input_data_path=data_path,
