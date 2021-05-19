@@ -111,7 +111,7 @@ class Driver(abc.ABC):
             training_data_dir = self._anchor_directory(self.model.training_data_dir,
                                                        partition_index)
             validation_data_dir = self._anchor_directory(self.model.validation_data_dir,
-                                                         partition_index)
+                                                         partition_index) if self.model.validation_data_dir else None
 
             if is_empty_directory(training_data_dir):
                 logger.info(f"{training_data_dir} is empty, no dataset to train on.")
@@ -199,7 +199,7 @@ class Driver(abc.ABC):
                 "part-{0:05d}-passive.avro".format(self.execution_context[constants.TASK_INDEX]))
             validation_inference_output_file = os.path.join(
                 self._anchor_directory(self.base_training_params.validation_score_dir, partition_index),
-                "part-{0:05d}.avro".format(self.execution_context[constants.TASK_INDEX]))
+                "part-{0:05d}.avro".format(self.execution_context[constants.TASK_INDEX])) if self.base_training_params.validation_score_dir else None
             training_context = dict(self.execution_context)
 
             # If passive dataset exists, add it to training context

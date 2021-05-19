@@ -128,6 +128,22 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         for active_training_record, prediction_record in zip(active_training_records, prediction_records):
             self.assertEqual(active_training_record, prediction_record)
 
+        # TEST 4 - Training without validation dataset
+        checkpoint_dir = tempfile.mkdtemp(dir=self.base_dir)
+        re_lr_model.train(training_data_dir=test_dataset_path, validation_data_dir=None,
+                          metadata_file=os.path.join(test_dataset_path, "data.json"), checkpoint_path=checkpoint_dir,
+                          execution_context=training_context, schema_params=schema_params)
+
+        # TEST 5 - Training without scoring
+        raw_params.extend(['--disable_random_effect_scoring_after_training', 'True'])
+        re_lr_model_disable_random_effect_scoring_after_training = RandomEffectLRLBFGSModel(raw_model_params=raw_params)
+        re_lr_model_disable_random_effect_scoring_after_training.train(training_data_dir=test_dataset_path,
+                                                                       validation_data_dir=test_dataset_path,
+                                                                       metadata_file=os.path.join(test_dataset_path, "data.json"),
+                                                                       checkpoint_path=checkpoint_dir,
+                                                                       execution_context=training_context,
+                                                                       schema_params=schema_params)
+
     def _check_intercept_only_model(self, models):
         """
         Check the intercept only model.

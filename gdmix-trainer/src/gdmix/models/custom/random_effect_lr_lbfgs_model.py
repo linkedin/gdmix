@@ -42,6 +42,7 @@ class REParams(LRParams):
     training_queue_timeout_in_seconds: int = 300  # Training queue put timeout in seconds.
     num_of_consumers: int = 2  # Number of consumer processes that will train RE models in parallel.
     variance_mode: Optional[str] = None  # How to compute variance. None, FULL or SIMPLE
+    disable_random_effect_scoring_after_training: bool = False  # Boolean for disabling scoring using the trained model at training phase
 
     def __post_init__(self):
         assert self.max_training_queue_size > self.num_of_consumers, \
@@ -73,6 +74,7 @@ class RandomEffectLRLBFGSModel(Model):
             self.training_data_dir = None
             self.passive_training_data_dir = None
         self.validation_data_dir = self.model_params.validation_data_dir
+        self.disable_random_effect_scoring_after_training = self.model_params.disable_random_effect_scoring_after_training
         # A managed queue storing to be processed jobs.
         self.job_queue = Manager().Queue(self.model_params.max_training_queue_size)
 
@@ -115,17 +117,20 @@ class RandomEffectLRLBFGSModel(Model):
                 predict = partial(self._predict, metadata=metadata, tensor_metadata=tensor_metadata, pool=pool,
                                   schema_params=schema_params, num_features=num_features, metadata_file=metadata_file,
                                   model_weights=model_weights)
-                # Run inference on validation set
-                o = execution_context.get(constants.VALIDATION_OUTPUT_FILE, None)
-                o and predict(input_path=validation_data_dir, output_file=o)
 
-                # Run inference on active training set
-                o = execution_context.get(constants.ACTIVE_TRAINING_OUTPUT_FILE, None)
-                o and predict(input_path=training_data_dir, output_file=o)
+                if not self.disable_random_effect_scoring_after_training:
+                    # Run inference on validation set
+                    if validation_data_dir:
+                        o = execution_context.get(constants.VALIDATION_OUTPUT_FILE, None)
+                        o and predict(input_path=validation_data_dir, output_file=o)
 
-                # Run inference on passive training set
-                i, o = execution_context.get(constants.PASSIVE_TRAINING_DATA_DIR, None), execution_context.get(constants.PASSIVE_TRAINING_OUTPUT_FILE, None)
-                i and o and predict(input_path=i, output_file=o)
+                    # Run inference on active training set
+                    o = execution_context.get(constants.ACTIVE_TRAINING_OUTPUT_FILE, None)
+                    o and predict(input_path=training_data_dir, output_file=o)
+
+                    # Run inference on passive training set
+                    i, o = execution_context.get(constants.PASSIVE_TRAINING_DATA_DIR, None), execution_context.get(constants.PASSIVE_TRAINING_OUTPUT_FILE, None)
+                    i and o and predict(input_path=i, output_file=o)
             else:
                 raise ValueError(f"Invalid action {action!r}.")
 

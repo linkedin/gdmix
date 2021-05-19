@@ -43,7 +43,7 @@ _SMALL_MAX_ITERS = 1
 
 # Ports are hard-coded for now. We should verify them to be unused.
 # Packages like portpicker come in handy. (https://github.com/google/python_portpicker)
-_PORTS = [13456, 13548, 14356, 14553, 15234, 15379]
+_PORTS = [13456, 13548, 14356, 14553, 15234, 15379, 15412]
 
 
 class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
@@ -69,6 +69,10 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         self._run_single_worker(True, _PORTS[2], True, False)
         # test single worker training intercept only model with offset
         self._run_single_worker(True, _PORTS[3], False, True)
+        # test single worker training without offset and without validation dataset
+        self._run_single_worker(True, _PORTS[4], False, True, False)
+        # test single worker training without offset and disable scoring right after training
+        self._run_single_worker(True, _PORTS[5], False, True, True, True)
 
     def testSingleWorkerPrediction(self):
         """
@@ -81,7 +85,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         datasets = self.datasets_with_offset
         _write_model(datasets['training'].coefficients, paths.feature_file, paths.output_model_dir, False)
         _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True, ZLIB)
-        proc_func = _ProcFunc(0, [_PORTS[4]], training_params)
+        proc_func = _ProcFunc(0, [_PORTS[6]], training_params)
         proc_func.__call__(paths, False)
         self._check_scores(datasets['validation'], paths.validation_score_dir)
         tf.io.gfile.rmtree(base_dir)
@@ -113,7 +117,13 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         self.assertAllClose(expected_total_scores, actual_total_scores,
                             msg='total score mismatch')
 
-    def _run_single_worker(self, has_offset, port, use_previous_model, intercept_only):
+    def _run_single_worker(self,
+                           has_offset,
+                           port,
+                           use_previous_model,
+                           intercept_only,
+                           has_validation_data_dir=True,
+                           disable_fixed_effect_scoring_after_training=False):
         """
         A test for single worker training. Dataset were pre-generated.
         The model, training scores and validation scores are checked against expected values.
@@ -121,6 +131,8 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :param port: Port number used for gRPC communication
         :param use_previous_model: whether to use the previous model
         :param intercept_only: whether this is an intercept-only model (no features)
+        :param has_validation_data_dir: whether has validation data dir
+        :param disable_fixed_effect_scoring_after_training: whether to disable scoring right after training
         :return: None
         """
         base_dir = tempfile.mkdtemp()
@@ -138,16 +150,15 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         if use_previous_model:
             training_params = _get_params(paths, _SMALL_MAX_ITERS, False)
         else:
-            if intercept_only:
-                training_params = _get_params(paths, _LARGE_MAX_ITERS, True)
-            else:
-                training_params = _get_params(paths, _LARGE_MAX_ITERS, False)
+            training_params = _get_params(paths, _LARGE_MAX_ITERS, intercept_only, has_validation_data_dir, disable_fixed_effect_scoring_after_training)
         _write_tfrecord_datasets(datasets, paths, 2, has_offset)
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
         self._check_model(datasets['training'].coefficients, paths.output_model_dir, paths.feature_file)
-        self._check_scores(datasets['training'], paths.training_score_dir)
-        self._check_scores(datasets['validation'], paths.validation_score_dir)
+        if not disable_fixed_effect_scoring_after_training:
+            self._check_scores(datasets['training'], paths.training_score_dir)
+            if has_validation_data_dir:
+                self._check_scores(datasets['validation'], paths.validation_score_dir)
         tf.io.gfile.rmtree(base_dir)
 
 
@@ -194,7 +205,7 @@ def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=Fal
     return all_paths
 
 
-def _get_params(paths, max_iters, intercept_only):
+def _get_params(paths, max_iters, intercept_only, has_validation_data_dir=True, disable_fixed_effect_scoring_after_training=False):
     """
     Get the various parameter for model initialization.
     :param paths: An AllPaths namedtuple.
@@ -209,7 +220,6 @@ def _get_params(paths, max_iters, intercept_only):
     schema_params = setup_fake_schema_params()
 
     raw_model_params = ['--' + constants.TRAINING_DATA_DIR, paths.training_data_dir,
-                        '--' + constants.VALIDATION_DATA_DIR, paths.validation_data_dir,
                         '--' + constants.METADATA_FILE, paths.metadata_file,
                         '--' + constants.NUM_OF_LBFGS_ITERATIONS, f"{max_iters}",
                         '--' + constants.OUTPUT_MODEL_DIR, paths.output_model_dir,
@@ -218,6 +228,13 @@ def _get_params(paths, max_iters, intercept_only):
                         '--' + constants.L2_REG_WEIGHT, f"{_L2_REG_WEIGHT}",
                         "--" + constants.REGULARIZE_BIAS, 'True',
                         "--" + constants.DELAYED_EXIT_IN_SECONDS, '1']
+
+    if has_validation_data_dir:
+        raw_model_params.extend(['--' + constants.VALIDATION_DATA_DIR, paths.validation_data_dir])
+
+    if disable_fixed_effect_scoring_after_training:
+        raw_model_params.extend(['--disable_fixed_effect_scoring_after_training', 'True'])
+
     if not intercept_only:
         raw_model_params.extend(['--' + constants.FEATURE_BAG, 'global',
                                  '--' + constants.FEATURE_FILE, paths.feature_file])
