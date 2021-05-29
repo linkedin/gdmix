@@ -155,10 +155,10 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
         self._check_model(datasets['training'].coefficients, paths.output_model_dir, paths.feature_file)
+        if has_validation_data_dir:
+            self._check_scores(datasets['validation'], paths.validation_score_dir)
         if not disable_fixed_effect_scoring_after_training:
             self._check_scores(datasets['training'], paths.training_score_dir)
-            if has_validation_data_dir:
-                self._check_scores(datasets['validation'], paths.validation_score_dir)
         tf.io.gfile.rmtree(base_dir)
 
 

@@ -118,12 +118,12 @@ class RandomEffectLRLBFGSModel(Model):
                                   schema_params=schema_params, num_features=num_features, metadata_file=metadata_file,
                                   model_weights=model_weights)
 
-                if not self.disable_random_effect_scoring_after_training:
-                    # Run inference on validation set
-                    if validation_data_dir:
-                        o = execution_context.get(constants.VALIDATION_OUTPUT_FILE, None)
-                        o and predict(input_path=validation_data_dir, output_file=o)
+                # Run inference on validation set
+                if validation_data_dir:
+                    o = execution_context.get(constants.VALIDATION_OUTPUT_FILE, None)
+                    o and predict(input_path=validation_data_dir, output_file=o)
 
+                if not self.disable_random_effect_scoring_after_training:
                     # Run inference on active training set
                     o = execution_context.get(constants.ACTIVE_TRAINING_OUTPUT_FILE, None)
                     o and predict(input_path=training_data_dir, output_file=o)
