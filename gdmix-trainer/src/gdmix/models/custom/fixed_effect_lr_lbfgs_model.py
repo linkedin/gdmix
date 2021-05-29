@@ -465,9 +465,8 @@ class FixedEffectLRModelLBFGS(Model):
             train_ops = (init_train_dataset_op, value_op, gradients_op)
 
             # Define ops for inference
+            inference_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
             if not self.disable_fixed_effect_scoring_after_training:
-                inference_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
-
                 inference_train_data_iterator = tf1.data.make_one_shot_iterator(train_dataset)
                 train_sample_ids_op, train_labels_op, train_weights_op, train_prediction_score_op, \
                     train_prediction_score_per_coordinate_op = self._inference_model_fn(
@@ -476,20 +475,20 @@ class FixedEffectLRModelLBFGS(Model):
                         train_num_iterations,
                         schema_params)
 
-                if validation_data_dir:
-                    valid_dataset = per_record_input_fn(validation_data_dir,
-                                                        metadata_file,
-                                                        num_workers,
-                                                        task_index,
-                                                        self.batch_size,
-                                                        self.data_format)
-                    inference_validation_data_iterator = tf1.data.make_one_shot_iterator(valid_dataset)
-                    valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
-                        valid_prediction_score_per_coordinate_op = self._inference_model_fn(
-                            inference_validation_data_iterator,
-                            inference_x_placeholder,
-                            validation_data_num_iterations,
-                            schema_params)
+            if validation_data_dir:
+                valid_dataset = per_record_input_fn(validation_data_dir,
+                                                    metadata_file,
+                                                    num_workers,
+                                                    task_index,
+                                                    self.batch_size,
+                                                    self.data_format)
+                inference_validation_data_iterator = tf1.data.make_one_shot_iterator(valid_dataset)
+                valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
+                    valid_prediction_score_per_coordinate_op = self._inference_model_fn(
+                        inference_validation_data_iterator,
+                        inference_x_placeholder,
+                        validation_data_num_iterations,
+                        schema_params)
 
             if num_workers > 1:
                 all_reduce_sync_op = collective_ops.all_reduce(
@@ -553,17 +552,17 @@ class FixedEffectLRModelLBFGS(Model):
                                 task_index,
                                 schema_params,
                                 self.training_output_dir)
-            if validation_data_dir:
-                logging("Inference validation data starts...")
-                inference_validation_data_ops = (valid_sample_ids_op, valid_labels_op, valid_weights_op,
-                                                 valid_prediction_score_op, valid_prediction_score_per_coordinate_op)
-                self._run_inference(self.model_coefficients,
-                                    tf_session,
-                                    inference_x_placeholder,
-                                    inference_validation_data_ops,
-                                    task_index,
-                                    schema_params,
-                                    self.validation_output_dir)
+        if validation_data_dir:
+            logging("Inference validation data starts...")
+            inference_validation_data_ops = (valid_sample_ids_op, valid_labels_op, valid_weights_op,
+                                             valid_prediction_score_op, valid_prediction_score_per_coordinate_op)
+            self._run_inference(self.model_coefficients,
+                                tf_session,
+                                inference_x_placeholder,
+                                inference_validation_data_ops,
+                                task_index,
+                                schema_params,
+                                self.validation_output_dir)
 
         # Final sync up and then reliably terminate all workers
         if (num_workers > 1):
