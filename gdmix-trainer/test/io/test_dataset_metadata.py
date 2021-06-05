@@ -12,17 +12,12 @@ class TestDatasetMetadata(tf.test.TestCase):
         test_metadata_file, "valid_metadata.json"))
     feature_names = ["weight", "f1"]
     label_names = ["response"]
-    number_of_training_samples = 1000
 
     def test_feature_names(self):
         self.assertEqual(self.dummy_metadata.get_feature_names(), self.feature_names)
 
     def test_label_names(self):
         self.assertEqual(self.dummy_metadata.get_label_names(), self.label_names)
-
-    def test_number_of_training_samples(self):
-        self.assertEqual(self.dummy_metadata.get_number_of_training_samples(),
-                         self.number_of_training_samples)
 
     def test_invalid_type(self):
         msg_pattern = r"User provided dtype \'.*\' is not supported. Supported types are \'.*\'."

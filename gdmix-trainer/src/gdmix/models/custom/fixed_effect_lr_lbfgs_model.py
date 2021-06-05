@@ -25,6 +25,7 @@ from gdmix.util.io_utils import add_dummy_weight, read_json_file, try_write_avro
     get_inference_output_avro_schema, low_rpc_call_glob
 from gdmix.util.model_utils import threshold_coefficients
 
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(module)s:%(message)s', datefmt='%Y/%m/%d %I:%M:%S')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -92,7 +93,6 @@ class FixedEffectLRModelLBFGS(Model):
 
         self.metadata = self._load_metadata()
         self.tensor_metadata = DatasetMetadata(self.metadata_file)
-        self.global_num_samples = self.tensor_metadata.get_number_of_training_samples()
         self.num_features = self._get_num_features()
         self.model_coefficients = None
 
@@ -102,8 +102,6 @@ class FixedEffectLRModelLBFGS(Model):
         self.server = None
 
         # validate parameters:
-        assert self.global_num_samples > 0, \
-            "Number of training samples must be set in the metadata and be positive"
         assert self.feature_file is None or \
             (self.feature_file and tf1.io.gfile.exists(self.feature_file)), \
             "feature file {} doesn't exist".format(self.feature_file)
@@ -247,7 +245,7 @@ class FixedEffectLRModelLBFGS(Model):
 
         return sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
 
-    def _train_model_fn(self, diter, x_placeholder, num_workers, num_features, global_num_samples, num_iterations,
+    def _train_model_fn(self, diter, x_placeholder, num_workers, num_features, num_iterations,
                         schema_params: SchemaParams):
         """ The training objective function and the gradients. """
         value = tf1.constant(0.0, tf1.float64)
@@ -292,16 +290,19 @@ class FixedEffectLRModelLBFGS(Model):
             # weights that are not in the dataset. Revisit it when we implement incremental learning.
             # Alternatively, the features that are in the prior models but not the current dataset
             # should not be copied to initial coefficients for warm-start, but needed for inference.
-            regularizer = tf1.nn.l2_loss(x_placeholder) if is_regularize_bias else tf1.nn.l2_loss(w)
-            batch_value = tf1.reduce_sum(weighted_loss) + regularizer * self.l2_reg_weight \
-                * tf1.cast(current_batch_size, tf1.float64) / global_num_samples
+            batch_value = tf1.reduce_sum(weighted_loss)
             batch_gradients = tf1.gradients(batch_value, x_placeholder)[0]
             value += batch_value
             gradients += batch_gradients
             return i, value, gradients
 
         _, value, gradients = tf1.while_loop(cond, body, [i, value, gradients])
-
+        regularizer = tf1.nn.l2_loss(x_placeholder) if is_regularize_bias else tf1.nn.l2_loss(x_placeholder[:-1])
+        # Divide the regularizer by number of workers because we will sum the contribution of each worker
+        # in the all reduce step.
+        loss_reg = regularizer * self.l2_reg_weight / float(num_workers)
+        value += loss_reg
+        gradients += tf1.gradients(loss_reg, x_placeholder)[0]
         if num_workers > 1:
             # sum all reduce
             reduced_value = collective_ops.all_reduce(
@@ -459,7 +460,6 @@ class FixedEffectLRModelLBFGS(Model):
                                                           train_x_placeholder,
                                                           num_workers,
                                                           self.num_features,
-                                                          self.global_num_samples,
                                                           train_num_iterations,
                                                           schema_params)
             train_ops = (init_train_dataset_op, value_op, gradients_op)
