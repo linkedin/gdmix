@@ -24,6 +24,7 @@ from gdmix.util import constants
 from gdmix.util.io_utils import read_json_file, export_linear_model_to_avro, get_feature_map, batched_write_avro, \
     get_inference_output_avro_schema, INTERCEPT
 
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(module)s:%(message)s', datefmt='%Y/%m/%d %I:%M:%S')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

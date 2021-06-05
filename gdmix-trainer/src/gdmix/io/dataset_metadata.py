@@ -21,7 +21,6 @@ class DatasetMetadata:
     LABELS = "labels"
     INDICES = "indices"
     VALUES = "values"
-    NUMBER_OF_TRAINING_SAMPLES = "numberOfTrainingSamples"
     SUPPORTED_TYPES = frozenset(['int', 'long', 'float', 'double', 'bytes', 'string'])
     METADATA_FIELDS = frozenset(["name", "dtype", "shape", "isSparse"])
     METADATA_FIELD_DEFAULT_VALUES = (None, None, None, False)
@@ -70,8 +69,6 @@ class DatasetMetadata:
         self._labels = list(label_tensors.values())
         self._feature_names = list(feature_tensors.keys())
         self._label_names = list(label_tensors.keys())
-        self._number_of_training_samples = path_or_metadata.get(
-            "numberOfTrainingSamples", -1)
 
     @classmethod
     def _build_metadata_info(cls, metadata_dict):
@@ -113,9 +110,6 @@ class DatasetMetadata:
 
     def get_tensors(self):
         return self._tensors.copy()
-
-    def get_number_of_training_samples(self):
-        return self._number_of_training_samples
 
     @staticmethod
     def map_int(in_dtype):
