@@ -53,6 +53,7 @@ object DataPartitioner {
     val predictionScorePerCoordinate = params.predictionScorePerCoordinateColumnName
     val offset = params.offsetColumnName
     val uid = params.uidColumnName
+    val savePassiveData = params.savePassiveData
     val maxNumOfSamplesPerModel = params.maxNumOfSamplesPerModel
     val minNumOfSamplesPerModel = params.minNumOfSamplesPerModel
 
@@ -99,8 +100,8 @@ object DataPartitioner {
         uid,
         minNumOfSamplesPerModel,
         maxNumOfSamplesPerModel,
-        inputMetadataFile,
-        ifSplitData = true)
+        ifSplitData = true,
+        savePassiveData)
 
       // Entity list contains entity id and partition id.
       val entityList = outputDf.select(col(partitionEntity), col(PARTITION_ID))
@@ -145,8 +146,8 @@ object DataPartitioner {
         uid,
         minNumOfSamplesPerModel,
         maxNumOfSamplesPerModel,
-        inputMetadataFile,
-        ifSplitData = false)
+        ifSplitData = false,
+        savePassiveData = false)
 
       Some(outputDf)
     } else {
@@ -187,8 +188,8 @@ object DataPartitioner {
    * @param uid Column name for the unique id
    * @param lowerBound The minimal samples per entity
    * @param upperBound The maximal samples per entity
-   * @param inputMetadataFile The input metadata file path
    * @param ifSplitData Whether to split the data into active and passive folders for the output
+   * @param savePassiveData if ifSplitData is true, this param specifies whether to save the passive data
    * @return The grouped data frame with partition id.
    */
   private[data] def groupPartitionAndSaveDataset(
@@ -205,8 +206,8 @@ object DataPartitioner {
     uid: String,
     lowerBound: Option[Int],
     upperBound: Option[Int],
-    inputMetadataFile: String,
-    ifSplitData: Boolean): DataFrame = {
+    ifSplitData: Boolean,
+    savePassiveData: Boolean): DataFrame = {
 
     // Join the offsets.
     val joinedDf = joinAndUpdateScores(
@@ -240,8 +241,9 @@ object DataPartitioner {
           recordType)
       }
 
-      // Save the passive data. Passive data is generated when there is a lower bound or an upper bound.
-      if (!(lowerBound.isEmpty && upperBound.isEmpty)) {
+      // Save the passive data. Passive data is generated when param savePassiveData is true
+      // and there is a lower bound or an upper bound.
+      if (!(lowerBound.isEmpty && upperBound.isEmpty) && savePassiveData) {
         val passiveData = dFWithPartitionId.filter(col(GROUP_ID) =!= 0).drop(GROUP_ID)
         if (!passiveData.rdd.isEmpty()) {
           IoUtils.saveDataFrame(
