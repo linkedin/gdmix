@@ -25,6 +25,7 @@ case class DataPartitionerParams(
   predictionScorePerCoordinateColumnName: String = PREDICTION_SCORE_PER_COORDINATE,
   offsetColumnName: String = OFFSET,
   uidColumnName: String = UID,
+  savePassiveData: Boolean = true,
   maxNumOfSamplesPerModel: Option[Int] = None,
   minNumOfSamplesPerModel: Option[Int] = None
 )
@@ -145,6 +146,12 @@ object DataPartitionerParser {
       .text(
         """Optional.
           |Column name of unique id.""".stripMargin)
+
+    opt[String]("savePassiveData").action((x, p) => p.copy(savePassiveData = x.toLowerCase == "true"))
+      .optional
+      .text(
+        """Optional.
+          |Boolean whether to save passive data.""".stripMargin)
 
     opt[Int]("maxNumOfSamplesPerModel").action((x, p) => p.copy(maxNumOfSamplesPerModel = Some(x)))
       .optional

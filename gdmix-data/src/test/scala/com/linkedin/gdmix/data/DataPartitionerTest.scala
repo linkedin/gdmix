@@ -2,6 +2,7 @@ package com.linkedin.gdmix.data
 
 import scala.collection.mutable.WrappedArray
 
+import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
@@ -10,6 +11,8 @@ import org.testng.annotations.Test
 
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.SharedSparkSession
+
+import java.nio.file.{Files, Paths}
 
 /**
  * Unit tests for [[DataPartitioner]].
@@ -218,6 +221,63 @@ class DataPartitionerTest extends SharedSparkSession {
     assertEquals(entity2(0)(2), expectedLabel(2))
     assertEquals(entity2(0)(3), expectedIndices(2))
     assertEquals(entity2(0)(4), expectedValues(2))
+  }
+
+  /**
+   * Unit test for [[DataPartitioner.groupPartitionAndSaveDataset]].
+   */
+  @Test()
+  def testGroupPartitionAndSaveDataset(): Unit = {
+    val dfTfRecord = createTfRecordDataFrame(uid, entityId, label, indices, values)
+    val outputPath = Files.createTempDirectory("output")
+    // Test if active and passive data are splited
+    DataPartitioner.groupPartitionAndSaveDataset(
+      dfTfRecord,
+      None,
+      None,
+      outputPath.toString,
+      ENTITY_ID,
+      1,
+      "tfrecord",
+      "predictionScore",
+      "predictionScorePerCoordinate",
+      "offset",
+      UID,
+      Some(2),
+      Some(4),
+      ifSplitData = true,
+      savePassiveData = true)
+
+    assertEquals(Files.exists(Paths.get(s"${outputPath.toString}/${ACTIVE}")), true)
+    assertEquals(Files.exists(Paths.get(s"${outputPath.toString}/${PASSIVE}")), true)
+    if (Files.exists(outputPath)) {
+        FileUtils.deleteDirectory(outputPath.toFile)
+    }
+
+    // Test if passive data can be discarded
+    val outputActiveDataOnlyPath = Files.createTempDirectory("output")
+    DataPartitioner.groupPartitionAndSaveDataset(
+      dfTfRecord,
+      None,
+      None,
+      outputActiveDataOnlyPath.toString,
+      ENTITY_ID,
+      1,
+      "tfrecord",
+      "predictionScore",
+      "predictionScorePerCoordinate",
+      "offset",
+      UID,
+      Some(2),
+      Some(4),
+      ifSplitData = true,
+      savePassiveData = false)
+
+    assertEquals(Files.exists(Paths.get(s"${outputActiveDataOnlyPath.toString}/${ACTIVE}")), true)
+    assertEquals(Files.exists(Paths.get(s"${outputActiveDataOnlyPath.toString}/${PASSIVE}")), false)
+    if (Files.exists(outputActiveDataOnlyPath)) {
+        FileUtils.deleteDirectory(outputActiveDataOnlyPath.toFile)
+    }
   }
 }
 
