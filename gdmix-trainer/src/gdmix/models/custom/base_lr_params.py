@@ -25,6 +25,8 @@ class LRParams:
     num_of_lbfgs_iterations: int = 100  # Number of LBFGS iterations.
 
     # Model related parameters
+    # Whether to include intercept (the "b" in wx+b)
+    has_intercept: bool = True
     offset_column_name: str = "offset"  # Score from previous model.
     # The model coefficients are treated as zero if their absolute values are less than or equal to sparsity_threshold.
     sparsity_threshold = 1.0e-4  # coefficients less than or equal to the threshold are ignored.
@@ -35,3 +37,6 @@ class LRParams:
 
     def __post_init__(self):
         assert self.batch_size > 0, "Batch size must be positive number"
+        if self.regularize_bias:
+            assert self.has_intercept, "Intercept must be used when it is regularized"
+        assert self.feature_bag or self.has_intercept, "Either intercept or feature bag much be used"

@@ -43,7 +43,7 @@ _SMALL_MAX_ITERS = 1
 
 # Ports are hard-coded for now. We should verify them to be unused.
 # Packages like portpicker come in handy. (https://github.com/google/python_portpicker)
-_PORTS = [13456, 13548, 14356, 14553, 15234, 15379, 15412]
+_PORTS = [13456, 13548, 14356, 14553, 15234, 15379, 15412, 15645]
 
 
 class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
@@ -55,6 +55,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         self.datasets_with_offset = _create_expected_data(True, 0, False, False)
         self.datasets_with_offset_and_previous_model = _create_expected_data(True, 0, True, False)
         self.datasets_with_offset_intercept_only = _create_expected_data(True, 0, False, True)
+        self.datasets_with_offset_without_intercept = _create_expected_data(True, 0, False, False, False)
 
     def testSingleWorkerTraining(self):
         """
@@ -73,6 +74,9 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         self._run_single_worker(True, _PORTS[4], False, True, False)
         # test single worker training without offset and disable scoring right after training
         self._run_single_worker(True, _PORTS[5], False, True, True, True)
+        # test single worker training where model does not have bias
+        self._run_single_worker(has_offset=True, port=_PORTS[6], use_previous_model=False,
+                                intercept_only=False, has_intercept=False)
 
     def testSingleWorkerPrediction(self):
         """
@@ -123,7 +127,8 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
                            use_previous_model,
                            intercept_only,
                            has_validation_data_dir=True,
-                           disable_fixed_effect_scoring_after_training=False):
+                           disable_fixed_effect_scoring_after_training=False,
+                           has_intercept=True):
         """
         A test for single worker training. Dataset were pre-generated.
         The model, training scores and validation scores are checked against expected values.
@@ -133,8 +138,10 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :param intercept_only: whether this is an intercept-only model (no features)
         :param has_validation_data_dir: whether has validation data dir
         :param disable_fixed_effect_scoring_after_training: whether to disable scoring right after training
+        :param has_intercept: whether to include intercept in the model
         :return: None
         """
+        assert has_intercept or not intercept_only
         base_dir = tempfile.mkdtemp()
         if has_offset:
             if use_previous_model:
@@ -142,15 +149,20 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
             else:
                 if intercept_only:
                     datasets = self.datasets_with_offset_intercept_only
-                else:
+                elif has_intercept:
                     datasets = self.datasets_with_offset
+                else:
+                    datasets = self.datasets_with_offset_without_intercept
         else:
             datasets = self.datasets_without_offset
-        paths = _prepare_paths(base_dir, has_offset, datasets["training"].previous_model, intercept_only)
+        paths = _prepare_paths(base_dir, has_offset, datasets["training"].previous_model,
+                               intercept_only, has_intercept)
         if use_previous_model:
             training_params = _get_params(paths, _SMALL_MAX_ITERS, False)
         else:
-            training_params = _get_params(paths, _LARGE_MAX_ITERS, intercept_only, has_validation_data_dir, disable_fixed_effect_scoring_after_training)
+            training_params = _get_params(
+                paths, _LARGE_MAX_ITERS, intercept_only, has_validation_data_dir,
+                disable_fixed_effect_scoring_after_training, has_intercept)
         _write_tfrecord_datasets(datasets, paths, 2, has_offset)
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
@@ -162,7 +174,7 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         tf.io.gfile.rmtree(base_dir)
 
 
-def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=False):
+def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=False, has_intercept=True):
     """
     Get an AllPaths namedtuple containing all needed paths.
     Create the directories needed for testing.
@@ -172,8 +184,10 @@ def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=Fal
     :param has_offset: Whether to include offset in the training dataset.
     :param previous_model: Previous model coefficents for warm start training.
     :param intercept_only: Whether the model is intercept only.
+    :param has_intercept: Whether the model uses intercept.
     :return: AllPaths namedtuple
     """
+    assert has_intercept or not intercept_only
     if intercept_only:
         feature_dir = None
         feature_file = None
@@ -201,16 +215,21 @@ def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=Fal
         _create_feature_file(all_paths.feature_file)
     _create_metadata_file(all_paths.metadata_file, has_offset)
     if previous_model is not None:
-        _write_model(previous_model, all_paths.feature_file, all_paths.output_model_dir, intercept_only)
+        _write_model(previous_model, all_paths.feature_file, all_paths.output_model_dir,
+                     intercept_only, has_intercept)
     return all_paths
 
 
-def _get_params(paths, max_iters, intercept_only, has_validation_data_dir=True, disable_fixed_effect_scoring_after_training=False):
+def _get_params(paths, max_iters, intercept_only, has_validation_data_dir=True,
+                disable_fixed_effect_scoring_after_training=False, has_intercept=True):
     """
     Get the various parameter for model initialization.
     :param paths: An AllPaths namedtuple.
     :param max_iters: maximum l-BFGS iterations.
     :param intercept_only: whether the model has intercept only, no other features.
+    :param has_validation_data_dir: whether to use validation data
+    :param disable_fixed_effect_scoring_after_training: whether to disable scoring
+    :param has_intercept: whether to include intercept in the model
     :return: Three different parameter sets.
     """
     base_training_params = setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT)
@@ -238,6 +257,10 @@ def _get_params(paths, max_iters, intercept_only, has_validation_data_dir=True, 
     if not intercept_only:
         raw_model_params.extend(['--' + constants.FEATURE_BAG, 'global',
                                  '--' + constants.FEATURE_FILE, paths.feature_file])
+    if has_intercept:
+        raw_model_params.extend(['--has_intercept', 'True'])
+    else:
+        raw_model_params.extend(['--has_intercept', 'False', '--regularize_bias', 'False'])
     return base_training_params, schema_params, raw_model_params
 
 
@@ -266,12 +289,14 @@ def _build_execution_context(worker_index, ports):
     return execution_context
 
 
-def _create_expected_data(has_offset, seed, use_previous_model, intercept_only):
+def _create_expected_data(has_offset, seed, use_previous_model, intercept_only, has_intercept=True):
     """
     Generated expected data for comparison.
     :param has_offset: Whether to use offset.
     :param seed: Random seed
     :param use_previous_model: Whether to generate/use a previous model.
+    :param intercept_only: whether the model has intercept only
+    :param has_intercept: whether the model uses intercept
     :return: Training and validation datasets.
     """
     np.random.seed(seed)
@@ -292,9 +317,12 @@ def _create_expected_data(has_offset, seed, use_previous_model, intercept_only):
     if intercept_only:
         train_features_plus_one = np.ones((_NUM_SAMPLES, 1))
         validation_features_plus_one = np.ones((_NUM_SAMPLES, 1))
-    else:
+    elif has_intercept:
         train_features_plus_one = np.hstack((training_features, np.ones((_NUM_SAMPLES, 1))))
         validation_features_plus_one = np.hstack((validation_features, np.ones((_NUM_SAMPLES, 1))))
+    else:
+        train_features_plus_one = training_features
+        validation_features_plus_one = validation_features
     previous_model = _solve_for_coefficients(train_features_plus_one, training_labels,
                                              training_offsets, _LARGE_MAX_ITERS)
     if use_previous_model:
@@ -428,13 +456,14 @@ def _write_single_dataset(data, output_path, num_files, has_offset, compression_
                 writer.write(example.SerializeToString())
 
 
-def _write_model(coefficients, feature_file, output_model_dir, intercept_only):
+def _write_model(coefficients, feature_file, output_model_dir, intercept_only, has_intercept=True):
     """
-    Write model to an avro file per Photon-ML format.
+    Write model to an avro file in Photon-ML format.
     :param coefficients: Model coefficients, the last element is the bias/intercept.
     :param feature_file: A file with all the features.
     :param output_model_dir: Output directory for the model file.
     :param intercept_only: Whether this is an intercept only model.
+    :param has_intercept: Whether to use intercept.
     :return: None
     """
     model_file = os.path.join(output_model_dir, "part-00000.avro")
@@ -446,10 +475,11 @@ def _write_model(coefficients, feature_file, output_model_dir, intercept_only):
         weights = coefficients[:-1]
         list_of_weight_indices = np.expand_dims(np.arange(weights.shape[0]), axis=0)
         list_of_weight_values = np.expand_dims(weights, axis=0),
+    biases = np.expand_dims(bias, axis=0) if has_intercept else None
     export_linear_model_to_avro(model_ids=["global model"],
                                 list_of_weight_indices=list_of_weight_indices,
                                 list_of_weight_values=list_of_weight_values,
-                                biases=np.expand_dims(bias, axis=0),
+                                biases=biases,
                                 feature_file=feature_file,
                                 output_file=model_file)
 

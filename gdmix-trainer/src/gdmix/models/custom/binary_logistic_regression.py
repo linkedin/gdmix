@@ -25,7 +25,7 @@ class BinaryLogisticRegressionTrainer:
     """
 
     def __init__(self, lambda_l2=0.0, solver="lbfgs", precision=10, num_lbfgs_corrections=10,
-                 max_iter=100, regularize_bias=False):
+                 max_iter=100, regularize_bias=False, has_intercept=True):
         self.lambda_l2 = lambda_l2
         assert solver in ("lbfgs",)
         self.solver = solver
@@ -36,6 +36,7 @@ class BinaryLogisticRegressionTrainer:
         self.num_lbfgs_corrections = num_lbfgs_corrections
         self.max_iter = max_iter
         self.regularize_bias = regularize_bias
+        self.has_intercept = has_intercept
 
         # Set the model parameters to None
         self.theta = None
@@ -74,7 +75,7 @@ class BinaryLogisticRegressionTrainer:
         Get loss for regularization term. Exclude intercept if self.regularize_bias is set to false
         """
         # For now, we assume "intercept_index" is always zero
-        if not self.regularize_bias:
+        if self.has_intercept and not self.regularize_bias:
             loss = (self.lambda_l2 / 2.0) * theta[intercept_index + 1:].dot(theta[intercept_index + 1:])
         else:
             loss = (self.lambda_l2 / 2.0) * theta.dot(theta)
@@ -113,7 +114,7 @@ class BinaryLogisticRegressionTrainer:
         Get gradient for regularization term. Exclude intercept if self.regularize_bias is set to false
         """
         gradient = self.lambda_l2 * theta
-        if not self.regularize_bias:
+        if self.has_intercept and not self.regularize_bias:
             gradient[intercept_index] = 0
         return gradient
 
@@ -129,7 +130,8 @@ class BinaryLogisticRegressionTrainer:
         grad = (1.0 / n_samples) * (cost_grad + self._get_gradient_from_regularization(theta))
         return grad
 
-    def _add_column_of_ones(self, X):
+    @staticmethod
+    def _add_column_of_ones(X):
         """
         Add intercept column to a dense/sparse matrix
         """
@@ -172,13 +174,13 @@ class BinaryLogisticRegressionTrainer:
         dX = np.multiply(X, d[:, np.newaxis])
         if mode == constants.SIMPLE:
             H_diag = np.array([X[:, i].dot(dX[:, i]) for i in range(p)]) + self.lambda_l2
-            if not self.regularize_bias:
+            if self.has_intercept and not self.regularize_bias:
                 # First element of the vector corresponds to the intercept
                 H_diag[0] -= self.lambda_l2
             return 1.0 / (H_diag + self.epsilon)
         elif mode == constants.FULL:
             H = np.transpose(X).dot(dX) + (self.lambda_l2 + self.epsilon) * np.eye(p)
-            if not self.regularize_bias:
+            if self.has_intercept and not self.regularize_bias:
                 # First element corresponds to the intercept
                 H[0][0] -= self.lambda_l2
             V = np.linalg.inv(H)
@@ -214,7 +216,7 @@ class BinaryLogisticRegressionTrainer:
         # Assert all shapes are same
         assert (X.shape[0] == y.shape[0] == weights.shape[0] == offsets.shape[0])
 
-        X_with_intercept = self._add_column_of_ones(X)
+        X_with_intercept = self._add_column_of_ones(X) if self.has_intercept else X
         if theta_initial is None:
             theta_initial = np.zeros(X_with_intercept.shape[1])
         # Run minimization
@@ -255,8 +257,7 @@ class BinaryLogisticRegressionTrainer:
         custom_theta = self.theta if custom_theta is None else custom_theta
         if custom_theta is None:
             raise Exception("Custom weights must be provided if attempting inference on untrained model")
-
-        X_with_intercept = self._add_column_of_ones(X)
+        X_with_intercept = self._add_column_of_ones(X) if self.has_intercept else X
 
         return self._predict(custom_theta, X_with_intercept, offsets, return_logits)
 

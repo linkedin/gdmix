@@ -61,15 +61,18 @@ def load_linear_models_from_avro(model_file, feature_file):
         """
         num_features = 0 if feature_map is None else len(feature_map)
         model_coefficients = np.zeros(num_features+1, dtype=np.float64)
+        # Reading the mean only since no downstream tasks need the variance.
+        has_bias = 0
         for ntv in model_record["means"]:
             name, term, value = ntv['name'], ntv['term'], np.float64(ntv['value'])
             if name == INTERCEPT and term == '':
                 model_coefficients[num_features] = value  # Intercept at the end.
+                has_bias = 1
             elif feature_map is not None:
                 feature_index = feature_map.get((name, term), None)
                 if feature_index is not None:  # Take only the features that in the current training dataset.
                     model_coefficients[feature_index] = value
-        return model_coefficients
+        return model_coefficients[:num_features+has_bias]
 
     if feature_file is None:
         feature_map = None
@@ -114,18 +117,29 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     # Check if it has variance. Variance exists if all the following are true:
     # bias is a tuple of length 2 and the second element (variance) is not None
     # Note this function is shared by fixed effects and random effects.
+    has_bias = bias is not None
     if isinstance(bias, tuple) and len(bias) == 2 and bias[1] is not None:
+        has_variance = True
+    elif weight_values is not None and isinstance(weight_values, tuple)\
+            and len(weight_values) == 2 and weight_values[1] is not None:
         has_variance = True
     else:
         has_variance = False
+
+    records = {u'modelId': model_id, u'modelClass': model_class, u'means': [], u'lossFunction': ""}
+    # insert bias mean
+    if has_bias:
+        bias_mean = bias[0] if has_variance else bias
+        record = {u'name': INTERCEPT, u'term': '', u'value': bias_mean}
+        records[u'means'].append(record)
+
     if has_variance:
-        record = {u'name': INTERCEPT, u'term': '', u'value': bias[0]}
-    else:
-        record = {u'name': INTERCEPT, u'term': '', u'value': bias}
-    records = {u'modelId': model_id, u'modelClass': model_class, u'means': [record], u'lossFunction': ""}
-    if has_variance:
-        record = {u'name': INTERCEPT, u'term': '', u'value': bias[1]}
-        records[u'variances'] = [record]
+        records[u'variances'] = []
+        # insert bias variance
+        if has_bias:
+            record = {u'name': INTERCEPT, u'term': '', u'value': bias[1]}
+            records[u'variances'].append(record)
+
     if weight_indices is not None and weight_values is not None:
         if has_variance:
             mean, variance = weight_values
@@ -171,7 +185,7 @@ def export_linear_model_to_avro(model_ids,
     feature_list = read_feature_list(feature_file) if feature_file else None
 
     # STEP [2] - Read number of features and models
-    num_models = len(biases)
+    num_models = len(list_of_weight_indices) if biases is None else len(biases)
     logger.info(f"To save {num_models} models.")
     if feature_file:
         logger.info(f"Found {len(feature_list)} features in {feature_file}")
@@ -182,12 +196,15 @@ def export_linear_model_to_avro(model_ids,
     def gen_records():
         if list_of_weight_indices is None or list_of_weight_values is None or feature_list is None:
             for i in range(num_models):
-                yield gen_one_avro_model(str(model_ids[i]), model_class, None, None, biases[i], feature_list,
-                                         sparsity_threshold)
+                current_bias = None if biases is None else biases[i]
+                yield gen_one_avro_model(str(model_ids[i]), model_class, None, None, current_bias,
+                                         feature_list, sparsity_threshold)
         else:
             for i in range(num_models):
+                current_bias = None if biases is None else biases[i]
                 yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i],
-                                         list_of_weight_values[i], biases[i], feature_list, sparsity_threshold)
+                                         list_of_weight_values[i], current_bias,
+                                         feature_list, sparsity_threshold)
     batched_write_avro(gen_records(), output_file, schema, model_log_interval)
     logger.info(f"dumped {num_models} models to avro file at {output_file}.")
 

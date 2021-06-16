@@ -27,7 +27,9 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
     def tearDown(self):
         tf.io.gfile.rmtree(self.base_dir)
 
-    def get_raw_params(self, partition_entity='memberId', num_of_lbfgs_iterations=None, intercept_only=False):
+    def get_raw_params(self, partition_entity='memberId', num_of_lbfgs_iterations=None,
+                       intercept_only=False, has_intercept=True):
+        assert has_intercept or not intercept_only
         base_training_params = setup_fake_base_training_params(training_stage=constants.RANDOM_EFFECT)
         base_training_params.batch_size = 2
         # flatten the params
@@ -47,6 +49,10 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
             raw_params.pop(feature_bag_index)
             assert(f'--{constants.FEATURE_BAG}' not in raw_params)
             assert('per_member' not in raw_params)
+        if has_intercept:
+            raw_params.extend(['--has_intercept', 'True'])
+        else:
+            raw_params.extend(['--has_intercept', 'False'])
         return raw_params
 
     def test_train_should_fail_if_producer_or_consumer_fails(self):
@@ -221,11 +227,13 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
                 file_writer.write(sequence_example.SerializeToString())
         return member_ids
 
-    def _run_warm_start(self, string_entity_id, intercept_only, enable_local_index):
+    def _run_warm_start(self, string_entity_id, intercept_only, enable_local_index, has_intercept=True):
+
+        assert has_intercept or not intercept_only
 
         # Step 1: train an initial model
         # Create and add AVRO model output directory to raw parameters
-        raw_params = self.get_raw_params(intercept_only=intercept_only)
+        raw_params = self.get_raw_params(intercept_only=intercept_only, has_intercept=has_intercept)
         avro_model_output_dir = tempfile.mkdtemp(dir=self.base_dir)
         raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
         if enable_local_index:
@@ -268,7 +276,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
             self._check_intercept_only_model(initial_model)
 
         # Step 2: Train for 1 l-bfgs step with warm start
-        raw_params = self.get_raw_params('memberId', 1, intercept_only)
+        raw_params = self.get_raw_params('memberId', 1, intercept_only, has_intercept)
         raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
         if enable_local_index:
             raw_params.extend(['--' + constants.ENABLE_LOCAL_INDEXING, 'True'])
@@ -335,6 +343,10 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
 
     def test_warm_start_string_entity_id_local_indexing(self):
         self._run_warm_start(string_entity_id=True, intercept_only=False, enable_local_index=True)
+
+    def test_warm_start_local_indexing_without_intercept(self):
+        self._run_warm_start(string_entity_id=False, intercept_only=False, enable_local_index=True,
+                             has_intercept=False)
 
     def test_model_with_variance(self):
         dataset_idx = 1

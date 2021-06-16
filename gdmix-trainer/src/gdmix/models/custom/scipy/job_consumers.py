@@ -41,7 +41,9 @@ class TrainingJobConsumer:
         """
         # Train model
         job = self.job_queue.get()
-        theta_length = job.X.shape[1] + 1  # +1 due to intercept
+        theta_length = job.X.shape[1]
+        if self.lr_model.has_intercept:
+            theta_length += 1  # +1 due to intercept
         result, variance = self.lr_model.fit(X=job.X,
                                              y=job.y,
                                              weights=job.weights,
@@ -60,7 +62,8 @@ class TrainingJobConsumer:
         theta = threshold_coefficients(theta, self.sparsity_threshold)
         return job.entity_id, TrainingResult(theta, variance, job.unique_global_indices)
 
-    def _densify_theta(self, theta, length):
+    @staticmethod
+    def _densify_theta(theta, length):
         """
         Convert theta to dense vector if it is not so already.
         It will be used as initial value for the L-BFGS optimizer.
@@ -89,7 +92,10 @@ class TrainingJobConsumer:
         :param indices_without_intercept: indices for the relevant (non-padding) elements.
         :return: a numpy array containing the elements specified by the input indices.
         """
-        indices = [0] + [x+1 for x in indices_without_intercept]  # account for the intercept.
+        if self.lr_model.has_intercept:
+            indices = [0] + [x+1 for x in indices_without_intercept]  # account for the intercept.
+        else:
+            indices = indices_without_intercept
         return np.array([theta[u] for u in indices])
 
 
@@ -153,7 +159,7 @@ def inc_count(job_consumer):
 
 
 def prepare_jobs(batch_iterator, model_params, schema_params, num_features, model_weights: dict,
-                 enable_local_indexing: bool, job_queue: BaseProxy):
+                 enable_local_indexing: bool, job_queue: BaseProxy, has_intercept: bool):
     """
     Utility method to take batches of TF grouped data and convert it into one or more Jobs.
     Useful for running training and inference
@@ -164,6 +170,7 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
     :param model_weights:         Model coefficients, dict of {model_id: TrainingResult}
     :param enable_local_indexing: Whether to index the features locally instead of use global indices
     :param job_queue:             A managed queue containing the generated jobs
+    :param has_intercept:         whether to include intercept in the model
     :return: a generator of entity_ids.
 
     The feature_bag is represented in sparse tensor format. Take per_member feature bag for example.
@@ -210,7 +217,8 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
                 values = np.zeros(sample_count)
                 cols = np.zeros(sample_count, dtype=int)
             else:
-                # Construct data matrix X. Slice portion of arrays from X_index through the number of rows for the entity
+                # Construct data matrix X. Slice portion of arrays from X_index
+                # through the number of rows for the entity
                 features = features_val[model_params.feature_bag + INDICES_SUFFIX]
                 indices = features.indices
                 rows = indices[np.where(indices[:, 0] == entity)][:, 1]
@@ -253,20 +261,31 @@ def prepare_jobs(batch_iterator, model_params, schema_params, num_features, mode
             # Note the prior model may have fewer or more features than the current dataset.
             theta = None
             if result:
-                prior_model = {u: v for u, v in zip(result.unique_global_indices, result.theta[1:])}
-                model_rows = [0]  # intercept index
-                model_values = [result.theta[0]]  # intercept value
+                model_rows = []
+                model_values = []
+                coeffs_without_intercept = result.theta[1:] if has_intercept else result.theta
+                prior_model = {u: v for u, v in zip(result.unique_global_indices, coeffs_without_intercept)}
+                idx_offset = 0
+                if has_intercept:
+                    # account for the intercept term
+                    model_rows.append(0)
+                    model_values.append(result.theta[0])
+                    idx_offset = 1  # account for the intercept
                 for i, u in enumerate(unique_global_indices):
                     if u in prior_model:
                         r = i if enable_local_indexing else u
-                        model_rows.append(1 + r)  # +1 since intercept is the first element.
+                        model_rows.append(idx_offset + r)  # +1 if bias is the first element.
                         model_values.append(prior_model[u])
                 model_cols = [0]*len(model_rows)
                 if enable_local_indexing:
+                    # +1 if bias is used
+                    coeffs_length = len(unique_global_indices) + 1 if has_intercept else len(unique_global_indices)
                     theta = csr_matrix((model_values, (model_rows, model_cols)),
-                                       shape=(len(unique_global_indices) + 1, 1))
+                                       shape=(coeffs_length, 1))
                 else:
-                    theta = csr_matrix((model_values, (model_rows, model_cols)), shape=(num_features + 1, 1))
+                    # +1 if bias is used
+                    coeffs_length = num_features + 1 if has_intercept else num_features
+                    theta = csr_matrix((model_values, (model_rows, model_cols)), shape=(coeffs_length, 1))
             job = Job(entity_id, X, y, offsets, weights, ids, unique_global_indices, theta=theta)
             job_queue.put(job)
             # use entity_id as a token, it may not be unique
