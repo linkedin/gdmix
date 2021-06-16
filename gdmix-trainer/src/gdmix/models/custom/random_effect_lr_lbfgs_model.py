@@ -65,6 +65,7 @@ class RandomEffectLRLBFGSModel(Model):
         self.checkpoint_path = os.path.join(self.model_params.output_model_dir)
         self.metadata_file = self.model_params.metadata_file
         self.feature_bag_name = self.model_params.feature_bag
+        self.has_intercept = self.model_params.has_intercept
         # If no features, then make sure feature file is None. This is intercept only model.
         self.feature_file = None if self.feature_bag_name is None else self.model_params.feature_file
         # If TRAIN_DATA_PATH is set, initialize active/passive training data path, else set to None
@@ -140,7 +141,8 @@ class RandomEffectLRLBFGSModel(Model):
         lr_model = BinaryLogisticRegressionTrainer(regularize_bias=self.model_params.regularize_bias, lambda_l2=self.model_params.l2_reg_weight,
                                                    precision=self.model_params.lbfgs_tolerance / np.finfo(float).eps,
                                                    num_lbfgs_corrections=self.model_params.num_of_lbfgs_curvature_pairs,
-                                                   max_iter=self.model_params.num_of_lbfgs_iterations)
+                                                   max_iter=self.model_params.num_of_lbfgs_iterations,
+                                                   has_intercept=self.has_intercept)
         consumer = TrainingJobConsumer(lr_model, name=input_path, job_queue=self.job_queue,
                                        enable_local_indexing=self.model_params.enable_local_indexing,
                                        sparsity_threshold=self.model_params.sparsity_threshold,
@@ -167,7 +169,8 @@ class RandomEffectLRLBFGSModel(Model):
                  metadata_file, model_weights):
         logger.info(f"Start inference for {input_path}.")
         # Create LR model object for inference
-        lr_model = BinaryLogisticRegressionTrainer(regularize_bias=True, lambda_l2=self.model_params.l2_reg_weight)
+        lr_model = BinaryLogisticRegressionTrainer(regularize_bias=True, lambda_l2=self.model_params.l2_reg_weight,
+                                                   has_intercept=self.has_intercept)
         consumer = InferenceJobConsumer(lr_model, num_features, schema_params, name=input_path,
                                         job_queue=self.job_queue)
         # Make sure the queue is empty
@@ -205,7 +208,7 @@ class RandomEffectLRLBFGSModel(Model):
         # Create the job id generator
         job_ids = prepare_jobs(get_iterator, self.model_params, schema_params, num_features=num_features,
                                model_weights=model_weights, enable_local_indexing=enable_local_indexing,
-                               job_queue=self.job_queue)
+                               job_queue=self.job_queue, has_intercept=self.has_intercept)
         # If a single consumer, use main process directly.
         if self.model_params.num_of_consumers == 1:
             return map(consumer, job_ids)
@@ -215,7 +218,7 @@ class RandomEffectLRLBFGSModel(Model):
     def _save_model(self, output_file, model_coefficients, num_features, feature_file):
         # Create model IDs, biases, weight indices and weight value arrays. Account for local indexing
         model_ids = list(model_coefficients.keys())
-        biases = []
+        biases = [] if self.has_intercept else None
         if feature_file is None:
             # intercept only model.
             list_of_weight_indices = None
@@ -225,15 +228,18 @@ class RandomEffectLRLBFGSModel(Model):
             list_of_weight_indices = []
             list_of_weight_values = []
         for entity_id, (mean, variance, unique_global_indices) in model_coefficients.items():
-            if self.model_params.variance_mode is None:
-                biases.append(mean[0])
-            else:
-                biases.append((mean[0], variance[0]))
+            idx = 0
+            if self.has_intercept:
+                if self.model_params.variance_mode is None:
+                    biases.append(mean[idx])
+                else:
+                    biases.append((mean[idx], variance[idx]))
+                idx = 1
             if list_of_weight_indices is not None and list_of_weight_values is not None:
                 if self.model_params.variance_mode is None:
-                    list_of_weight_values.append(mean[1:])
+                    list_of_weight_values.append(mean[idx:])
                 else:
-                    list_of_weight_values.append((mean[1:], variance[1:]))
+                    list_of_weight_values.append((mean[idx:], variance[idx:]))
                 # unique_global_indices is always present, even when local indexing is not used.
                 # It is needed for update from the prior models.
                 indices = unique_global_indices
@@ -262,10 +268,11 @@ class RandomEffectLRLBFGSModel(Model):
 
         # Get the model file and read the avro model
         with tf.io.gfile.GFile(model_file, 'rb') as fo:
-            return dict(self._convert_avro_model_record_to_sparse_coefficients(record, feature2global_id) for record in fastavro.reader(fo))
+            return dict(self._convert_avro_model_record_to_sparse_coefficients(
+                self.has_intercept, record, feature2global_id) for record in fastavro.reader(fo))
 
     @staticmethod
-    def _convert_avro_model_record_to_sparse_coefficients(model_record, feature2global_id):
+    def _convert_avro_model_record_to_sparse_coefficients(has_intercept, model_record, feature2global_id):
         # Extract model id
         model_id = model_record["modelId"]
 
@@ -276,7 +283,7 @@ class RandomEffectLRLBFGSModel(Model):
         for idx, ntv in enumerate(model_record["means"]):
             model_coefficients.append(np.float64(ntv["value"]))
             # verify the first element is intercept
-            if idx == 0:
+            if has_intercept and idx == 0:
                 assert(ntv["name"] == INTERCEPT and ntv["term"] == '')
             else:
                 # Add global index for non-intercept features
@@ -285,7 +292,7 @@ class RandomEffectLRLBFGSModel(Model):
             for idx, ntv in enumerate(model_record["variances"]):
                 model_variance.append(np.float64(ntv["value"]))
                 # verify the first element is intercept
-                if idx == 0:
+                if has_intercept and idx == 0:
                     assert(ntv["name"] == INTERCEPT and ntv["term"] == '')
                 else:
                     # The ordering of variance should match the coefficients.

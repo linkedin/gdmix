@@ -19,10 +19,12 @@ class TestIoUtils(tf.test.TestCase):
         self.feature_file = os.path.join(self.base_dir, 'feature.txt')
         self.short_feature_file = os.path.join(self.base_dir, 'short_feature.txt')
         self.model_file = os.path.join(self.base_dir, 'model.avro')
+        self.model_file_no_bias = os.path.join(self.base_dir, 'model_no_bias.avro')
         self.weight_indices = [np.array([0, 2]), np.array([0, 1, 2])]
         self.weight_values = [np.array([0.1, 0.2]), np.array([1.1, 0.3, 0.4])]
         self.biases = np.array([0.5, -0.7])
         self.expected_models = [[0.1, 0, 0.2, 0.5], [1.1, 0.3, 0.4, -0.7]]
+        self.expected_models_no_bias = [[0.1, 0, 0.2], [1.1, 0.3, 0.4]]
         self.expected_short_models = [[0.1, 0, 0.5], [1.1, 0.3, -0.7]]
 
         with open(self.feature_file, 'w') as f:
@@ -42,6 +44,13 @@ class TestIoUtils(tf.test.TestCase):
                                     biases=self.biases,
                                     feature_file=self.feature_file,
                                     output_file=self.model_file)
+
+        export_linear_model_to_avro(model_ids=["model 1", "model 2"],
+                                    list_of_weight_indices=self.weight_indices,
+                                    list_of_weight_values=self.weight_values,
+                                    biases=None,
+                                    feature_file=self.feature_file,
+                                    output_file=self.model_file_no_bias)
 
         for i in range(3):
             file_name = os.path.join(self.base_dir, f'test_{i}.avro')
@@ -67,6 +76,9 @@ class TestIoUtils(tf.test.TestCase):
         models = load_linear_models_from_avro(self.model_file, self.feature_file)
         for model, expected in zip(models, self.expected_models):
             self.assertAllEqual(model, expected)
+        models_no_bias = load_linear_models_from_avro(self.model_file_no_bias, self.feature_file)
+        for model, expected in zip(models_no_bias, self.expected_models_no_bias):
+            self.assertAllEqual(model, expected)
         short_models = load_linear_models_from_avro(self.model_file, self.short_feature_file)
         for i in range(len(short_models)):
             self.assertAllEqual(short_models[i], self.expected_short_models[i])
@@ -83,7 +95,8 @@ class TestIoUtils(tf.test.TestCase):
         bias = 7.8
         feature_list = [('f1,2', 't1'), ('f2', ''), ('f3', 't3,3')]
 
-        records_avro = gen_one_avro_model(model_id, model_class, weight_indices, weights, bias, feature_list, 0.0)
+        records_avro = gen_one_avro_model(
+            model_id, model_class, weight_indices, weights, bias, feature_list, 0.0)
         records = {u'modelId': model_id, u'modelClass': model_class, u'means': [
             {u'name': '(INTERCEPT)', u'term': '', u'value': 7.8},
             {u'name': 'f1,2', u'term': 't1', u'value': 1.2},
@@ -91,6 +104,10 @@ class TestIoUtils(tf.test.TestCase):
             {u'name': 'f3', u'term': 't3,3', u'value': 5.6}
         ], u'lossFunction': ""}
         self.assertDictEqual(records_avro, records)
+        records_avro_no_bias = gen_one_avro_model(
+            model_id, model_class, weight_indices, weights, None, feature_list, 0.0)
+        records[u'means'] = records[u'means'][1:]
+        self.assertDictEqual(records_avro_no_bias, records)
 
     def testGenOneAvroModelwithThreshold(self):
         """
@@ -150,7 +167,8 @@ class TestIoUtils(tf.test.TestCase):
         bias = (-7.8, 1.2)
         feature_list = [('f1,2', 't1'), ('f2', ''), ('f3', 't3,3')]
 
-        records_avro = gen_one_avro_model(model_id, model_class, weight_indices, weights, bias, feature_list, 0.0)
+        records_avro = gen_one_avro_model(
+            model_id, model_class, weight_indices, weights, bias, feature_list, 0.0)
         records = {u'modelId': model_id, u'modelClass': model_class, u'means': [
             {u'name': '(INTERCEPT)', u'term': '', u'value': -7.8},
             {u'name': 'f1,2', u'term': 't1', u'value': 1.2},
@@ -163,6 +181,11 @@ class TestIoUtils(tf.test.TestCase):
             {u'name': 'f3', u'term': 't3,3', u'value': 10.1}
         ], u'lossFunction': ""}
         self.assertDictEqual(records_avro, records)
+        records_avro_no_bias = gen_one_avro_model(
+            model_id, model_class, weight_indices, weights, None, feature_list, 0.0)
+        records[u'means'] = records[u'means'][1:]
+        records[u'variances'] = records[u'variances'][1:]
+        self.assertDictEqual(records_avro_no_bias, records)
 
     def testIsEmptyDirectory(self):
         """

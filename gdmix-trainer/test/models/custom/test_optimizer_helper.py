@@ -7,7 +7,7 @@ from gdmix.util import constants
 
 def compute_coefficients_and_variance(X, y, weights=None, offsets=None,
                                       variance_mode=constants.SIMPLE,
-                                      lambda_l2=0.0):
+                                      lambda_l2=0.0, has_intercept=True):
     """
     compute coefficients and variance for logistic regression model
     :param X: num_samples x num_features matrix
@@ -16,11 +16,12 @@ def compute_coefficients_and_variance(X, y, weights=None, offsets=None,
     :param offsets: num_samples floats, offset of each sample
     :param variance_mode: full or simple
     :param lambda_l2: L2 regularization coefficient
+    :param has_intercept: whether to include intercept
     :return: (mean, variance) tuple
     """
     if scipy.sparse.issparse(X):
         X = X.toarray()
-    X_with_intercept = np.hstack((np.ones((X.shape[0], 1)), X))
+    X_with_intercept = np.hstack((np.ones((X.shape[0], 1)), X)) if has_intercept else X
     lr_model = sm.GLM(y, X_with_intercept, family=sm.families.Binomial(),
                       offset=offsets, freq_weights=weights)
     if lambda_l2 != 0.0:

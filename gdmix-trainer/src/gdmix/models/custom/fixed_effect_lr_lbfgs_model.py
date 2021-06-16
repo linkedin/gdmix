@@ -85,6 +85,7 @@ class FixedEffectLRModelLBFGS(Model):
         self.copy_to_local = self.model_params.copy_to_local
         self.num_correction_pairs = self.model_params.num_of_lbfgs_curvature_pairs
         self.factor = self.model_params.lbfgs_tolerance / np.finfo(float).eps
+        self.has_intercept = self.model_params.has_intercept
         self.is_regularize_bias = self.model_params.regularize_bias
         self.max_iteration = self.model_params.num_of_lbfgs_iterations
         self.l2_reg_weight = self.model_params.l2_reg_weight
@@ -224,11 +225,18 @@ class FixedEffectLRModelLBFGS(Model):
             weight_list = tf1.concat([weight_list, weights], axis=0)
             label_list = tf1.concat([label_list, labels], axis=0)
 
-            w = x_placeholder[:-1]
-            b = x_placeholder[-1]
-            logits = tf1.sparse.sparse_dense_matmul(tf1.cast(features, tf1.float64),
-                                                    tf1.cast(tf1.expand_dims(w, 1), tf1.float64))\
-                + tf1.expand_dims(tf1.ones(current_batch_size, tf1.float64) * tf1.cast(b, tf1.float64), 1)
+            if self.has_intercept:
+                w = x_placeholder[:-1]
+                b = x_placeholder[-1]
+            else:
+                w = x_placeholder
+            logits_no_bias = tf1.sparse.sparse_dense_matmul(tf1.cast(features, tf1.float64),
+                                                            tf1.cast(tf1.expand_dims(w, 1), tf1.float64))
+            if self.has_intercept:
+                logits = logits_no_bias + tf1.expand_dims(
+                    tf1.ones(current_batch_size, tf1.float64) * tf1.cast(b, tf1.float64), 1)
+            else:
+                logits = logits_no_bias
             prediction_score_per_coordinate_list = tf1.concat([prediction_score_per_coordinate_list,
                                                                tf1.reshape(logits, [-1])], axis=0)
 
@@ -249,8 +257,11 @@ class FixedEffectLRModelLBFGS(Model):
                         schema_params: SchemaParams):
         """ The training objective function and the gradients. """
         value = tf1.constant(0.0, tf1.float64)
-        # Add bias
-        gradients = tf1.constant(np.zeros(num_features + 1))
+        if self.has_intercept:
+            # Add intercept
+            gradients = tf1.constant(np.zeros(num_features + 1))
+        else:
+            gradients = tf1.constant(np.zeros(num_features))
         feature_bag_name = self.feature_bag_name
         label_column_name = schema_params.label_column_name
         sample_weight_column_name = schema_params.weight_column_name
@@ -258,6 +269,7 @@ class FixedEffectLRModelLBFGS(Model):
         is_regularize_bias = self.is_regularize_bias
         has_weight = self._has_feature(sample_weight_column_name)
         has_offset = self._has_feature(offset_column_name)
+        has_intercept = self.has_intercept
         i = 0
 
         def cond(i, value, gradients):
@@ -273,12 +285,19 @@ class FixedEffectLRModelLBFGS(Model):
                                                                                           tf1.float64)
             offsets = all_features[offset_column_name] if has_offset else tf1.zeros(current_batch_size, tf1.float64)
 
-            w = x_placeholder[:-1]
-            b = x_placeholder[-1]
-            logits = tf1.sparse.sparse_dense_matmul(tf1.cast(features, tf1.float64),
-                                                    tf1.cast(tf1.expand_dims(w, 1), tf1.float64)) \
-                + tf1.expand_dims(tf1.ones(current_batch_size, tf1.float64) * tf1.cast(b, tf1.float64), 1) \
+            if self.has_intercept:
+                w = x_placeholder[:-1]
+                b = x_placeholder[-1]
+            else:
+                w = x_placeholder
+            logits_no_bias = tf1.sparse.sparse_dense_matmul(tf1.cast(features, tf1.float64),
+                                                            tf1.cast(tf1.expand_dims(w, 1), tf1.float64)) \
                 + tf1.expand_dims(tf1.cast(offsets, tf1.float64), 1)
+            if self.has_intercept:
+                logits = logits_no_bias + tf1.expand_dims(
+                    tf1.ones(current_batch_size, tf1.float64) * tf1.cast(b, tf1.float64), 1)
+            else:
+                logits = logits_no_bias
 
             loss = tf1.nn.sigmoid_cross_entropy_with_logits(labels=tf1.cast(labels, tf1.float64),
                                                             logits=tf1.reshape(tf1.cast(logits, tf1.float64), [-1]))
@@ -297,7 +316,8 @@ class FixedEffectLRModelLBFGS(Model):
             return i, value, gradients
 
         _, value, gradients = tf1.while_loop(cond, body, [i, value, gradients])
-        regularizer = tf1.nn.l2_loss(x_placeholder) if is_regularize_bias else tf1.nn.l2_loss(x_placeholder[:-1])
+        regularizer = tf1.nn.l2_loss(x_placeholder) if (is_regularize_bias or not has_intercept)\
+            else tf1.nn.l2_loss(x_placeholder[:-1])
         # Divide the regularizer by number of workers because we will sum the contribution of each worker
         # in the all reduce step.
         loss_reg = regularizer * self.l2_reg_weight / float(num_workers)
@@ -440,7 +460,8 @@ class FixedEffectLRModelLBFGS(Model):
         if validation_data_dir:
             assigned_validation_files = self._get_assigned_files(validation_data_dir, num_workers, task_index)
             validation_data_num_iterations = self._get_num_iterations(assigned_validation_files, metadata_file)
-        # Define the graph here, keep session open to let scipy L-BFGS solver repeatly call _compute_loss_and_gradients
+        # Define the graph here, keep session open to let scipy L-BFGS solver repeatedly call
+        # _compute_loss_and_gradients
         # Reset the graph.
         tf1.reset_default_graph()
         with tf1.variable_scope('worker{}'.format(task_index)), \
@@ -508,9 +529,18 @@ class FixedEffectLRModelLBFGS(Model):
         # load existing model if available
         logging("Try to load initial model coefficients...")
         prev_model = self._load_model(catch_exception=True)
-        if prev_model is None or len(prev_model) != self.num_features + 1:
+        expected_model_size = self.num_features + 1 if self.has_intercept else self.num_features
+        if prev_model is None:
             logging("No initial model found, use all zeros instead.")
-            x0 = np.zeros(self.num_features + 1)
+            use_zero = True
+        elif len(prev_model) != expected_model_size:
+            logging("Initial model size is {len(prev_model)},"
+                    "expected {expected_model_size}, use all zeros instead.")
+            use_zero = True
+        else:
+            use_zero = False
+        if use_zero:
+            x0 = np.zeros(expected_model_size)
         else:
             logging("Found a previous model,  loaded as the initial point for training")
             x0 = prev_model
@@ -579,13 +609,14 @@ class FixedEffectLRModelLBFGS(Model):
 
     def _save_model(self):
         """ Save the trained linear model in avro format. """
-        bias = self.model_coefficients[-1]
+        bias = self.model_coefficients[-1] if self.has_intercept else None
+        expanded_bias = None if bias is None else np.expand_dims(bias, axis=0)
         if self.feature_bag_name is None:
             # intercept only model
             list_of_weight_indices = None
             list_of_weight_values = None
         else:
-            weights = self.model_coefficients[:-1]
+            weights = self.model_coefficients[:-1] if self.has_intercept else self.model_coefficients
             indices = np.arange(weights.shape[0])
             list_of_weight_values = np.expand_dims(weights, axis=0)
             list_of_weight_indices = np.expand_dims(indices, axis=0)
@@ -593,7 +624,7 @@ class FixedEffectLRModelLBFGS(Model):
         export_linear_model_to_avro(model_ids=["global model"],
                                     list_of_weight_indices=list_of_weight_indices,
                                     list_of_weight_values=list_of_weight_values,
-                                    biases=np.expand_dims(bias, axis=0),
+                                    biases=expanded_bias,
                                     feature_file=self.feature_file,
                                     output_file=output_file,
                                     sparsity_threshold=self.sparsity_threshold)
@@ -637,7 +668,8 @@ class FixedEffectLRModelLBFGS(Model):
         # Compute the number of iterations before the main graph is built.
         assigned_files = self._get_assigned_files(input_data_path, num_workers, task_index)
         data_num_iterations = self._get_num_iterations(assigned_files, metadata_file)
-        # Define the graph here, keep session open to let scipy L-BFGS solver repeatly call _compute_loss_and_gradients
+        # Define the graph here, keep session open to let scipy L-BFGS solver repeatedly call
+        # _compute_loss_and_gradients
         # Inference is conducted in local mode.
         # Reset the default graph.
         tf1.reset_default_graph()

@@ -30,6 +30,9 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
                                                                                 random_state=0)
 
         self.binary_lr_trainer = BinaryLogisticRegressionTrainer(max_iter=1000)
+        self.binary_lr_trainer_without_bias = BinaryLogisticRegressionTrainer(
+            max_iter=1000,
+            has_intercept=False)
         self.custom_weights = self.binary_lr_trainer.fit(X=self.x_train,
                                                          y=self.y_train,
                                                          weights=None,
@@ -71,6 +74,28 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
         training_metrics = self.binary_lr_trainer.compute_metrics(X=sparse.csr_matrix(self.x_train),
                                                                   y=self.y_train,
                                                                   offsets=None)
+        # Assert prediction shape matches expectation, and training metrics are within expected range
+        assert (0.0 <= training_metrics['auc'] <= 1.0)
+        assert (training_pred.shape[0] == self.x_train.shape[0])
+
+    def test_on_sparse_dataset_without_bias(self):
+        """
+        Test training on a sparse dataset
+        """
+        # Train on sparsified sample data
+        self.binary_lr_trainer_without_bias.fit(X=sparse.csr_matrix(self.x_train),
+                                                y=self.y_train,
+                                                weights=None,
+                                                offsets=None)
+
+        # Get predictions and metrics on the training data
+        training_pred = self.binary_lr_trainer_without_bias.predict_proba(
+            X=sparse.csr_matrix(self.x_train),
+            offsets=None)
+        training_metrics = self.binary_lr_trainer_without_bias.compute_metrics(
+            X=sparse.csr_matrix(self.x_train),
+            y=self.y_train,
+            offsets=None)
         # Assert prediction shape matches expectation, and training metrics are within expected range
         assert (0.0 <= training_metrics['auc'] <= 1.0)
         assert (training_pred.shape[0] == self.x_train.shape[0])
@@ -200,6 +225,51 @@ class TestBinaryLogisticRegressionTrainer(tf.test.TestCase):
         expected_full = compute_coefficients_and_variance(X=X, y=y, weights=weights, offsets=offsets,
                                                           variance_mode=constants.FULL,
                                                           lambda_l2=lambda_l2)
+
+        actual_simple = binary_lr_trainer.fit(X=sparse.csr_matrix(X),
+                                              y=y,
+                                              weights=weights,
+                                              offsets=offsets,
+                                              variance_mode=constants.SIMPLE)
+
+        actual_full = binary_lr_trainer.fit(X=sparse.csr_matrix(X),
+                                            y=y,
+                                            weights=weights,
+                                            offsets=offsets,
+                                            variance_mode=constants.FULL)
+        self.assertAllClose(expected_simple[0], actual_simple[0][0], rtol=1e-02, atol=1e-02,
+                            msg='simple mean mismatch')
+        self.assertAllClose(expected_simple[1], actual_simple[1], rtol=1e-02, atol=1e-02,
+                            msg='simple variance mismatch')
+        self.assertAllClose(expected_full[0], actual_full[0][0], rtol=1e-02, atol=1e-02,
+                            msg='full mean mismatch')
+        self.assertAllClose(expected_full[1], actual_full[1], rtol=1e-02, atol=1e-02,
+                            msg='full variance mismatch')
+
+    def test_fit_with_variance_computation_without_intercept(self):
+        """
+        Test fit when the variance computation is required but no intercept is used
+        """
+        # Generate the dataset
+        num_features = 10
+        num_samples = 100
+        X = np.random.randn(num_samples, num_features)
+        y = np.random.randint(2, size=num_samples)
+        weights = np.random.rand(num_samples)
+        offsets = np.random.randn(num_samples)
+        lambda_l2 = 0.0
+        binary_lr_trainer = BinaryLogisticRegressionTrainer(
+            lambda_l2=lambda_l2,
+            max_iter=1000,
+            regularize_bias=True,
+            has_intercept=False)
+        expected_simple = compute_coefficients_and_variance(X=X, y=y, weights=weights, offsets=offsets,
+                                                            variance_mode=constants.SIMPLE,
+                                                            lambda_l2=lambda_l2, has_intercept=False)
+
+        expected_full = compute_coefficients_and_variance(X=X, y=y, weights=weights, offsets=offsets,
+                                                          variance_mode=constants.FULL,
+                                                          lambda_l2=lambda_l2, has_intercept=False)
 
         actual_simple = binary_lr_trainer.fit(X=sparse.csr_matrix(X),
                                               y=y,
