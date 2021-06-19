@@ -6,7 +6,7 @@ import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types._
 
 import com.linkedin.gdmix.configs.DataType
-import com.linkedin.gdmix.utils.Constants.{NAME, TERM}
+import com.linkedin.gdmix.utils.Constants.{NAME, TERM, VALUE, CROSS}
 
 /**
  * Helper class to convert NTVs to sparse vectors
@@ -23,6 +23,25 @@ object ConversionUtils {
   case class NameTermValue(name: String, term: String, value: Float)
 
   /**
+   * Case class to represent the NameTermValue (NTV) where the value is float (nullable)
+   *
+   * @param name Name of a feature
+   * @param term Term of a feature
+   * @param value Value of a feature (Option[Float])
+   */
+  case class NameTermValueOptionFloat(name: String, term: String, value: Option[Float])
+
+  /**
+   * Case class to represent the NameTermValue (NTV) where the value is double (nullable)
+   * Photon-ML generates model values are in double format and nullable.
+   *
+   * @param name Name of a feature
+   * @param term Term of a feature
+   * @param value Value of a feature (Option[Double])
+   */
+  case class NameTermValueOptionDouble(name: String, term: String, value: Option[Double])
+
+  /**
    * Case class for SparseVector type
    * @param indices The indices of a sparse vector
    * @param values The values of a sparse vector
@@ -36,37 +55,13 @@ object ConversionUtils {
   def getNameTermUdf: UserDefinedFunction = udf { r: Row => (r.getAs[String](NAME), r.getAs[String](TERM)) }
 
   /**
-   * UDF to convert a Seq of indices and a Seq of values to a sparse vector
-   * @return A sparse with indices and values
+   *  Split the full name into (model_id, feature_name) tuple
    */
-  def collectIdValueUdf(sortIndex: Boolean): UserDefinedFunction = udf {
-    (indices: Seq[Int], values: Seq[Float]) =>
-      val (sortedIndices, sortedValues) = if (sortIndex)
-        (indices zip values).sortBy(_._1).unzip
-        else
-        (indices, values)
-    SparseVector(sortedIndices.map(_.toLong), sortedValues)
-  }
-
-  /**
-   * UDF to convert a Seq of indices and a Seq of values to a dense vector
-   * @param length dense vector length
-   * @return A dense vector
-   */
-  def convertToDenseVector(length: Long): UserDefinedFunction = udf {
-    (indices: Seq[Int], values: Seq[Float]) =>
-      val vector = collection.mutable.Seq.fill(length.toInt)(0.0f)
-      (indices zip values).foreach { x =>
-        vector(x._1) = x._2
-      }
-      Seq(vector: _*)
-  }
-
-  /**
-   * Sort indices, values by indices in ascending order
-   */
-  def sortIndexUdf: UserDefinedFunction = udf {
-    (indices: Seq[Int], values: Seq[Float]) => SparseVector(indices.map(_.toLong), values)
+  def splitModelIdUdf: UserDefinedFunction = udf { r: Row =>
+    val Array(modelId, name) = r.getAs[String](NAME).split(CROSS)
+    val term = r.getAs[String](TERM)
+    val value = r.getAs[Double](VALUE)
+    (modelId, NameTermValueOptionDouble(name, term, Some(value)))
   }
 
   /**

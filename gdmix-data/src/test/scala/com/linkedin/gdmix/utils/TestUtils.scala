@@ -2,7 +2,7 @@ package com.linkedin.gdmix.utils
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{col, udf}
 
 import com.linkedin.gdmix.utils.Constants._
 import com.linkedin.gdmix.utils.ConversionUtils.NameTermValue
@@ -13,30 +13,15 @@ import com.linkedin.gdmix.utils.ConversionUtils.NameTermValue
 object TestUtils {
 
   /**
-   * UDF to mock NTVs for unit tests
-   *
-   * @param k The integer to mod uid to generate name, term and value
-   * @return An array of NTVs
+   * Sort the columns of a DataFrame
+   * if the original columns are ["c", "b", "a"],
+   * the sorted columns are ["a", "b", "c"]
+   * @param df: input DataFrame
+   * @return: the sorted DataFrame
    */
-  def mockNtvUdf(k: Int): UserDefinedFunction = udf {
-    uid: Long => {
-      val name1 = (uid % k).toString
-      val term1 = (uid % k).toString
-      val value1 = (uid % k).toFloat
-      val name2 = (uid % k + 1).toString
-      val term2 = (uid % k + 1).toString
-      val value2 = (uid % k + 1).toFloat
-      Seq(NameTermValue(name1, term1, value1), NameTermValue(name2, term2, value2))
-    }
-  }
-
-  /**
-   * UDF to get the indices given the feature bag
-   *
-   * @return An array of indices
-   */
-  def getIndicesUdf: UserDefinedFunction = udf {
-    r: Row => r.getAs[Seq[Long]](INDICES)
+  def sortColumns(df: DataFrame): DataFrame = {
+    val sortedColumns = df.columns.sorted.map(str => col(str))
+    df.select(sortedColumns:_*)
   }
 
   /**
@@ -47,10 +32,16 @@ object TestUtils {
    * @return true of false
    */
   def equalSmallDataFrame(df1: DataFrame, df2: DataFrame, sortedBy: String): Boolean = {
+    // sort the rows
     val sdf1 = df1.sort(sortedBy)
     val sdf2 = df2.sort(sortedBy)
-    (sdf1.collect().sameElements(sdf2.collect())
-      && sdf1.schema.equals(sdf2.schema))
+
+    // sort the columns
+    val ssdf1 = sortColumns(sdf1)
+    val ssdf2 = sortColumns(sdf2)
+
+    (ssdf1.schema.equals(ssdf2.schema)
+      && ssdf1.collect().sameElements(ssdf2.collect()))
   }
 
   /**
