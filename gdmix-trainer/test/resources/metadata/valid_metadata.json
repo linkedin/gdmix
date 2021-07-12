@@ -1,5 +1,4 @@
 {
-  "numberOfTrainingSamples": 1000,
   "features": [
     {
       "name": "weight",
