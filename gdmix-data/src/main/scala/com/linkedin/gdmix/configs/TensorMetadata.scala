@@ -5,12 +5,10 @@ import com.fasterxml.jackson.module.scala.JsonScalaEnumeration
 /**
  * Case class for the dataset metadata
  *
- * @param numberOfTrainingSamples Number of training samples
  * @param features Tensor metadata of a sequence of features
  * @param labels Tensor metadata of a sequence of labels
  */
 case class DatasetMetadata(
-  numberOfTrainingSamples: Option[Long] = None,
   features: Seq[TensorMetadata],
   labels: Option[Seq[TensorMetadata]] = None)
 

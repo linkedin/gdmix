@@ -1,5 +1,4 @@
 {
-  "numberOfTrainingSamples" : 32,
   "features" : [ {
     "name" : "weight",
     "dtype" : "float",

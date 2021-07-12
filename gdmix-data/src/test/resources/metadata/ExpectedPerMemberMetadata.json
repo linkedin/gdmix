@@ -1,5 +1,4 @@
 {
-  "numberOfTrainingSamples" : 6,
   "features" : [ {
     "name" : "memberId",
     "dtype" : "long",

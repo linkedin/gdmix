@@ -20,7 +20,6 @@ weight_indices = [np.sort(np.random.choice(
 f1 = np.arange(num_records, dtype=np.float32) + 10.0
 json_string = """
 {
-  "numberOfTrainingSamples": 20,
   "features": [
     {
       "name": "weight",

@@ -535,7 +535,6 @@ def _create_metadata_file(filename, has_offset):
     :return:
     """
     metadata = {
-        "numberOfTrainingSamples": _NUM_SAMPLES,
         "features": [{
             "name": "weight",
             "dtype": "float",
