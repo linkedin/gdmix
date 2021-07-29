@@ -8,7 +8,7 @@ import com.linkedin.gdmix.utils.Constants._
 case class OffsetUpdaterParams(
   trainingDataDir: String,
   trainingScoreDir: String,
-  trainingScorePerCoordinateDir: Option[String] = None,
+  trainingScorePerCoordinateDir: String,
   outputTrainingDataDir: String,
   validationDataDir: Option[String] = None,
   validationScoreDir: Option[String] = None,
@@ -41,11 +41,10 @@ object OffsetUpdaterParser {
         """Required.
           |Training input score path.""".stripMargin)
 
-    opt[String]("trainingScorePerCoordinateDir").action((x, p) =>
-      p.copy(trainingScorePerCoordinateDir = if (x.trim.isEmpty) None else Some(x.trim)))
-      .optional
+    opt[String]("trainingScorePerCoordinateDir").action((x, p) => p.copy(trainingScorePerCoordinateDir = x.trim))
+      .required
       .text(
-        """Optional.
+        """Required.
           |Path to the per-coordinate training score of the previous iteration.""".stripMargin)
 
     opt[String]("outputTrainingDataDir").action((x, p) => p.copy(outputTrainingDataDir = x.trim))
@@ -123,6 +122,7 @@ object OffsetUpdaterParser {
     val emptyOffsetUpdaterParams = OffsetUpdaterParams(
       trainingDataDir = "",
       trainingScoreDir = "",
+      trainingScorePerCoordinateDir = "",
       outputTrainingDataDir = ""
     )
     offsetUpdaterParser.parse(args, emptyOffsetUpdaterParams) match {

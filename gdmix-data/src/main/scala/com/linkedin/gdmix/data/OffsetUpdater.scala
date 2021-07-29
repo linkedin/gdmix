@@ -49,15 +49,11 @@ object OffsetUpdater {
     // Update offset in training data.
     val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath, dataFormat)
     val trainInputScore = IoUtils.readDataFrame(spark, trainInputScorePath, AVRO)
-    val trainPerCoordinateScoreOpt = if (!IoUtils.isEmptyStr(trainPerCoordinateScorePath)) {
-      Some(IoUtils.readDataFrame(spark, trainPerCoordinateScorePath.get, AVRO))
-    } else {
-      None
-    }
+    val trainPerCoordinateScore = IoUtils.readDataFrame(spark, trainPerCoordinateScorePath, AVRO)
     val trainOutputData = updateOffset(
       trainInputData,
       trainInputScore,
-      trainPerCoordinateScoreOpt,
+      Some(trainPerCoordinateScore),
       predictionScore,
       predictionScorePerCoordinate,
       offset,
@@ -67,19 +63,15 @@ object OffsetUpdater {
     // Update offset in validation data.
     if (!IoUtils.isEmptyStr(validationInputDataPath)
       && !IoUtils.isEmptyStr(validationInputScorePath)
+      && !IoUtils.isEmptyStr(validationPerCoordinateScorePath)
       && !IoUtils.isEmptyStr(validationOutputDataPath)) {
       val validationInputData = IoUtils.readDataFrame(spark, validationInputDataPath.get, dataFormat)
       val validationInputScore = IoUtils.readDataFrame(spark, validationInputScorePath.get, AVRO)
       val validationPerCoordinateScore = IoUtils.readDataFrame(spark, validationPerCoordinateScorePath.get, AVRO)
-      val validationPerCoordinateScoreOpt = if (!IoUtils.isEmptyStr(validationPerCoordinateScorePath)) {
-        Some(IoUtils.readDataFrame(spark, validationPerCoordinateScorePath.get, AVRO))
-      } else {
-        None
-      }
       val validationOutputData = updateOffset(
         validationInputData,
         validationInputScore,
-        validationPerCoordinateScoreOpt,
+        Some(validationPerCoordinateScore),
         predictionScore,
         predictionScorePerCoordinate,
         offset,
