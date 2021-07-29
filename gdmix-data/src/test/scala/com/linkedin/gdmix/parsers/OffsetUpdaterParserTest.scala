@@ -40,12 +40,6 @@ class OffsetUpdaterParserTest {
           "--trainingDataDir", "fixed-effect/trainingData",
           "--trainingScorePerCoordinateDir", "jymbii_lr/global/trainingScore",
           "--outputTrainingDataDir", "jymbii_lr/global/updatedTrainingData")),
-      // miss trainingScorePerCoordinateDir
-      Array(
-        Seq(
-          "--trainingDataDir", "fixed-effect/trainingData",
-          "--trainingScoreDir", "jymbii_lr/per-job/trainingScore",
-          "--outputTrainingDataDir", "jymbii_lr/global/updatedTrainingData")),
       // miss outputTrainingDataDir
       Array(
         Seq(
@@ -77,7 +71,7 @@ class OffsetUpdaterParserTest {
     val expectedParams = OffsetUpdaterParams(
       trainingDataDir = "fixed-effect/trainingData",
       trainingScoreDir = "jymbii_lr/per-job/trainingScore",
-      trainingScorePerCoordinateDir = "jymbii_lr/global/trainingScore",
+      trainingScorePerCoordinateDir = Some("jymbii_lr/global/trainingScore"),
       outputTrainingDataDir = "jymbii_lr/global/updatedTrainingData",
       validationDataDir = Some("fixed-effect/validationData"),
       validationScoreDir = Some("jymbii_lr/per-job/validationScore"),
