@@ -534,8 +534,8 @@ class FixedEffectLRModelLBFGS(Model):
             logging("No initial model found, use all zeros instead.")
             use_zero = True
         elif len(prev_model) != expected_model_size:
-            logging("Initial model size is {len(prev_model)},"
-                    "expected {expected_model_size}, use all zeros instead.")
+            logging(f"Initial model size is {len(prev_model)},"
+                    f"expected {expected_model_size}, use all zeros instead.")
             use_zero = True
         else:
             use_zero = False
