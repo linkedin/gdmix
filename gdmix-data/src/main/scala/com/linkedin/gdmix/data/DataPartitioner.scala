@@ -71,6 +71,8 @@ object DataPartitioner {
     val schemaOpt = if (dataFormat == TFRECORD) Some(MetadataGenerator
       .createSchemaForTfrecord(inputMetadataFile)) else None
 
+    val useBroadcast = spark.conf.get("spark.sql.autoBroadcastJoinThreshold") != "-1"
+
     // Partition training dataset if the training input data is provided.
     val trainOutputOpt = if (!IoUtils.isEmptyStr(trainInputDataPath)) {
       val trainInputData = IoUtils.readDataFrame(spark, trainInputDataPath.get, dataFormat, schemaOpt)
@@ -101,7 +103,8 @@ object DataPartitioner {
         minNumOfSamplesPerModel,
         maxNumOfSamplesPerModel,
         ifSplitData = true,
-        savePassiveData)
+        savePassiveData,
+        useBroadcast)
 
       // Entity list contains entity id and partition id.
       val entityList = outputDf.select(col(partitionEntity), col(PARTITION_ID))
@@ -147,7 +150,8 @@ object DataPartitioner {
         minNumOfSamplesPerModel,
         maxNumOfSamplesPerModel,
         ifSplitData = false,
-        savePassiveData = false)
+        savePassiveData = false,
+        useBroadcast)
 
       Some(outputDf)
     } else {
@@ -190,6 +194,7 @@ object DataPartitioner {
    * @param upperBound The maximal samples per entity
    * @param ifSplitData Whether to split the data into active and passive folders for the output
    * @param savePassiveData if ifSplitData is true, this param specifies whether to save the passive data
+   * @param useBroadcast If useBroadcast is true, it will use broadcast; otherwise not
    * @return The grouped data frame with partition id.
    */
   private[data] def groupPartitionAndSaveDataset(
@@ -207,7 +212,8 @@ object DataPartitioner {
     lowerBound: Option[Int],
     upperBound: Option[Int],
     ifSplitData: Boolean,
-    savePassiveData: Boolean): DataFrame = {
+    savePassiveData: Boolean,
+    useBroadcast: Boolean = true): DataFrame = {
 
     // Join the offsets.
     val joinedDf = joinAndUpdateScores(
@@ -220,7 +226,7 @@ object DataPartitioner {
       uid).cache()
 
     // Group and bound the dataset by a lower bound and an upper bound.
-    val groupedDf = boundAndGroupData(joinedDf, lowerBound, upperBound, partitionEntity, uid)
+    val groupedDf = boundAndGroupData(joinedDf, lowerBound, upperBound, partitionEntity, uid, useBroadcast)
 
     // Add partition Id.
     val dFWithPartitionId = groupedDf
@@ -281,6 +287,7 @@ object DataPartitioner {
    * @param upperBound Upper bound on the number of records per entity
    * @param partitionEntity The entity by which the output dataset will be partitioned
    * @param uid UID column name
+   * @param useBroadcast If useBroadcast is true, it will use broadcast; otherwise not
    * @return The bounded and grouped data frame.
    */
   private[data] def boundAndGroupData(
@@ -288,10 +295,11 @@ object DataPartitioner {
     lowerBound: Option[Int],
     upperBound: Option[Int],
     partitionEntity: String,
-    uid: String): DataFrame = {
+    uid: String,
+    useBroadcast: Boolean = true): DataFrame = {
 
     // Get the group id for each entity.
-    val dfWithGroupId = getGroupId(dataFrame, lowerBound, upperBound, partitionEntity, uid)
+    val dfWithGroupId = getGroupId(dataFrame, lowerBound, upperBound, partitionEntity, uid, useBroadcast)
 
     // The columns of partitionEntity and groupId are not needed to be grouped since they are the same per-group.
     val groupedColumnNames = dfWithGroupId.columns
@@ -315,6 +323,7 @@ object DataPartitioner {
    * @param upperBound Upper bound on the number of records per entity
    * @param partitionEntity The entity by which the output dataset will be partitioned
    * @param uid UID column name
+   * @param useBroadcast If useBroadcast is true, it will use broadcast; otherwise not
    * @return The bounded and grouped data frame.
    */
   private[data] def getGroupId(
@@ -322,7 +331,8 @@ object DataPartitioner {
     lowerBound: Option[Int],
     upperBound: Option[Int],
     partitionEntity: String,
-    uid: String): DataFrame = {
+    uid: String,
+    useBroadcast: Boolean = true): DataFrame = {
 
     // No lower bound and upper bound. All the samples are active data.
     if (lowerBound.isEmpty && upperBound.isEmpty) {
@@ -334,7 +344,12 @@ object DataPartitioner {
         .groupBy(partitionEntity)
         .count()
         .select(col(partitionEntity), col(COUNT).alias(PER_ENTITY_TOTAL_SAMPLE_COUNT))
-      val dfWithEntityCount = dataFrame.join(broadcast(perEntityCounts), partitionEntity)
+
+      val dfWithEntityCount = if (useBroadcast) {
+        dataFrame.join(broadcast(perEntityCounts), partitionEntity)
+      } else {
+        dataFrame.join(perEntityCounts, partitionEntity)
+      }
 
       // If there's an upper bound, calculate the number of groups needed to bound the data.
       val dfWithGroupCounts = if (!upperBound.isEmpty) {
