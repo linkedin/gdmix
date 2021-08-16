@@ -329,6 +329,27 @@ For more information about distributed training, please refer to [gdmix-workflow
   </p>
 </figure>
 
+## **Citation**
+Please cite GDMix in your publications if it helps your research:
+```
+@manual{guo-liu20,
+  author    = {Jun Shi and
+               Chengming Jiang and 
+               Aman Gupta and 
+               Mingzhou Zhou and 
+               Alice Wu and 
+               Yunbo Ouyang and 
+               Charles Xiao and 
+               Jun Jia and 
+               Haichao Wei and 
+               Huiji Gao and 
+               Bo Long},
+  title     = {GDMix: A Deep Ranking Personalization Framework},
+  url       = {https://engineering.linkedin.com/blog/2020/gdmix--a-deep-ranking-personalization-framework},
+  year      = {2020}
+}
+```
+
 ## Contributing
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
 
