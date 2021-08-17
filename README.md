@@ -332,7 +332,7 @@ For more information about distributed training, please refer to [gdmix-workflow
 ## **Citation**
 Please cite GDMix in your publications if it helps your research:
 ```
-@manual{guo-liu20,
+@manual{shi-jiang20,
   author    = {Jun Shi and
                Chengming Jiang and 
                Aman Gupta and 
