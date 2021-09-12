@@ -8,6 +8,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.json4s.DefaultFormats
+import org.slf4j.{Logger, LoggerFactory}
 
 import com.linkedin.gdmix.parsers.DataPartitionerParser
 import com.linkedin.gdmix.parsers.DataPartitionerParams
@@ -18,6 +19,7 @@ import com.linkedin.gdmix.utils.{IoUtils, PartitionUtils}
  * Partition training and validation data into multiple partitions.
  */
 object DataPartitioner {
+  private val logger: Logger = LoggerFactory.getLogger(this.getClass)
 
   def main(args: Array[String]): Unit = {
 
@@ -33,6 +35,7 @@ object DataPartitioner {
   }
 
   def run(spark: SparkSession, params: DataPartitionerParams): Unit = {
+    logger.info(params.toString)
 
     // Parse the commandline option.
     val trainInputDataPath = params.trainingDataDir

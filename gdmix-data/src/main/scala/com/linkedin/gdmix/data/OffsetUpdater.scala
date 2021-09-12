@@ -2,6 +2,7 @@ package com.linkedin.gdmix.data
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
+import org.slf4j.{Logger, LoggerFactory}
 
 import com.linkedin.gdmix.parsers.OffsetUpdaterParser
 import com.linkedin.gdmix.parsers.OffsetUpdaterParams
@@ -12,6 +13,7 @@ import com.linkedin.gdmix.utils.IoUtils
  * Update offset for fixed-effect data once random-effects are done. Only used in multiple coordinate descent iterations.
  */
 object OffsetUpdater {
+  private val logger: Logger = LoggerFactory.getLogger(this.getClass)
 
   def main(args: Array[String]): Unit = {
 
@@ -26,6 +28,7 @@ object OffsetUpdater {
   }
 
   def run(spark: SparkSession, params: OffsetUpdaterParams): Unit = {
+    logger.info(params.toString)
 
     // Parse the commandline option.
     val trainInputDataPath = params.trainingDataDir
