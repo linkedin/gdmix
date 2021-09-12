@@ -708,4 +708,6 @@ class FixedEffectLRModelLBFGS(Model):
         logging("Closed the session")
 
     def _parse_parameters(self, raw_model_parameters):
-        return FixedLRParams.__from_argv__(raw_model_parameters, error_on_unknown=False)
+        params = FixedLRParams.__from_argv__(raw_model_parameters, error_on_unknown=False)
+        logging(params)
+        return params

@@ -311,4 +311,6 @@ class RandomEffectLRLBFGSModel(Model):
         logger.info("Model export is done as part of the training() API for random effect LR LBFGS training. Skipping.")
 
     def _parse_parameters(self, raw_model_parameters) -> REParams:
-        return REParams.__from_argv__(raw_model_parameters, error_on_unknown=False)
+        params = REParams.__from_argv__(raw_model_parameters, error_on_unknown=False)
+        logger.info(params)
+        return params
