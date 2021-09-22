@@ -37,7 +37,7 @@ User will need to :
 - Install the `gdmix-trainer` and `gdmix-workflow` python packages
 ```
 version=0.3.0
-wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
+wget -c https://linkedin.jfrog.io/ui/native/open-source/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
 
 pip install gdmix-trainer gdmix-workflow
 ```
@@ -218,7 +218,7 @@ python download_process_movieLens_data.py
 Download the `gdmix-data` fat jar for spark to process intermediate data:
 ```
 version=0.3.0
-wget -c https://linkedin.bintray.com/maven/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
+wget -c https://linkedin.jfrog.io/ui/native/open-source/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
 ```
 Install python packages `gdmix-trainer` and `gdmix-workflow`:
 ```
