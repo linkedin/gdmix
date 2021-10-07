@@ -20,6 +20,7 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
     """
     Test for random effect custom LR model
     """
+
     def setUp(self):
         tf.compat.v1.reset_default_graph()
         self.base_dir = tempfile.mkdtemp()
@@ -356,17 +357,17 @@ class TestRandomEffectCustomLRModel(tf.test.TestCase):
         avro_model_output_dir = tempfile.mkdtemp(dir=self.base_dir)
         raw_params.extend(['--' + constants.OUTPUT_MODEL_DIR, avro_model_output_dir])
         raw_params.extend(['--' + constants.ENABLE_LOCAL_INDEXING, 'True'])
-        raw_params.extend(['--variance_mode', variance_mode])
+        raw_params.extend(['--random_effect_variance_mode', variance_mode])
 
         # Replace the feature file
         feature_idx = raw_params.index('--' + constants.FEATURE_FILE)
-        del raw_params[feature_idx:feature_idx+2]
+        del raw_params[feature_idx:feature_idx + 2]
         raw_params.extend(['--' + constants.FEATURE_FILE,
                            os.path.join(test_dataset_path, 'dataset_1_feature_file.csv')])
 
         # For this test, we need set l2 to 0.0. See the comments in test_optimizer_helper
         l2_idx = raw_params.index('--' + constants.L2_REG_WEIGHT)
-        del raw_params[l2_idx:l2_idx+2]
+        del raw_params[l2_idx:l2_idx + 2]
         raw_params.extend(['--' + constants.L2_REG_WEIGHT, '0.0'])
 
         train_tfrecord_dir = tempfile.mkdtemp(dir=self.base_dir)

@@ -12,6 +12,7 @@ from fastavro import parse_schema
 from smart_arg import arg_suite
 from scipy.optimize import fmin_l_bfgs_b
 from tensorflow.python.ops import collective_ops
+from typing import Optional
 
 from gdmix.io.dataset_metadata import DatasetMetadata
 from gdmix.io.input_data_pipeline import per_record_input_fn
@@ -28,6 +29,8 @@ from gdmix.util.model_utils import threshold_coefficients
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(module)s:%(message)s', datefmt='%Y/%m/%d %I:%M:%S')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+_VARIANCE_MODE = (constants.FULL, constants.SIMPLE)
 
 
 def logging(msg):
@@ -60,6 +63,12 @@ class FixedLRParams(LRParams):
     retry_interval: int = 2  # Number of seconds between retries.
     delayed_exit_in_seconds: int = 60  # Number of seconds before exiting
     disable_fixed_effect_scoring_after_training: bool = False  # Boolean for disabling scoring using the trained model at training phase
+    fixed_effect_variance_mode: Optional[str] = None  # How to compute fixed effect training variance. None, FULL or SIMPLE
+
+    def __post_init__(self):
+        assert self.fixed_effect_variance_mode is None \
+            or self.fixed_effect_variance_mode in _VARIANCE_MODE, \
+            f"Action: {self.fixed_effect_variance_mode} must be in {_VARIANCE_MODE}"
 
 
 class FixedEffectLRModelLBFGS(Model):
@@ -109,10 +118,16 @@ class FixedEffectLRModelLBFGS(Model):
         self.retry_interval = self.model_params.retry_interval
         self.delayed_exit_in_seconds = self.model_params.delayed_exit_in_seconds
         self.server = None
+        self.fixed_effect_variance_mode = self.model_params.fixed_effect_variance_mode
+        self.epsilon = 1.0e-12
 
         # validate parameters:
-        assert self.feature_file is None or (self.feature_file and tf1.io.gfile.exists(
-            self.feature_file)), "feature file {} doesn't exist".format(self.feature_file)
+        assert self.feature_file is None or (self.feature_file and tf.io.gfile.exists(
+            self.feature_file)), f"feature file {self.feature_file} doesn't exist."
+
+        # validate only support compute variance for logistic regression model
+        if self.fixed_effect_variance_mode is not None:
+            assert self.model_type == constants.LOGISTIC_REGRESSION, f"doesn't support variance computation for model type {self.mdoel_type}."
 
     def _create_local_cache(self):
         """ Create a local cache directory to store temporary files. """
@@ -124,7 +139,7 @@ class FixedEffectLRModelLBFGS(Model):
 
     def _load_metadata(self):
         """ Read metadata file from json format. """
-        assert tf1.io.gfile.exists(self.metadata_file), "metadata file %s does not exist" % self.metadata_file
+        assert tf.io.gfile.exists(self.metadata_file), "metadata file %s does not exist" % self.metadata_file
         return read_json_file(self.metadata_file)
 
     @staticmethod
@@ -166,7 +181,7 @@ class FixedEffectLRModelLBFGS(Model):
         if feature_bag:
             feature_tensor = all_features[feature_bag]
         else:
-            feature_tensor = tf1.sparse.SparseTensor(indices=[[0, 0]], values=[0.0], dense_shape=[batch_size, 1])
+            feature_tensor = tf.sparse.SparseTensor(indices=[[0, 0]], values=[0.0], dense_shape=[batch_size, 1])
         return feature_tensor
 
     def _has_label(self, label_column_name):
@@ -196,13 +211,18 @@ class FixedEffectLRModelLBFGS(Model):
                 time.sleep(self.retry_interval)
         raise exception
 
-    def _inference_model_fn(self, diter, x_placeholder, num_iterations, schema_params: SchemaParams):
+    def _scoring_fn(self, diter, x_placeholder, num_workers, num_iterations, schema_params: SchemaParams):
         """ Implement the forward pass to get logit. """
-        sample_id_list = tf1.constant([], tf1.int64)
-        label_list = tf1.constant([], tf1.float32)
-        weight_list = tf1.constant([], tf1.float32)
-        prediction_score_list = tf1.constant([], tf1.float64)
-        prediction_score_per_coordinate_list = tf1.constant([], tf1.float64)
+        sample_id_list = tf.constant([], tf.int64)
+        label_list = tf.constant([], tf.float32)
+        weight_list = tf.constant([], tf.float32)
+        prediction_score_list = tf.constant([], tf.float64)
+        prediction_score_per_coordinate_list = tf.constant([], tf.float64)
+        # for variance computation
+        variances_dimension = self.num_features + 1 if self.has_intercept else self.num_features
+        H = tf.zeros([variances_dimension, variances_dimension])
+        if self.fixed_effect_variance_mode == constants.SIMPLE:
+            H = tf.zeros(variances_dimension)
 
         feature_bag_name = self.feature_bag_name
         sample_id_column_name = schema_params.uid_column_name
@@ -212,65 +232,89 @@ class FixedEffectLRModelLBFGS(Model):
         has_offset = self._has_feature(offset_column_name)
         has_label = self._has_label(label_column_name)
         has_weight = self._has_feature(sample_weight_column_name)
-        i = tf1.constant(0, tf1.int64)
+        i = tf.constant(0, tf.int64)
 
-        def cond(i, sample_id_list, label_list, weight_list, prediction_score_list,
-                 prediction_score_per_coordinate_list):
-            return tf1.less(i, num_iterations)
+        def cond(i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list, H):
+            return tf.less(i, num_iterations)
 
-        def body(i, sample_id_list, label_list, weight_list, prediction_score_list,
-                 prediction_score_per_coordinate_list):
+        def body(i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list, H):
             i += 1
             all_features, all_labels = diter.get_next()
             sample_ids = all_features[sample_id_column_name]
-            current_batch_size = tf1.shape(sample_ids)[0]
+            current_batch_size = tf.shape(sample_ids)[0]
             features = self._get_feature_bag_tensor(all_features, feature_bag_name, current_batch_size)
-            offsets = all_features[offset_column_name] if has_offset else tf1.zeros(current_batch_size, tf1.float64)
-            weights = all_features[sample_weight_column_name] if has_weight \
-                else tf1.ones(current_batch_size, tf1.float32)
-            labels = tf1.cast(all_labels[label_column_name], tf1.float32) if has_label else tf1.zeros(current_batch_size, tf1.float32)
+            offsets = all_features[offset_column_name] if has_offset else tf.zeros(current_batch_size, tf.float64)
+            weights = all_features[sample_weight_column_name] if has_weight else tf.ones(current_batch_size)
+            labels = tf.cast(all_labels[label_column_name], tf.float32) if has_label else tf.zeros(current_batch_size)
 
-            sample_id_list = tf1.concat([sample_id_list, sample_ids], axis=0)
-            weight_list = tf1.concat([weight_list, weights], axis=0)
-            label_list = tf1.concat([label_list, labels], axis=0)
+            sample_id_list = tf.concat([sample_id_list, sample_ids], axis=0)
+            weight_list = tf.concat([weight_list, weights], axis=0)
+            label_list = tf.concat([label_list, labels], axis=0)
 
             if self.has_intercept:
                 w = x_placeholder[:-1]
                 b = x_placeholder[-1]
             else:
                 w = x_placeholder
-            logits_no_bias = tf1.sparse.sparse_dense_matmul(tf1.cast(features, tf1.float64),
-                                                            tf1.cast(tf1.expand_dims(w, 1), tf1.float64))
+            logits_no_bias = tf.sparse.sparse_dense_matmul(tf.cast(features, tf.float64),
+                                                           tf.cast(tf.expand_dims(w, 1), tf.float64))
             if self.has_intercept:
-                logits = logits_no_bias + tf1.expand_dims(
-                    tf1.ones(current_batch_size, tf1.float64) * tf1.cast(b, tf1.float64), 1)
+                logits = logits_no_bias + tf.expand_dims(tf.ones(current_batch_size, tf.float64) * tf.cast(b, tf.float64), 1)
             else:
                 logits = logits_no_bias
-            prediction_score_per_coordinate_list = tf1.concat([prediction_score_per_coordinate_list,
-                                                               tf1.reshape(logits, [-1])], axis=0)
+            prediction_score_per_coordinate_list = tf.concat([prediction_score_per_coordinate_list,
+                                                              tf.reshape(logits, [-1])], axis=0)
 
-            logits_with_offsets = logits + tf1.expand_dims(tf1.cast(offsets, tf1.float64), 1)
-            prediction_score_list = tf1.concat([prediction_score_list, tf1.reshape(logits_with_offsets, [-1])], axis=0)
+            logits_with_offsets = logits + tf.expand_dims(tf.cast(offsets, tf.float64), 1)
+            prediction_score_list = tf.concat([prediction_score_list, tf.reshape(logits_with_offsets, [-1])], axis=0)
 
-            return i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
+            # Compute variance for training data
+            if self.fixed_effect_variance_mode is not None:
+                rho = tf.cast(tf.math.sigmoid(tf.reshape(logits_with_offsets, [-1])), tf.float32)
+                d = rho * (tf.ones(tf.shape(rho)) - rho)
+                if has_weight:
+                    d = d * tf.cast(weights, tf.float32)
 
-        _, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list \
-            = tf1.while_loop(cond, body,
-                             loop_vars=[i, sample_id_list, label_list, weight_list,
-                                        prediction_score_list, prediction_score_per_coordinate_list],
-                             shape_invariants=[i.get_shape()] + [tf1.TensorShape([None])] * 5)
+                features_to_dense = tf.sparse.to_dense(features)
+                if self.has_intercept:
+                    # add intercept column
+                    intercept_column = tf.expand_dims(tf.ones(current_batch_size), 1)
+                    features_for_variance_compute = tf.concat([features_to_dense, intercept_column], axis=1)
+                else:
+                    features_for_variance_compute = features_to_dense
+                # # compute X^t * D * X
+                dx = features_for_variance_compute * tf.expand_dims(d, axis=1)
+                batched_H = tf.matmul(features_for_variance_compute, dx, transpose_a=True, a_is_sparse=True, b_is_sparse=True)
 
-        return sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list
+                if self.fixed_effect_variance_mode == constants.SIMPLE:
+                    H += tf.linalg.diag_part(batched_H)
+                elif self.fixed_effect_variance_mode == constants.FULL:
+                    H += batched_H
+
+            return i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list, H
+
+        _, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list, H\
+            = tf.while_loop(cond, body,
+                            loop_vars=[i, sample_id_list, label_list, weight_list,
+                                       prediction_score_list, prediction_score_per_coordinate_list, H],
+                            shape_invariants=[i.get_shape()] + [tf.TensorShape([None])] * 5 + [H.get_shape()])
+
+        if self.fixed_effect_variance_mode is not None and num_workers > 1:
+            H = collective_ops.all_reduce(
+                H, num_workers, FixedEffectLRModelLBFGS.TF_ALL_REDUCE_GROUP_KEY, 2,
+                merge_op='Add', final_op='Id')
+
+        return sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list, H
 
     def _train_model_fn(self, diter, x_placeholder, num_workers, num_features, num_iterations,
                         schema_params: SchemaParams):
         """ The training objective function and the gradients. """
-        value = tf1.constant(0.0, tf1.float64)
+        value = tf.constant(0.0, tf.float64)
         if self.has_intercept:
             # Add intercept
-            gradients = tf1.constant(np.zeros(num_features + 1))
+            gradients = tf.constant(np.zeros(num_features + 1))
         else:
-            gradients = tf1.constant(np.zeros(num_features))
+            gradients = tf.constant(np.zeros(num_features))
         feature_bag_name = self.feature_bag_name
         label_column_name = schema_params.label_column_name
         sample_weight_column_name = schema_params.weight_column_name
@@ -288,34 +332,32 @@ class FixedEffectLRModelLBFGS(Model):
             i += 1
             all_features, all_labels = diter.get_next()
             labels = all_labels[label_column_name]
-            current_batch_size = tf1.shape(labels)[0]
+            current_batch_size = tf.shape(labels)[0]
             features = self._get_feature_bag_tensor(all_features, feature_bag_name, current_batch_size)
-            weights = all_features[sample_weight_column_name] if has_weight else tf1.ones(current_batch_size,
-                                                                                          tf1.float64)
-            offsets = all_features[offset_column_name] if has_offset else tf1.zeros(current_batch_size, tf1.float64)
+            weights = all_features[sample_weight_column_name] if has_weight else tf.ones(current_batch_size, tf.float64)
+            offsets = all_features[offset_column_name] if has_offset else tf.zeros(current_batch_size, tf.float64)
 
             if self.has_intercept:
                 w = x_placeholder[:-1]
                 b = x_placeholder[-1]
             else:
                 w = x_placeholder
-            logits_no_bias = tf1.sparse.sparse_dense_matmul(tf1.cast(features, tf1.float64),
-                                                            tf1.cast(tf1.expand_dims(w, 1), tf1.float64)
-                                                            ) + tf1.expand_dims(tf1.cast(offsets, tf1.float64), 1)
+            logits_no_bias = tf.sparse.sparse_dense_matmul(tf.cast(features, tf.float64),
+                                                           tf.cast(tf.expand_dims(w, 1), tf.float64)
+                                                           ) + tf.expand_dims(tf.cast(offsets, tf.float64), 1)
             if self.has_intercept:
-                logits = logits_no_bias + tf1.expand_dims(
-                    tf1.ones(current_batch_size, tf1.float64) * tf1.cast(b, tf1.float64), 1)
+                logits = logits_no_bias + tf.expand_dims(tf.ones(current_batch_size, tf.float64) * tf.cast(b, tf.float64), 1)
             else:
                 logits = logits_no_bias
 
             if self.model_type == constants.LOGISTIC_REGRESSION:
-                loss = tf1.nn.sigmoid_cross_entropy_with_logits(labels=tf1.cast(labels, tf1.float64),
-                                                                logits=tf1.reshape(tf1.cast(logits, tf1.float64), [-1]))
+                loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.cast(labels, tf.float64),
+                                                               logits=tf.reshape(tf.cast(logits, tf.float64), [-1]))
             else:
-                loss = tf1.squared_difference(tf1.cast(labels, tf1.float64),
-                                              tf1.reshape(tf1.cast(logits, tf1.float64), [-1]))
+                loss = tf.math.squared_difference(tf.cast(labels, tf.float64),
+                                                  tf.reshape(tf.cast(logits, tf.float64), [-1]))
 
-            weighted_loss = tf1.cast(weights, tf1.float64) * loss
+            weighted_loss = tf.cast(weights, tf.float64) * loss
             # regularzer has the option to include or exclude bias
             # Note: The L2 is computed on the entire weight vector, this is fine if the dataset has
             # all the features. In some cases, e.g incremental learning, the incremental dataset
@@ -323,20 +365,20 @@ class FixedEffectLRModelLBFGS(Model):
             # weights that are not in the dataset. Revisit it when we implement incremental learning.
             # Alternatively, the features that are in the prior models but not the current dataset
             # should not be copied to initial coefficients for warm-start, but needed for inference.
-            batch_value = tf1.reduce_sum(weighted_loss)
-            batch_gradients = tf1.gradients(batch_value, x_placeholder)[0]
+            batch_value = tf.reduce_sum(weighted_loss)
+            batch_gradients = tf.gradients(batch_value, x_placeholder)[0]
             value += batch_value
             gradients += batch_gradients
             return i, value, gradients
 
-        _, value, gradients = tf1.while_loop(cond, body, [i, value, gradients])
-        regularizer = tf1.nn.l2_loss(x_placeholder) if (is_regularize_bias or not has_intercept) \
-            else tf1.nn.l2_loss(x_placeholder[:-1])
+        _, value, gradients = tf.while_loop(cond, body, [i, value, gradients])
+        regularizer = tf.nn.l2_loss(x_placeholder) if (is_regularize_bias or not has_intercept)\
+            else tf.nn.l2_loss(x_placeholder[:-1])
         # Divide the regularizer by number of workers because we will sum the contribution of each worker
         # in the all reduce step.
         loss_reg = regularizer * self.l2_reg_weight / float(num_workers)
         value += loss_reg
-        gradients += tf1.gradients(loss_reg, x_placeholder)[0]
+        gradients += tf.gradients(loss_reg, x_placeholder)[0]
         if num_workers > 1:
             # sum all reduce
             reduced_value = collective_ops.all_reduce(
@@ -397,15 +439,33 @@ class FixedEffectLRModelLBFGS(Model):
             os.remove(output_file)
             logging(f"Worker {task_index} has copied inference result to directory {output_dir}")
 
-    # TODO(mizhou): All inference results are saved to memory and then write once, give the observation
-    # of small inference result size (each sample size is only 24 bytes), may need revisiting.
-    def _run_inference(self, x, tf_session, x_placeholder, ops, task_index, schema_params, output_dir):
-        """ Run inference on training or validation dataset. """
+    def _scoring(self, x, tf_session, x_placeholder, ops, task_index, schema_params, output_dir, compute_training_variance=False):
+        """ Run scoring on training or validation dataset. """
         start_time = time.time()
-        sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op = ops
-        sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate = tf_session.run(
-            [sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op],
-            feed_dict={x_placeholder: x})
+        if compute_training_variance:
+            sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op, variances_op = ops
+            sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate, H = tf_session.run(
+                [sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op, variances_op],
+                feed_dict={x_placeholder: x})
+
+            if self.fixed_effect_variance_mode == constants.SIMPLE:
+                H += self.l2_reg_weight
+                if self.has_intercept and not self.is_regularize_bias:
+                    # The last element corresponds to the intercept, subtract the l2_reg_weight for the intercept
+                    H[-1] -= self.l2_reg_weight
+                self.variances = 1.0 / (H + self.epsilon)
+            elif self.fixed_effect_variance_mode == constants.FULL:
+                H += np.diag([self.l2_reg_weight + self.epsilon] * H.shape[0])
+                if self.has_intercept and not self.is_regularize_bias:
+                    # The last element corresponds to the intercept, subtract the l2_reg_weight for the intercept
+                    H[-1][-1] -= self.l2_reg_weight
+                V = np.linalg.inv(H)
+                self.variances = np.diagonal(V)
+        else:
+            sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op = ops
+            sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate = tf_session.run(
+                [sample_ids_op, labels_op, weights_op, prediction_score_op, prediction_score_per_coordinate_op],
+                feed_dict={x_placeholder: x})
 
         self._write_inference_result(sample_ids, labels, weights, prediction_score,
                                      prediction_score_per_coordinate, task_index,
@@ -456,22 +516,22 @@ class FixedEffectLRModelLBFGS(Model):
         is_chief = execution_context[constants.IS_CHIEF]
         self._create_server(execution_context)
 
-        assigned_train_files = self._get_assigned_files(training_data_dir, num_workers, task_index)
+        assigned_training_files = self._get_assigned_files(training_data_dir, num_workers, task_index)
         if self.copy_to_local:
-            train_input_dir = self.local_training_input_dir
+            training_input_dir = self.local_training_input_dir
             self._create_local_cache()
-            actual_train_files = copy_files(assigned_train_files, train_input_dir)
+            actual_training_files = copy_files(assigned_training_files, training_input_dir)
             # After copy the worker's shard to local, we don't shard the local files any more.
-            train_num_shards = 1
-            train_shard_index = 0
+            training_data_num_shards = 1
+            training_data_shard_index = 0
         else:
-            train_input_dir = self.training_data_dir
-            actual_train_files = assigned_train_files
-            train_num_shards = num_workers
-            train_shard_index = task_index
+            training_input_dir = training_data_dir
+            actual_training_files = assigned_training_files
+            training_data_num_shards = num_workers
+            training_data_shard_index = task_index
 
         # Compute the number of iterations before the main graph is built.
-        train_num_iterations = self._get_num_iterations(actual_train_files, metadata_file)
+        training_data_num_iterations = self._get_num_iterations(actual_training_files, metadata_file)
         if validation_data_dir:
             assigned_validation_files = self._get_assigned_files(validation_data_dir, num_workers, task_index)
             validation_data_num_iterations = self._get_num_iterations(assigned_validation_files, metadata_file)
@@ -483,32 +543,33 @@ class FixedEffectLRModelLBFGS(Model):
                 tf1.device('job:worker/task:{}/device:CPU:0'.format(task_index)):
 
             # Define ops for training
-            train_dataset = per_record_input_fn(train_input_dir,
-                                                metadata_file,
-                                                train_num_shards,
-                                                train_shard_index,
-                                                self.batch_size,
-                                                self.data_format)
-            train_diter = tf1.data.make_initializable_iterator(train_dataset)
-            init_train_dataset_op = train_diter.initializer
-            train_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
-            value_op, gradients_op = self._train_model_fn(train_diter,
-                                                          train_x_placeholder,
+            training_dataset = per_record_input_fn(training_input_dir,
+                                                   metadata_file,
+                                                   training_data_num_shards,
+                                                   training_data_shard_index,
+                                                   self.batch_size,
+                                                   self.data_format)
+            training_data_iterator = tf1.data.make_initializable_iterator(training_dataset)
+            init_training_dataset_op = training_data_iterator.initializer
+            training_x_placeholder = tf1.placeholder(tf.float64, shape=[None])
+            value_op, gradients_op = self._train_model_fn(training_data_iterator,
+                                                          training_x_placeholder,
                                                           num_workers,
                                                           self.num_features,
-                                                          train_num_iterations,
+                                                          training_data_num_iterations,
                                                           schema_params)
-            train_ops = (init_train_dataset_op, value_op, gradients_op)
+            training_ops = (init_training_dataset_op, value_op, gradients_op)
 
             # Define ops for inference
-            inference_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
-            if not self.disable_fixed_effect_scoring_after_training:
-                inference_train_data_iterator = tf1.data.make_one_shot_iterator(train_dataset)
-                train_sample_ids_op, train_labels_op, train_weights_op, train_prediction_score_op, train_prediction_score_per_coordinate_op = \
-                    self._inference_model_fn(
-                        inference_train_data_iterator,
+            inference_x_placeholder = tf1.placeholder(tf.float64, shape=[None])
+            if not self.disable_fixed_effect_scoring_after_training or self.fixed_effect_variance_mode is not None:
+                inference_training_data_iterator = tf1.data.make_one_shot_iterator(training_dataset)
+                training_sample_ids_op, training_labels_op, training_weights_op, training_prediction_score_op, \
+                    training_prediction_score_per_coordinate_op, H_op = self._scoring_fn(
+                        inference_training_data_iterator,
                         inference_x_placeholder,
-                        train_num_iterations,
+                        num_workers,
+                        training_data_num_iterations,
                         schema_params)
 
             if validation_data_dir:
@@ -519,16 +580,17 @@ class FixedEffectLRModelLBFGS(Model):
                                                     self.batch_size,
                                                     self.data_format)
                 inference_validation_data_iterator = tf1.data.make_one_shot_iterator(valid_dataset)
-                valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, valid_prediction_score_per_coordinate_op = \
-                    self._inference_model_fn(
+                valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, valid_prediction_score_per_coordinate_op, _ = \
+                    self._scoring_fn(
                         inference_validation_data_iterator,
                         inference_x_placeholder,
+                        num_workers,
                         validation_data_num_iterations,
                         schema_params)
 
             if num_workers > 1:
                 all_reduce_sync_op = collective_ops.all_reduce(
-                    tf1.constant(0.0, tf1.float64),
+                    tf.constant(0.0, tf.float64),
                     num_workers,
                     FixedEffectLRModelLBFGS.TF_ALL_REDUCE_GROUP_KEY,
                     0,
@@ -577,7 +639,7 @@ class FixedEffectLRModelLBFGS(Model):
             m=self.num_correction_pairs,  # number of variable metrics corrections. default is 10.
             factr=self.factor,  # control precision, smaller the better.
             maxiter=self.max_iteration,
-            args=(tf_session, train_x_placeholder, train_ops, task_index),
+            args=(tf_session, training_x_placeholder, training_ops, task_index),
             disp=0)
         logging("Training --- {} seconds ---".format(time.time() - start_time))
         logging("\n------------------------------\nf_min: {}\nnum of funcalls: {}\ntask msg:"
@@ -586,28 +648,31 @@ class FixedEffectLRModelLBFGS(Model):
         logging(f"Zeroing coefficients equal to or below {self.sparsity_threshold}")
         self.model_coefficients = threshold_coefficients(self.model_coefficients, self.sparsity_threshold)
 
-        if not self.disable_fixed_effect_scoring_after_training:
+        if not self.disable_fixed_effect_scoring_after_training or self.fixed_effect_variance_mode is not None:
             logging("Inference training data starts...")
-            inference_training_data_ops = (train_sample_ids_op, train_labels_op, train_weights_op,
-                                           train_prediction_score_op, train_prediction_score_per_coordinate_op)
-            self._run_inference(self.model_coefficients,
-                                tf_session,
-                                inference_x_placeholder,
-                                inference_training_data_ops,
-                                task_index,
-                                schema_params,
-                                self.training_output_dir)
+            inference_training_data_ops = (training_sample_ids_op, training_labels_op, training_weights_op,
+                                           training_prediction_score_op, training_prediction_score_per_coordinate_op)
+            if self.fixed_effect_variance_mode is not None:
+                inference_training_data_ops = inference_training_data_ops + (H_op,)
+            self._scoring(self.model_coefficients,
+                          tf_session,
+                          inference_x_placeholder,
+                          inference_training_data_ops,
+                          task_index,
+                          schema_params,
+                          self.training_output_dir,
+                          self.fixed_effect_variance_mode is not None)
         if validation_data_dir:
             logging("Inference validation data starts...")
             inference_validation_data_ops = (valid_sample_ids_op, valid_labels_op, valid_weights_op,
                                              valid_prediction_score_op, valid_prediction_score_per_coordinate_op)
-            self._run_inference(self.model_coefficients,
-                                tf_session,
-                                inference_x_placeholder,
-                                inference_validation_data_ops,
-                                task_index,
-                                schema_params,
-                                self.validation_output_dir)
+            self._scoring(self.model_coefficients,
+                          tf_session,
+                          inference_x_placeholder,
+                          inference_validation_data_ops,
+                          task_index,
+                          schema_params,
+                          self.validation_output_dir)
 
         # Final sync up and then reliably terminate all workers
         if (num_workers > 1):
@@ -624,17 +689,30 @@ class FixedEffectLRModelLBFGS(Model):
 
     def _save_model(self):
         """ Save the trained linear model in avro format. """
-        bias = self.model_coefficients[-1] if self.has_intercept else None
-        expanded_bias = None if bias is None else np.expand_dims(bias, axis=0)
+        compute_training_variance = self.fixed_effect_variance_mode is not None
+        if self.has_intercept:
+            if compute_training_variance:
+                bias = (self.model_coefficients[-1], self.variances[-1])
+            else:
+                bias = self.model_coefficients[-1]
+        else:
+            bias = None
+        expanded_bias = None if bias is None else [bias]
+
         if self.feature_bag_name is None:
             # intercept only model
             list_of_weight_indices = None
             list_of_weight_values = None
         else:
-            weights = self.model_coefficients[:-1] if self.has_intercept else self.model_coefficients
+            if self.has_intercept:
+                weights = self.model_coefficients[:-1]
+                variances = self.variances[:-1] if compute_training_variance else None
+            else:
+                weights = self.model_coefficients
+                variances = self.variances if compute_training_variance else None
             indices = np.arange(weights.shape[0])
-            list_of_weight_values = np.expand_dims(weights, axis=0)
-            list_of_weight_indices = np.expand_dims(indices, axis=0)
+            list_of_weight_values = [weights] if variances is None else [(weights, variances)]
+            list_of_weight_indices = [indices]
         output_file = os.path.join(self.checkpoint_path, "part-00000.avro")
         if self.model_type == constants.LOGISTIC_REGRESSION:
             model_class = "com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"
@@ -653,7 +731,7 @@ class FixedEffectLRModelLBFGS(Model):
         """ Load model from avro file. """
         model = None
         logging("Loading model from {}".format(self.checkpoint_path))
-        model_exist = self.checkpoint_path and tf1.io.gfile.exists(self.checkpoint_path)
+        model_exist = self.checkpoint_path and tf.io.gfile.exists(self.checkpoint_path)
         if model_exist:
             model_file = low_rpc_call_glob("{}/*.avro".format(self.checkpoint_path))
             if len(model_file) == 1:
@@ -700,12 +778,13 @@ class FixedEffectLRModelLBFGS(Model):
                                           task_index,
                                           self.batch_size,
                                           self.data_format)
-            x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
+            x_placeholder = tf1.placeholder(tf.float64, shape=[None])
 
             data_iterator = tf1.data.make_one_shot_iterator(dataset)
-            sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op = self._inference_model_fn(
+            sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op, _ = self._scoring_fn(
                 data_iterator,
                 x_placeholder,
+                num_workers,
                 data_num_iterations,
                 schema_params)
             init_variables_op = tf1.global_variables_initializer()
@@ -716,13 +795,13 @@ class FixedEffectLRModelLBFGS(Model):
 
         predict_ops = (sample_ids_op, labels_op, weights_op, scores_op, scores_and_offsets_op)
         model_coefficients = self._load_model()
-        self._run_inference(model_coefficients,
-                            tf_session,
-                            x_placeholder,
-                            predict_ops,
-                            task_index,
-                            schema_params,
-                            output_dir)
+        self._scoring(model_coefficients,
+                      tf_session,
+                      x_placeholder,
+                      predict_ops,
+                      task_index,
+                      schema_params,
+                      output_dir)
         logging("Snooze before closing the session")
         snooze_after_tf_session_closure(tf_session, self.delayed_exit_in_seconds)
         logging("Closed the session")
