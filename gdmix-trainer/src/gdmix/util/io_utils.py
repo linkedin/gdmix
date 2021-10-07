@@ -170,7 +170,7 @@ def export_linear_model_to_avro(model_ids,
                                 model_class="com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel",
                                 sparsity_threshold=1.0e-4):
     """
-    Export random effect logistic regression model in avro format for photon-ml to consume
+    Export fixed/random effect logistic regression model in avro format for photon-ml to consume
     :param model_ids:               a list of model ids used in generated avro file
     :param list_of_weight_indices:  list of indices for entity-specific model weights
     :param list_of_weight_values:   list of values for entity-specific model weights

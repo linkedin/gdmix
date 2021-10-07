@@ -42,15 +42,15 @@ class REParams(LRParams):
     max_training_queue_size: int = 10  # Maximum size of training job queue
     training_queue_timeout_in_seconds: int = 300  # Training queue put timeout in seconds.
     num_of_consumers: int = 2  # Number of consumer processes that will train RE models in parallel.
-    variance_mode: Optional[str] = None  # How to compute variance. None, FULL or SIMPLE
+    random_effect_variance_mode: Optional[str] = None  # How to compute variance. None, FULL or SIMPLE
     disable_random_effect_scoring_after_training: bool = False  # Boolean for disabling scoring using the trained model at training phase
 
     def __post_init__(self):
         assert self.max_training_queue_size > self.num_of_consumers, \
             "queue size limit must be larger than the number of consumers"
-        assert self.variance_mode is None \
-            or self.variance_mode in _VARIANCE_MODE, \
-            f"Action: {self.variance_mode} must be in {_VARIANCE_MODE}"
+        assert self.random_effect_variance_mode is None \
+            or self.random_effect_variance_mode in _VARIANCE_MODE, \
+            f"Action: {self.random_effect_variance_mode} must be in {_VARIANCE_MODE}"
 
 
 class RandomEffectLRLBFGSModel(Model):
@@ -59,6 +59,7 @@ class RandomEffectLRLBFGSModel(Model):
 
     Supports training entity-based models. Several models can be trained in parallel on multiple processes.
     """
+
     def __init__(self, raw_model_params):
         super(RandomEffectLRLBFGSModel, self).__init__(raw_model_params)
         self.model_params: REParams = self._parse_parameters(raw_model_params)
@@ -146,7 +147,7 @@ class RandomEffectLRLBFGSModel(Model):
         consumer = TrainingJobConsumer(lr_model, name=input_path, job_queue=self.job_queue,
                                        enable_local_indexing=self.model_params.enable_local_indexing,
                                        sparsity_threshold=self.model_params.sparsity_threshold,
-                                       variance_mode=self.model_params.variance_mode)
+                                       variance_mode=self.model_params.random_effect_variance_mode)
         # Make sure the queue is empty
         assert(self.job_queue.empty())
         results = self._pooled_action(pool, consumer, input_path, schema_params, model_weights, num_features, metadata_file,
@@ -230,13 +231,13 @@ class RandomEffectLRLBFGSModel(Model):
         for entity_id, (mean, variance, unique_global_indices) in model_coefficients.items():
             idx = 0
             if self.has_intercept:
-                if self.model_params.variance_mode is None:
+                if self.model_params.random_effect_variance_mode is None:
                     biases.append(mean[idx])
                 else:
                     biases.append((mean[idx], variance[idx]))
                 idx = 1
             if list_of_weight_indices is not None and list_of_weight_values is not None:
-                if self.model_params.variance_mode is None:
+                if self.model_params.random_effect_variance_mode is None:
                     list_of_weight_values.append(mean[idx:])
                 else:
                     list_of_weight_values.append((mean[idx:], variance[idx:]))
@@ -296,7 +297,7 @@ class RandomEffectLRLBFGSModel(Model):
                     assert(ntv["name"] == INTERCEPT and ntv["term"] == '')
                 else:
                     # The ordering of variance should match the coefficients.
-                    assert(unique_global_indices[idx-1] == feature2global_id[(ntv["name"], ntv["term"])])
+                    assert(unique_global_indices[idx - 1] == feature2global_id[(ntv["name"], ntv["term"])])
         if feature2global_id is None:
             # intercept-only model, add one dummy feature
             # sanity check unique_global_indices.
