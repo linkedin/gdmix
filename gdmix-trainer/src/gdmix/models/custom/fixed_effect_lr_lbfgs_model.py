@@ -20,8 +20,8 @@ from gdmix.models.custom.base_lr_params import LRParams
 from gdmix.params import SchemaParams, Params
 from gdmix.util import constants
 from gdmix.util.distribution_utils import shard_input_files
-from gdmix.util.io_utils import add_dummy_weight, read_json_file, try_write_avro_blocks,\
-    export_linear_model_to_avro, load_linear_models_from_avro, copy_files,\
+from gdmix.util.io_utils import add_dummy_weight, read_json_file, try_write_avro_blocks, \
+    export_linear_model_to_avro, load_linear_models_from_avro, copy_files, \
     get_inference_output_avro_schema, low_rpc_call_glob
 from gdmix.util.model_utils import threshold_coefficients
 
@@ -52,7 +52,9 @@ def snooze_after_tf_session_closure(tf_session, duration_in_seconds):
 @arg_suite
 @dataclass
 class FixedLRParams(LRParams):
-    """Logistic regression model with scipy LBFGS + TF."""
+    """
+    Hyperparameter data class for linear model with scipy LBFGS + TF.
+    """
     copy_to_local: bool = True  # Copying data to local or not.
     num_server_creation_retries: int = 50  # Number of retries to establish tf server.
     retry_interval: int = 2  # Number of seconds between retries.
@@ -62,7 +64,8 @@ class FixedLRParams(LRParams):
 
 class FixedEffectLRModelLBFGS(Model):
     """
-    Logistic regression model with scipy LBFGS + TF.
+    Linear model with scipy LBFGS + TF.
+    Support logistic regression by default and plain linear regression if parameter "self.model_type='linear_regression'".
     """
     # TF all reduce op group identifier
     TF_ALL_REDUCE_GROUP_KEY = 0
@@ -71,6 +74,7 @@ class FixedEffectLRModelLBFGS(Model):
         self.model_params: FixedLRParams = self._parse_parameters(raw_model_params)
         self.training_output_dir = base_training_params.training_score_dir
         self.validation_output_dir = base_training_params.validation_score_dir
+        self.model_type = base_training_params.model_type
         self.local_training_input_dir = "local_training_input_dir"
         self.lbfgs_iteration = 0
         self.training_data_dir = self.model_params.training_data_dir
@@ -90,7 +94,11 @@ class FixedEffectLRModelLBFGS(Model):
         self.max_iteration = self.model_params.num_of_lbfgs_iterations
         self.l2_reg_weight = self.model_params.l2_reg_weight
         self.sparsity_threshold = self.model_params.sparsity_threshold
-        self.disable_fixed_effect_scoring_after_training = self.model_params.disable_fixed_effect_scoring_after_training
+        if self.model_type == constants.LOGISTIC_REGRESSION:
+            self.disable_fixed_effect_scoring_after_training = self.model_params.disable_fixed_effect_scoring_after_training
+        else:
+            # disable inference after training for plain linear regression
+            self.disable_fixed_effect_scoring_after_training = True
 
         self.metadata = self._load_metadata()
         self.tensor_metadata = DatasetMetadata(self.metadata_file)
@@ -103,9 +111,8 @@ class FixedEffectLRModelLBFGS(Model):
         self.server = None
 
         # validate parameters:
-        assert self.feature_file is None or \
-            (self.feature_file and tf1.io.gfile.exists(self.feature_file)), \
-            "feature file {} doesn't exist".format(self.feature_file)
+        assert self.feature_file is None or (self.feature_file and tf1.io.gfile.exists(
+            self.feature_file)), "feature file {} doesn't exist".format(self.feature_file)
 
     def _create_local_cache(self):
         """ Create a local cache directory to store temporary files. """
@@ -176,7 +183,7 @@ class FixedEffectLRModelLBFGS(Model):
         exception = None
         for i in range(self.num_server_creation_retries):
             try:
-                logging(f"No. {i+1} attempt to create a TF Server, "
+                logging(f"No. {i + 1} attempt to create a TF Server, "
                         f"max {self.num_server_creation_retries} attempts")
                 self.server = tf1.distribute.Server(cluster_spec,
                                                     config=config,
@@ -192,7 +199,7 @@ class FixedEffectLRModelLBFGS(Model):
     def _inference_model_fn(self, diter, x_placeholder, num_iterations, schema_params: SchemaParams):
         """ Implement the forward pass to get logit. """
         sample_id_list = tf1.constant([], tf1.int64)
-        label_list = tf1.constant([], tf1.int64)
+        label_list = tf1.constant([], tf1.float32)
         weight_list = tf1.constant([], tf1.float32)
         prediction_score_list = tf1.constant([], tf1.float64)
         prediction_score_per_coordinate_list = tf1.constant([], tf1.float64)
@@ -207,10 +214,12 @@ class FixedEffectLRModelLBFGS(Model):
         has_weight = self._has_feature(sample_weight_column_name)
         i = tf1.constant(0, tf1.int64)
 
-        def cond(i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list):
+        def cond(i, sample_id_list, label_list, weight_list, prediction_score_list,
+                 prediction_score_per_coordinate_list):
             return tf1.less(i, num_iterations)
 
-        def body(i, sample_id_list, label_list, weight_list, prediction_score_list, prediction_score_per_coordinate_list):
+        def body(i, sample_id_list, label_list, weight_list, prediction_score_list,
+                 prediction_score_per_coordinate_list):
             i += 1
             all_features, all_labels = diter.get_next()
             sample_ids = all_features[sample_id_column_name]
@@ -219,7 +228,7 @@ class FixedEffectLRModelLBFGS(Model):
             offsets = all_features[offset_column_name] if has_offset else tf1.zeros(current_batch_size, tf1.float64)
             weights = all_features[sample_weight_column_name] if has_weight \
                 else tf1.ones(current_batch_size, tf1.float32)
-            labels = all_labels[label_column_name] if has_label else tf1.zeros(current_batch_size, tf1.int64)
+            labels = tf1.cast(all_labels[label_column_name], tf1.float32) if has_label else tf1.zeros(current_batch_size, tf1.float32)
 
             sample_id_list = tf1.concat([sample_id_list, sample_ids], axis=0)
             weight_list = tf1.concat([weight_list, weights], axis=0)
@@ -291,16 +300,21 @@ class FixedEffectLRModelLBFGS(Model):
             else:
                 w = x_placeholder
             logits_no_bias = tf1.sparse.sparse_dense_matmul(tf1.cast(features, tf1.float64),
-                                                            tf1.cast(tf1.expand_dims(w, 1), tf1.float64)) \
-                + tf1.expand_dims(tf1.cast(offsets, tf1.float64), 1)
+                                                            tf1.cast(tf1.expand_dims(w, 1), tf1.float64)
+                                                            ) + tf1.expand_dims(tf1.cast(offsets, tf1.float64), 1)
             if self.has_intercept:
                 logits = logits_no_bias + tf1.expand_dims(
                     tf1.ones(current_batch_size, tf1.float64) * tf1.cast(b, tf1.float64), 1)
             else:
                 logits = logits_no_bias
 
-            loss = tf1.nn.sigmoid_cross_entropy_with_logits(labels=tf1.cast(labels, tf1.float64),
-                                                            logits=tf1.reshape(tf1.cast(logits, tf1.float64), [-1]))
+            if self.model_type == constants.LOGISTIC_REGRESSION:
+                loss = tf1.nn.sigmoid_cross_entropy_with_logits(labels=tf1.cast(labels, tf1.float64),
+                                                                logits=tf1.reshape(tf1.cast(logits, tf1.float64), [-1]))
+            else:
+                loss = tf1.squared_difference(tf1.cast(labels, tf1.float64),
+                                              tf1.reshape(tf1.cast(logits, tf1.float64), [-1]))
+
             weighted_loss = tf1.cast(weights, tf1.float64) * loss
             # regularzer has the option to include or exclude bias
             # Note: The L2 is computed on the entire weight vector, this is fine if the dataset has
@@ -316,7 +330,7 @@ class FixedEffectLRModelLBFGS(Model):
             return i, value, gradients
 
         _, value, gradients = tf1.while_loop(cond, body, [i, value, gradients])
-        regularizer = tf1.nn.l2_loss(x_placeholder) if (is_regularize_bias or not has_intercept)\
+        regularizer = tf1.nn.l2_loss(x_placeholder) if (is_regularize_bias or not has_intercept) \
             else tf1.nn.l2_loss(x_placeholder[:-1])
         # Divide the regularizer by number of workers because we will sum the contribution of each worker
         # in the all reduce step.
@@ -362,9 +376,10 @@ class FixedEffectLRModelLBFGS(Model):
                 zip(sample_ids, labels, weights, prediction_score, prediction_score_per_coordinate):
             rec = {schema_params.uid_column_name: int(rec_id),
                    schema_params.prediction_score_column_name: float(rec_prediction_score),
-                   schema_params.prediction_score_per_coordinate_column_name: float(rec_prediction_score_per_coordinate)}
+                   schema_params.prediction_score_per_coordinate_column_name: float(
+                       rec_prediction_score_per_coordinate)}
             if self._has_label(schema_params.label_column_name):
-                rec[schema_params.label_column_name] = int(rec_label)
+                rec[schema_params.label_column_name] = float(rec_label)
             if self._has_feature(schema_params.weight_column_name):
                 rec[schema_params.weight_column_name] = int(rec_weight)
             records.append(rec)
@@ -410,7 +425,7 @@ class FixedEffectLRModelLBFGS(Model):
         :return: number of iterations
         """
         start_time = time.time()
-        assert(self.data_format == constants.TFRECORD)
+        assert (self.data_format == constants.TFRECORD)
         # reset the default graph, so it has been called before the main graph is built.
         tf1.reset_default_graph()
         num_iterations = 0
@@ -489,8 +504,8 @@ class FixedEffectLRModelLBFGS(Model):
             inference_x_placeholder = tf1.placeholder(tf1.float64, shape=[None])
             if not self.disable_fixed_effect_scoring_after_training:
                 inference_train_data_iterator = tf1.data.make_one_shot_iterator(train_dataset)
-                train_sample_ids_op, train_labels_op, train_weights_op, train_prediction_score_op, \
-                    train_prediction_score_per_coordinate_op = self._inference_model_fn(
+                train_sample_ids_op, train_labels_op, train_weights_op, train_prediction_score_op, train_prediction_score_per_coordinate_op = \
+                    self._inference_model_fn(
                         inference_train_data_iterator,
                         inference_x_placeholder,
                         train_num_iterations,
@@ -504,8 +519,8 @@ class FixedEffectLRModelLBFGS(Model):
                                                     self.batch_size,
                                                     self.data_format)
                 inference_validation_data_iterator = tf1.data.make_one_shot_iterator(valid_dataset)
-                valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, \
-                    valid_prediction_score_per_coordinate_op = self._inference_model_fn(
+                valid_sample_ids_op, valid_labels_op, valid_weights_op, valid_prediction_score_op, valid_prediction_score_per_coordinate_op = \
+                    self._inference_model_fn(
                         inference_validation_data_iterator,
                         inference_x_placeholder,
                         validation_data_num_iterations,
@@ -560,7 +575,7 @@ class FixedEffectLRModelLBFGS(Model):
             x0=x0,
             approx_grad=False,
             m=self.num_correction_pairs,  # number of variable metrics corrections. default is 10.
-            factr=self.factor,            # control precision, smaller the better.
+            factr=self.factor,  # control precision, smaller the better.
             maxiter=self.max_iteration,
             args=(tf_session, train_x_placeholder, train_ops, task_index),
             disp=0)
@@ -621,12 +636,17 @@ class FixedEffectLRModelLBFGS(Model):
             list_of_weight_values = np.expand_dims(weights, axis=0)
             list_of_weight_indices = np.expand_dims(indices, axis=0)
         output_file = os.path.join(self.checkpoint_path, "part-00000.avro")
+        if self.model_type == constants.LOGISTIC_REGRESSION:
+            model_class = "com.linkedin.photon.ml.supervised.classification.LogisticRegressionModel"
+        else:
+            model_class = "com.linkedin.photon.ml.supervised.regression.LinearRegressionModel"
         export_linear_model_to_avro(model_ids=["global model"],
                                     list_of_weight_indices=list_of_weight_indices,
                                     list_of_weight_values=list_of_weight_values,
                                     biases=expanded_bias,
                                     feature_file=self.feature_file,
                                     output_file=output_file,
+                                    model_class=model_class,
                                     sparsity_threshold=self.sparsity_threshold)
 
     def _load_model(self, catch_exception=False):

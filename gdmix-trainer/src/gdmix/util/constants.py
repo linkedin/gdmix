@@ -75,6 +75,7 @@ ACTION_INFERENCE = "inference"
 ACTION_TRAIN = "train"
 
 # Supported models
+LINEAR_REGRESSION = "linear_regression"
 LOGISTIC_REGRESSION = "logistic_regression"
 DETEXT = "detext"
 

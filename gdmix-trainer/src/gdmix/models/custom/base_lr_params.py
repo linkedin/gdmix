@@ -4,7 +4,7 @@ from typing import Optional
 
 @dataclass
 class LRParams:
-    """Base logistic regression parameters"""
+    """Base linear model parameters"""
 
     # Input / output files or directories
     metadata_file: str  # Path to metadata.

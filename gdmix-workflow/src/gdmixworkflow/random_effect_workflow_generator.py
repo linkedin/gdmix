@@ -39,12 +39,14 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
 
     def get_train_input_paths(self, random_effect_name):
         """ Get input paths for the training job that are from the partition job. """
-        output_dir = path_join(self.root_output_dir, path_join(random_effect_name, "partition"))
-        training_data_dir = path_join(output_dir, "trainingData")
-        validation_data_dir = path_join(output_dir, "validationData")
-        metadata_file = path_join(output_dir, path_join("metadata", "tensor_metadata.json"))
-        partition_list_file = path_join(output_dir, "partitionList.txt")
-        return training_data_dir, validation_data_dir, metadata_file, partition_list_file
+        output_dir = path_join(self.root_output_dir,
+                               path_join(random_effect_name, "partition"))
+        train_data_path = path_join(output_dir, "trainingData")
+        validation_data_path = path_join(output_dir, "validationData")
+        metadata_file = path_join(output_dir,
+                                  path_join("metadata", "tensor_metadata.json"))
+        partition_list_path = path_join(output_dir, "partitionList.txt")
+        return (train_data_path, validation_data_path, metadata_file, partition_list_path)
 
     def get_metric_output_path(self, random_effect_name):
         """ Get metric output path. """
@@ -56,11 +58,11 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
         """ Get sparkjob partition command.
         Return: [job_type, job_name, "", job_params]
         """
-        prev_train_score_dir, prev_validation_score_dir = \
+        prev_train_score_path, prev_validation_score_path = \
             self.get_prev_model_score_paths(prev_model_name)
 
         random_effect_name = random_effect_config_obj.name
-        training_data_dir, validation_data_dir, metadata_file, partition_list_file = \
+        train_data_path, validation_data_path, metadata_file, partition_list_path = \
             self.get_train_input_paths(random_effect_name)
 
         params = {
@@ -83,14 +85,30 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
         """ Get tfjob training job.
         Return: [job_type, job_name, "", job_params]
         """
-        training_data_dir, validation_data_dir, metadata_file, partition_list_file = self.get_train_input_paths(name)
-        output_model_dir, training_score_dir, validation_score_dir = self.get_train_output_paths(name)
+        random_effect_name = random_effect_config_obj.name
+        params = {STAGE: RANDOM_EFFECT}
+        # get params from config
+        flatten_config_obj(params, random_effect_config_obj)
+        # adjust param keys
+        params.pop("name")
+        params[PREDICTION_SCORE] = params.pop(OUTPUT_COLUMN_NAME)
+        # adjust training/validation data and metadata path as the output of partition job
+        train_data_path, validation_data_path, metadata_file, partition_list_path = \
+            self.get_train_input_paths(random_effect_name)
+        params[TRAIN_DATA_PATH] = train_data_path
+        params[VALIDATION_DATA_PATH] = validation_data_path
+        params[METADATA_FILE] = metadata_file
+        params[PARTITION_LIST_FILE] = partition_list_path
+        # add output params
+        model_path, train_score_path, validation_score_path = \
+            self.get_train_output_paths(random_effect_name)
 
-        gdmix_params = Params(**gdmix_config, stage=RANDOM_EFFECT, partition_list_file=partition_list_file,
-                              training_score_dir=training_score_dir, validation_score_dir=validation_score_dir)
-        re_params = replace(REParams(**random_effect_config_obj, output_model_dir=output_model_dir),
-                            training_data_dir=training_data_dir, validation_data_dir=validation_data_dir, metadata_file=metadata_file)
-        return GDMIX_TFJOB, f"{name}-tf-train", "", (gdmix_params, re_params)
+        params[MODEL_OUTPUT_DIR] = model_path
+        params[TRAINING_OUTPUT_DIR] = train_score_path
+        params[VALIDATION_OUTPUT_DIR] = validation_score_path
+
+        params = prefix_dash_dash(params)
+        return (GDMIX_TFJOB, "{}-tf-train".format(random_effect_name), "", params)
 
     def get_compute_metric_job(self, random_effect_config_obj):
         """ Get sparkjob compute metrics command.
@@ -99,12 +117,15 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
         random_effect_name = random_effect_config_obj.name
         _, _, validation_score_dir = self.get_train_output_paths(random_effect_name)
         params = {
-            r"\--metricsInputDir": validation_score_dir,
-            "--outputMetricFile": self.get_metric_output_path(random_effect_name),
-            "--labelColumnName": random_effect_config_obj.gdmix_config['label_column_name'],
-            "--predictionColumnName": random_effect_config_obj.gdmix_config['prediction_score_column_name']}
-        return (GDMIX_SPARKJOB, f"{random_effect_name}-compute-metric",
-                "com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator", params)
+            r"\-inputPath": validation_score_path,
+            "-outputPath": self.get_metric_output_path(random_effect_name),
+            "-labelName": random_effect_config_obj.input_column_names.label,
+            "-scoreName": random_effect_config_obj.output_column_name,
+            "-metricName": AUC
+        }
+        return (GDMIX_SPARKJOB, "{}-compute-metric".format(random_effect_name),
+                "com.linkedin.gdmix.evaluation.Evaluator",
+                params)
 
     def get_job_sequence(self):
         """ Get gdmix job sequence.
