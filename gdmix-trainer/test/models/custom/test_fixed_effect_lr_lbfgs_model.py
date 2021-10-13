@@ -43,40 +43,51 @@ _SMALL_MAX_ITERS = 1
 
 # Ports are hard-coded for now. We should verify them to be unused.
 # Packages like portpicker come in handy. (https://github.com/google/python_portpicker)
-_PORTS = [13456, 13548, 14356, 14553, 15234, 15379, 15412, 15645]
+_PORTS = [13456, 13548, 14356, 14553, 15234, 15379, 15412, 15645, 15654, 16345, 16354, 16435, 16453, 16534, 16543]
 
 
 class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
     """
-    Test logistic regression model with lbfgs solver
+    Test linear model with lbfgs solver
     """
+
     def setUp(self):
-        self.datasets_without_offset = _create_expected_data(False, 0, False, False)
-        self.datasets_with_offset = _create_expected_data(True, 0, False, False)
-        self.datasets_with_offset_and_previous_model = _create_expected_data(True, 0, True, False)
-        self.datasets_with_offset_intercept_only = _create_expected_data(True, 0, False, True)
-        self.datasets_with_offset_without_intercept = _create_expected_data(True, 0, False, False, False)
+        self.datasets_without_offset = {}
+        self.datasets_with_offset = {}
+        self.datasets_with_offset_and_previous_model = {}
+        self.datasets_with_offset_intercept_only = {}
+        self.datasets_with_offset_without_intercept = {}
+        for model_type in [constants.LOGISTIC_REGRESSION, constants.LINEAR_REGRESSION]:
+            self.datasets_without_offset[model_type] = _create_expected_data(False, 0, False, False, True, model_type)
+            self.datasets_with_offset[model_type] = _create_expected_data(True, 0, False, False, True, model_type)
+            self.datasets_with_offset_and_previous_model[model_type] = _create_expected_data(True, 0, True, False,
+                                                                                             True, model_type)
+            self.datasets_with_offset_intercept_only[model_type] = _create_expected_data(True, 0, False, True,
+                                                                                         True, model_type)
+            self.datasets_with_offset_without_intercept[model_type] = _create_expected_data(True, 0, False, False,
+                                                                                            False, model_type)
 
     def testSingleWorkerTraining(self):
         """
         Single worker, test training.
         :return: None
         """
-        # test single worker training without offset
-        self._run_single_worker(False, _PORTS[0], False, False)
-        # test single worker training with offset
-        self._run_single_worker(True, _PORTS[1], False, False)
-        # test single worker training with offset and previous model
-        self._run_single_worker(True, _PORTS[2], True, False)
-        # test single worker training intercept only model with offset
-        self._run_single_worker(True, _PORTS[3], False, True)
-        # test single worker training without offset and without validation dataset
-        self._run_single_worker(True, _PORTS[4], False, True, False)
-        # test single worker training without offset and disable scoring right after training
-        self._run_single_worker(True, _PORTS[5], False, True, True, True)
-        # test single worker training where model does not have bias
-        self._run_single_worker(has_offset=True, port=_PORTS[6], use_previous_model=False,
-                                intercept_only=False, has_intercept=False)
+        for idx, model_type in enumerate([constants.LINEAR_REGRESSION, constants.LOGISTIC_REGRESSION]):
+            # test single worker training without offset
+            self._run_single_worker(False, _PORTS[7 * idx + 0], False, False, model_type=model_type)
+            # test single worker training with offset
+            self._run_single_worker(True, _PORTS[7 * idx + 1], False, False, model_type=model_type)
+            # test single worker training with offset and previous model
+            self._run_single_worker(True, _PORTS[7 * idx + 2], True, False, model_type=model_type)
+            # test single worker training intercept only model with offset
+            self._run_single_worker(True, _PORTS[7 * idx + 3], False, True, model_type=model_type)
+            # test single worker training without offset and without validation dataset
+            self._run_single_worker(True, _PORTS[7 * idx + 4], False, True, False, model_type=model_type)
+            # test single worker training without offset and disable scoring right after training
+            self._run_single_worker(True, _PORTS[7 * idx + 5], False, True, True, True, model_type=model_type)
+            # test single worker training where model does not have bias
+            self._run_single_worker(has_offset=True, port=_PORTS[7 * idx + 6], use_previous_model=False,
+                                    intercept_only=False, has_intercept=False, model_type=model_type)
 
     def testSingleWorkerPrediction(self):
         """
@@ -84,11 +95,12 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :return: None
         """
         base_dir = tempfile.mkdtemp()
-        paths = _prepare_paths(base_dir, True)
-        training_params = _get_params(paths, _LARGE_MAX_ITERS, False)
-        datasets = self.datasets_with_offset
+        model_type = constants.LOGISTIC_REGRESSION
+        paths = _prepare_paths(base_dir, True, model_type=model_type)
+        training_params = _get_params(paths, _LARGE_MAX_ITERS, False, model_type=model_type)
+        datasets = self.datasets_with_offset[model_type]
         _write_model(datasets['training'].coefficients, paths.feature_file, paths.output_model_dir, False)
-        _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True, ZLIB)
+        _write_tfrecord_datasets(datasets, paths, _NUM_WORKERS, True, ZLIB, model_type=model_type)
         proc_func = _ProcFunc(0, [_PORTS[6]], training_params)
         proc_func.__call__(paths, False)
         self._check_scores(datasets['validation'], paths.validation_score_dir)
@@ -128,7 +140,8 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
                            intercept_only,
                            has_validation_data_dir=True,
                            disable_fixed_effect_scoring_after_training=False,
-                           has_intercept=True):
+                           has_intercept=True,
+                           model_type=constants.LOGISTIC_REGRESSION):
         """
         A test for single worker training. Dataset were pre-generated.
         The model, training scores and validation scores are checked against expected values.
@@ -139,42 +152,44 @@ class TestFixedEffectLRModelLBFGS(tf.test.TestCase):
         :param has_validation_data_dir: whether has validation data dir
         :param disable_fixed_effect_scoring_after_training: whether to disable scoring right after training
         :param has_intercept: whether to include intercept in the model
+        :param model_type: the type of linear model to use (e.g, "linear_regression", "logistic_regression", etc.)
         :return: None
         """
         assert has_intercept or not intercept_only
         base_dir = tempfile.mkdtemp()
         if has_offset:
             if use_previous_model:
-                datasets = self.datasets_with_offset_and_previous_model
+                datasets = self.datasets_with_offset_and_previous_model[model_type]
             else:
                 if intercept_only:
-                    datasets = self.datasets_with_offset_intercept_only
+                    datasets = self.datasets_with_offset_intercept_only[model_type]
                 elif has_intercept:
-                    datasets = self.datasets_with_offset
+                    datasets = self.datasets_with_offset[model_type]
                 else:
-                    datasets = self.datasets_with_offset_without_intercept
+                    datasets = self.datasets_with_offset_without_intercept[model_type]
         else:
-            datasets = self.datasets_without_offset
+            datasets = self.datasets_without_offset[model_type]
         paths = _prepare_paths(base_dir, has_offset, datasets["training"].previous_model,
-                               intercept_only, has_intercept)
+                               intercept_only, has_intercept, model_type=model_type)
         if use_previous_model:
-            training_params = _get_params(paths, _SMALL_MAX_ITERS, False)
+            training_params = _get_params(paths, _SMALL_MAX_ITERS, False, model_type=model_type)
         else:
             training_params = _get_params(
                 paths, _LARGE_MAX_ITERS, intercept_only, has_validation_data_dir,
-                disable_fixed_effect_scoring_after_training, has_intercept)
-        _write_tfrecord_datasets(datasets, paths, 2, has_offset)
+                disable_fixed_effect_scoring_after_training, has_intercept, model_type=model_type)
+        _write_tfrecord_datasets(datasets, paths, 2, has_offset, model_type=model_type)
         proc_func = _ProcFunc(0, [port], training_params)
         proc_func.__call__(paths, True)
         self._check_model(datasets['training'].coefficients, paths.output_model_dir, paths.feature_file)
         if has_validation_data_dir:
             self._check_scores(datasets['validation'], paths.validation_score_dir)
-        if not disable_fixed_effect_scoring_after_training:
+        if not disable_fixed_effect_scoring_after_training and model_type != constants.LINEAR_REGRESSION:
             self._check_scores(datasets['training'], paths.training_score_dir)
         tf.io.gfile.rmtree(base_dir)
 
 
-def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=False, has_intercept=True):
+def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=False, has_intercept=True,
+                   model_type=constants.LOGISTIC_REGRESSION):
     """
     Get an AllPaths namedtuple containing all needed paths.
     Create the directories needed for testing.
@@ -185,6 +200,7 @@ def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=Fal
     :param previous_model: Previous model coefficents for warm start training.
     :param intercept_only: Whether the model is intercept only.
     :param has_intercept: Whether the model uses intercept.
+    :param model_type: Type of the linear model.
     :return: AllPaths namedtuple
     """
     assert has_intercept or not intercept_only
@@ -213,7 +229,7 @@ def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=Fal
     tf.io.gfile.mkdir(all_paths.validation_score_dir)
     if feature_file:
         _create_feature_file(all_paths.feature_file)
-    _create_metadata_file(all_paths.metadata_file, has_offset)
+    _create_metadata_file(all_paths.metadata_file, has_offset, model_type=model_type)
     if previous_model is not None:
         _write_model(previous_model, all_paths.feature_file, all_paths.output_model_dir,
                      intercept_only, has_intercept)
@@ -221,7 +237,8 @@ def _prepare_paths(base_dir, has_offset, previous_model=None, intercept_only=Fal
 
 
 def _get_params(paths, max_iters, intercept_only, has_validation_data_dir=True,
-                disable_fixed_effect_scoring_after_training=False, has_intercept=True):
+                disable_fixed_effect_scoring_after_training=False, has_intercept=True,
+                model_type=constants.LOGISTIC_REGRESSION):
     """
     Get the various parameter for model initialization.
     :param paths: An AllPaths namedtuple.
@@ -230,9 +247,11 @@ def _get_params(paths, max_iters, intercept_only, has_validation_data_dir=True,
     :param has_validation_data_dir: whether to use validation data
     :param disable_fixed_effect_scoring_after_training: whether to disable scoring
     :param has_intercept: whether to include intercept in the model
+    :param model_type: the type of linear model to use (e.g, "linear_regression", "logistic_regression", etc.)
     :return: Three different parameter sets.
     """
-    base_training_params = setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT)
+    base_training_params = setup_fake_base_training_params(training_stage=constants.FIXED_EFFECT,
+                                                           model_type=model_type)
     base_training_params.training_score_dir = paths.training_score_dir
     base_training_params.validation_score_dir = paths.validation_score_dir
 
@@ -289,7 +308,8 @@ def _build_execution_context(worker_index, ports):
     return execution_context
 
 
-def _create_expected_data(has_offset, seed, use_previous_model, intercept_only, has_intercept=True):
+def _create_expected_data(has_offset, seed, use_previous_model, intercept_only, has_intercept=True,
+                          model_type=constants.LOGISTIC_REGRESSION):
     """
     Generated expected data for comparison.
     :param has_offset: Whether to use offset.
@@ -308,6 +328,9 @@ def _create_expected_data(has_offset, seed, use_previous_model, intercept_only, 
         validation_features = np.random.rand(_NUM_SAMPLES, _NUM_FEATURES)
     training_labels = np.random.randint(2, size=_NUM_SAMPLES)
     validation_labels = np.random.randint(2, size=_NUM_SAMPLES)
+    if model_type == constants.LINEAR_REGRESSION:
+        training_labels = training_labels.astype(np.float64)
+        validation_labels = validation_labels.astype(np.float64)
     if has_offset:
         training_offsets = np.random.rand(_NUM_SAMPLES)
         validation_offsets = np.random.rand(_NUM_SAMPLES)
@@ -323,17 +346,20 @@ def _create_expected_data(has_offset, seed, use_previous_model, intercept_only, 
     else:
         train_features_plus_one = training_features
         validation_features_plus_one = validation_features
+
     previous_model = _solve_for_coefficients(train_features_plus_one, training_labels,
-                                             training_offsets, _LARGE_MAX_ITERS)
+                                             training_offsets, _LARGE_MAX_ITERS, model_type=model_type)
     if use_previous_model:
         coefficients = _solve_for_coefficients(train_features_plus_one, training_labels,
-                                               training_offsets, _SMALL_MAX_ITERS, previous_model)
+                                               training_offsets, _SMALL_MAX_ITERS, previous_model,
+                                               model_type=model_type)
     else:
         coefficients = previous_model
     training_per_coordinate_scores, training_total_scores = _predict(coefficients, train_features_plus_one,
                                                                      training_offsets)
     validation_per_coordinate_scores, validation_total_scores = _predict(coefficients, validation_features_plus_one,
                                                                          validation_offsets)
+
     return {'training': ExpectedData(training_features if intercept_only else training_features.astype(np.float32),
                                      training_labels,
                                      training_offsets.astype(np.float32),
@@ -341,13 +367,14 @@ def _create_expected_data(has_offset, seed, use_previous_model, intercept_only, 
                                      coefficients.astype(np.float32),
                                      training_per_coordinate_scores.astype(np.float32),
                                      training_total_scores.astype(np.float32)),
-            'validation': ExpectedData(validation_features if intercept_only else validation_features.astype(np.float32),
-                                       validation_labels,
-                                       validation_offsets.astype(np.float32),
-                                       previous_model.astype(np.float32) if use_previous_model else None,
-                                       coefficients.astype(np.float32),
-                                       validation_per_coordinate_scores.astype(np.float32),
-                                       validation_total_scores.astype(np.float32))}
+            'validation': ExpectedData(
+                validation_features if intercept_only else validation_features.astype(np.float32),
+                validation_labels,
+                validation_offsets.astype(np.float32),
+                previous_model.astype(np.float32) if use_previous_model else None,
+                coefficients.astype(np.float32),
+                validation_per_coordinate_scores.astype(np.float32),
+                validation_total_scores.astype(np.float32))}
 
 
 def _predict(theta, features, offsets):
@@ -363,7 +390,8 @@ def _predict(theta, features, offsets):
     return per_coordinate_scores, total_scores
 
 
-def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=None):
+def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=None,
+                            model_type=constants.LOGISTIC_REGRESSION):
     """
     Solve LR mdoels with LBFGS solver.
     :param features: Feature matrix
@@ -371,18 +399,26 @@ def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=N
     :param offsets: Input offsets.
     :param max_iter: maximum number of LBFGS steps.
     :param theta_initial: Initial value for theta.
+    :param model_type: Linear model type.
     :return: Estimated coefficients.
     """
-    def _loss(theta, features, offsets, labels):
+
+    def _loss(theta, features, offsets, labels, model_type):
         _, pred = _predict(theta, features, offsets)
-        logloss = np.maximum(pred, 0) - pred * labels + np.log(1 + np.exp(-np.absolute(pred)))
-        loss = logloss.sum() + _L2_REG_WEIGHT / 2.0 * theta.dot(theta)
+        if model_type == constants.LOGISTIC_REGRESSION:
+            loss = np.maximum(pred, 0) - pred * labels + np.log(1 + np.exp(-np.absolute(pred)))
+        else:
+            loss = np.square(labels.astype(np.float64) - pred.astype(np.float64))
+        loss = loss.sum() + _L2_REG_WEIGHT / 2.0 * theta.dot(theta)
         return loss
 
-    def _gradient(theta, features, offsets, labels):
+    def _gradient(theta, features, offsets, labels, model_type):
         _, logit = _predict(theta, features, offsets)
-        pred = expit(logit)
-        cost_grad = features.T.dot(pred - labels)
+        if model_type == constants.LOGISTIC_REGRESSION:
+            pred = expit(logit)
+            cost_grad = features.T.dot(pred - labels)
+        else:
+            cost_grad = 2.0 * features.T.dot(logit - labels)
         reg_grad = _L2_REG_WEIGHT * theta
         grad = cost_grad + reg_grad
         return grad
@@ -397,36 +433,42 @@ def _solve_for_coefficients(features, labels, offsets, max_iter, theta_initial=N
                            m=_NUM_LBFGS_CORRECTIONS,
                            factr=_PRECISION,
                            maxiter=max_iter,
-                           args=(features, offsets, labels),
+                           args=(features, offsets, labels, model_type),
                            disp=0)
 
     # Extract learned parameters from result
     return result[0]
 
 
-def _write_tfrecord_datasets(data, paths, num_files, has_offset, compression_type=None):
+def _write_tfrecord_datasets(data, paths, num_files, has_offset, compression_type=None,
+                             model_type=constants.LOGISTIC_REGRESSION):
     """
     Write the generated data to tfrecord files.
     :param data: A dict of input data, including training and validtion datasets.
     :param paths: An AllPaths namedtuple including all needed paths.
     :param num_files: The number of files to be generated.
     :param has_offset: Whether to use offset.
-    :param compression_type: None (uncompressed), ZLIB and GZIP
+    :param compression_type: None (uncompressed), ZLIB and GZIP.
+    :param model_type: Type of the linear model.
     :return: None
     """
     training, validation = data['training'], data['validation']
-    _write_single_dataset(training, paths.training_data_dir, num_files, has_offset, compression_type)
-    _write_single_dataset(validation, paths.validation_data_dir, num_files, has_offset, compression_type)
+    _write_single_dataset(training, paths.training_data_dir, num_files, has_offset, compression_type,
+                          model_type=model_type)
+    _write_single_dataset(validation, paths.validation_data_dir, num_files, has_offset, compression_type,
+                          model_type=model_type)
 
 
-def _write_single_dataset(data, output_path, num_files, has_offset, compression_type=None):
+def _write_single_dataset(data, output_path, num_files, has_offset, compression_type=None,
+                          model_type=constants.LOGISTIC_REGRESSION):
     """
     Write a single dataset to tfrecord files.
     :param data: A dict of input data, including training and validation datasets.
     :param output_path: Output path for the generated files.
     :param num_files: The number of files to be generated.
     :param has_offset: Whether to use offset.
-    :param compression_type: None (uncompressed), ZLIB and GZIP
+    :param compression_type: None (uncompressed), ZLIB and GZIP.
+    :param model_type: Type of the linear model.
     :return:
     """
     if compression_type == GZIP:
@@ -452,7 +494,7 @@ def _write_single_dataset(data, output_path, num_files, has_offset, compression_
                 else:
                     offsets = None
                 example = _get_example(feature_indices, feature_values, data.labels[index], 1.0,
-                                       index, offsets)
+                                       index, offsets, model_type=model_type)
                 writer.write(example.SerializeToString())
 
 
@@ -495,7 +537,7 @@ def _get_sparse_representation(feature):
     return indices, values
 
 
-def _get_example(index, value, label, weight, uid, offset):
+def _get_example(index, value, label, weight, uid, offset, model_type=constants.LOGISTIC_REGRESSION):
     """
     Create a single tfrecord example from various inputs.
     :param index: Index of the feature, part of the sparse representation.
@@ -504,11 +546,13 @@ def _get_example(index, value, label, weight, uid, offset):
     :param weight: Weight of the example.
     :param uid: UID of the example.
     :param offset: Offset of the example, or None.
+    :param model_type: Type of the linear model.
     :return: A TF example.
     """
     tf_feature = {
-        'response': tf.train.Feature(int64_list=tf.train.Int64List(
-            value=[label])),
+        'response': tf.train.Feature(float_list=tf.train.FloatList(
+            value=[label])) if model_type == constants.LINEAR_REGRESSION else tf.train.Feature(
+            int64_list=tf.train.Int64List(value=[label])),
         'weight': tf.train.Feature(float_list=tf.train.FloatList(
             value=[weight])),
         'uid': tf.train.Feature(int64_list=tf.train.Int64List(
@@ -527,13 +571,15 @@ def _get_example(index, value, label, weight, uid, offset):
     return tf.train.Example(features=features)
 
 
-def _create_metadata_file(filename, has_offset):
+def _create_metadata_file(filename, has_offset, model_type=constants.LOGISTIC_REGRESSION):
     """
     Create the metadata for the dataset.
     :param filename: Output file name.
     :param has_offset: Whether to use offset.
+    :param model_type: Type of the linear model.
     :return:
     """
+    response_type = "int" if model_type == constants.LOGISTIC_REGRESSION else "float"
     metadata = {
         "features": [{
             "name": "weight",
@@ -553,7 +599,7 @@ def _create_metadata_file(filename, has_offset):
         }],
         "labels": [{
             "name": "response",
-            "dtype": "int",
+            "dtype": response_type,
             "shape": [],
             "isSparse": False
         }]
@@ -611,6 +657,7 @@ class _ProcFunc:
     The multiprocessing training however does not work so far. It causes hang.
     So it is limited to single-worker single-process usage.
     """
+
     def __init__(self, worker_index, ports, training_params):
         self.execution_context = _build_execution_context(worker_index, ports)
         self.base_training_params = training_params[0]

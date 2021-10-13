@@ -3,21 +3,22 @@ package com.linkedin.gdmix.parsers
 import com.linkedin.gdmix.utils.Constants._
 
 /**
- * Parameters for AUC compute job.
+ * Parameters for evaluation metric compute job.
  */
-case class AreaUnderROCCurveEvaluatorParams(
+case class EvaluatorParams(
   metricsInputDir: String,
   outputMetricFile: String,
   labelColumnName: String,
-  predictionColumnName: String
+  predictionColumnName: String,
+  metricName: String
 )
 
 /**
- * Parser for AUC compute job.
+ * Parser for evaluation metric compute job.
  */
-object AreaUnderROCCurveEvaluatorParser {
-  private val areaUnderROCCurveEvaluatorParser = new scopt.OptionParser[AreaUnderROCCurveEvaluatorParams](
-    "Parsing command line for auc compute job.") {
+object EvaluatorParser {
+  private val evaluatorParser = new scopt.OptionParser[EvaluatorParams](
+    "Parsing command line for evaluation metric compute job.") {
 
     opt[String]("metricsInputDir").action((x, p) => p.copy(metricsInputDir = x.trim))
       .required
@@ -29,7 +30,7 @@ object AreaUnderROCCurveEvaluatorParser {
       .required
       .text(
         """Required.
-          |Output file for the computed AUC.""".stripMargin)
+          |Output file for the computed evaluation metric.""".stripMargin)
 
     opt[String]("labelColumnName").action((x, p) => p.copy(labelColumnName = x.trim))
       .required
@@ -42,20 +43,33 @@ object AreaUnderROCCurveEvaluatorParser {
       .text(
         """Required.
           |prediction score column name.""".stripMargin)
+
+    opt[String]("metricName").action((x, p) => p.copy(metricName = x.trim))
+      .required
+      .text(
+        """Required.
+          |evaluation metric name (current only support 'auc' and 'mse').""".stripMargin)
+
+    checkConfig(p =>
+      if (!List(AUC, MSE).contains(p.metricName)) {
+        failure(s"${p.metricName} is not supported, should be in ['auc', 'mse'].")
+      }
+      else success)
   }
 
-  def parse(args: Seq[String]): AreaUnderROCCurveEvaluatorParams = {
-    val emptyAreaUnderROCCurveEvaluatorParams = AreaUnderROCCurveEvaluatorParams(
+  def parse(args: Seq[String]): EvaluatorParams = {
+    val emptyEvaluatorParams = EvaluatorParams(
       metricsInputDir = "",
       outputMetricFile = "",
       labelColumnName = "",
-      predictionColumnName = ""
+      predictionColumnName = "",
+      metricName = ""
     )
-    areaUnderROCCurveEvaluatorParser.parse(args, emptyAreaUnderROCCurveEvaluatorParams) match {
+    evaluatorParser.parse(args, emptyEvaluatorParams) match {
       case Some(params) => params
       case None => throw new IllegalArgumentException(
         s"Parsing the command line arguments failed.\n" +
-          s"(${args.mkString(", ")}),\n${areaUnderROCCurveEvaluatorParser.usage}")
+          s"(${args.mkString(", ")}),\n${evaluatorParser.usage}")
     }
   }
 }

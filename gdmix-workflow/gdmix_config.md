@@ -25,9 +25,9 @@ Optional fields:
   - **regularize_bias**: whether to regularize the intercept. Ususally we don't put regularization on intercept since it is an important feature. Boolean, default is false.
   - **l2_reg_weight**: weight of L2 regularization for each feature bag. Float, default is 0.001.
   - **optimizer**: optimizer used in the training, currently support LBFGS only. Map, default values are {"name": "LBFGS", "params": [{ "lbfgs_tolerance": 1.0e-7, "num_of_lbfgs_iterations": 100, "num_of_lbfgs_curvature_pairs": 10 }] }
-  - **metric**: metric of the model. String, support "AUC" and "NDCG" Default is "AUC".
-  - **position_k**: the position to compute the truncated ndcg, only needed when metric is "NDCG". Integer, default is 1.
-  - **copy_to_local**: whether copy training data to worker's local disk. Boolean, default is true.
+  - **metric**: metric of the model. String, support "auc" and "mse" Default is "auc".
+  - **batch_size**: batch size to iterative read data to avoid out-of-memory error. Please note this is different from the batch size for sgd, its value only impacts IO and won't impact final metrics. Integer, default is 500.
+  - **copy_to_local**: whether copy training data to local disk. Boolean, default is true.
 
 ### Random-effect config
 Required fields include all fields from fixed-effect config plus:

@@ -36,13 +36,15 @@ class ModelFactory:
         model_type = base_training_params.model_type
         driver_type = base_training_params.stage
         logger.info(f"Instantiating {model_type} model and driver")
-        if model_type == constants.LOGISTIC_REGRESSION:
+        if model_type in [constants.LOGISTIC_REGRESSION, constants.LINEAR_REGRESSION]:
             tf.compat.v1.disable_eager_execution()
             if driver_type == constants.FIXED_EFFECT:
                 logger.info("Choosing Scipy-LBFGS FE model")
                 model = FixedEffectLRModelLBFGS(
                     raw_model_params=raw_model_params, base_training_params=base_training_params)
             else:
+                if model_type == constants.LINEAR_REGRESSION:
+                    raise Exception(f"Does not support random effect model for plain linear regression")
                 logger.info("Choosing Scipy RE model")
                 model = RandomEffectLRLBFGSModel(raw_model_params=raw_model_params)
         elif model_type == constants.DETEXT:

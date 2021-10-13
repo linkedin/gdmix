@@ -6,7 +6,7 @@ from smart_arg import arg_suite, LateInit
 
 _ACTIONS = (constants.ACTION_INFERENCE, constants.ACTION_TRAIN)
 _STAGES = (constants.FIXED_EFFECT, constants.RANDOM_EFFECT)
-_MODEL_TYPES = (constants.LOGISTIC_REGRESSION, constants.DETEXT)
+_MODEL_TYPES = (constants.LOGISTIC_REGRESSION, constants.LINEAR_REGRESSION, constants.DETEXT)
 
 
 @dataclass
@@ -15,7 +15,8 @@ class GDMixParams:
     __action = {"choices": _ACTIONS}
     stage: str = _STAGES[0]  # Fixed or random effect.
     __stage = {"choices": _STAGES}
-    model_type: str = _MODEL_TYPES[0]  # The model type to train, e.g, logistic regression, detext, etc.
+    # The model type to train, e.g, logistic regression, linear regression, detext, etc.
+    model_type: str = _MODEL_TYPES[0]
     __model_type = {"choices": _MODEL_TYPES}
 
     # Input / output directories

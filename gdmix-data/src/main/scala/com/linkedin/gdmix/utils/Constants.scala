@@ -7,6 +7,7 @@ object Constants {
 
   val ACTIVE = "active"
   val AUC = "auc"
+  val MSE = "mse"
   val AVRO = "avro"
   val AVRO_FORMAT = "com.databricks.spark.avro"
   val CONFIG_SPLITTER = ";"

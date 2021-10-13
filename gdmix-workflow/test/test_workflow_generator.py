@@ -15,16 +15,22 @@ from gdmixworkflow.random_effect_workflow_generator import RandomEffectWorkflowG
 from gdmixworkflow.single_node.local_ops import get_param_list
 
 
+
 class TestGDMixWorkflowGenerator(unittest.TestCase):
     """
     Test gdmix workflow generator
     """
 
     def setUp(self):
-        lr_config_file = path_join(
+        logistic_regression_config_file = path_join(
             os.getcwd(),
-            "test/resources/lr-movieLens.yaml")
-        self.lr_config_obj = json_config_file_to_obj(lr_config_file)
+            "test/resources/logistic-regression-single-node-movieLens.config")
+        self.logistic_regression_config_obj = json_config_file_to_obj(logistic_regression_config_file)
+
+        linear_regression_config_file = path_join(
+            os.getcwd(),
+            "test/resources/logistic-regression-single-node-movieLens.config")
+        self.linear_regression_config_obj = json_config_file_to_obj(linear_regression_config_file)
 
         detext_config_file = path_join(
             os.getcwd(),
@@ -34,8 +40,8 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
         # Set self.maxDiff to None to see diff for long text
         self.maxDiff = None
 
-    def test_lr_model_fixed_effect_workflow_generator(self):
-        fe_workflow = FixedEffectWorkflowGenerator(self.lr_config_obj)
+    def test_logistic_regression_model_fixed_effect_workflow_generator(self):
+        fe_workflow = FixedEffectWorkflowGenerator(self.logistic_regression_config_obj)
         # check sequence
         seq = fe_workflow.get_job_sequence()
         self.assertEqual(len(seq), 2)
@@ -46,26 +52,86 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
             'gdmix_tfjob',
             'global-tf-train',
             '',
-            (Params(uid_column_name='uid', weight_column_name='weight', label_column_name='response', prediction_score_column_name='predictionScore',
-                    prediction_score_per_coordinate_column_name='predictionScorePerCoordinate', action='train', stage='fixed_effect',
-                    model_type='logistic_regression', training_score_dir='lr-training/global/training_scores',
-                    validation_score_dir='lr-training/global/validation_scores', partition_list_file=None),
-             FixedLRParams(metadata_file='movieLens/global/metadata/tensor_metadata.json', output_model_dir='lr-training/global/models',
-                           training_data_dir='movieLens/global/trainingData', validation_data_dir='movieLens/global/validationData', feature_bag='global',
-                           feature_file='movieLens/global/featureList/global', regularize_bias=False, l2_reg_weight=1.0, lbfgs_tolerance=1e-12,
-                           num_of_lbfgs_curvature_pairs=10, num_of_lbfgs_iterations=100, offset='offset', batch_size=16, data_format='tfrecord',
-                           copy_to_local=False, num_server_creation_retries=50, retry_interval=2, delayed_exit_in_seconds=60)))
-
-        self.assertEqual(expected_train_job, actual_train_job)
+            {'--stage': 'fixed_effect',
+             '--action': 'train',
+             '--model_type': 'logistic_regression',
+             '--train_data_path': 'movieLens/global/trainingData',
+             '--validation_data_path': 'movieLens/global/validationData',
+             '--copy_to_local': False,
+             '--feature_file': 'movieLens/global/featureList/global',
+             '--label': 'response',
+             '--sample_id': 'uid',
+             '--sample_weight': 'weight',
+             '--feature_bag': 'global',
+             '--metadata_file': 'movieLens/global/metadata/tensor_metadata.json',
+             '--l2_reg_weight': 1.0,
+             '--regularize_bias': False,
+             '--optimizer_name': 'LBFGS',
+             '--lbfgs_tolerance': 1e-12,
+             '--num_of_lbfgs_iterations': 100,
+             '--num_of_lbfgs_curvature_pairs': 10,
+             '--prediction_score': 'predictionScore',
+             '--model_output_dir': 'logistic-regression-training/global/models',
+             '--training_output_dir': 'logistic-regression-training/global/train_scores',
+             '--validation_output_dir': 'logistic-regression-training/global/validation_scores'})
 
         expected_compute_metric_job = (
             'gdmix_sparkjob',
             'global-compute-metric',
-            'com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator',
-            {'\\--metricsInputDir': 'lr-training/global/validation_scores',
-             '--outputMetricFile': 'lr-training/global/metric',
-             '--labelColumnName': 'response',
-             '--predictionColumnName': 'predictionScore'})
+            'com.linkedin.gdmix.evaluation.Evaluator',
+            {'\\-inputPath': 'logistic-regression-training/global/validation_scores',
+             '-outputPath': 'logistic-regression-training/global/metric',
+             '-labelName': 'response',
+             '-scoreName': 'predictionScore',
+             '-metricName': 'auc'})
+        self.assertEqual(actual_train_job, expected_train_job)
+        self.assertEqual(actual_compute_metric_job, expected_compute_metric_job)
+
+    def test_linear_regression_model_fixed_effect_workflow_generator(self):
+        fe_workflow = FixedEffectWorkflowGenerator(self.linear_regression_config_obj)
+        # check sequence
+        seq = fe_workflow.get_job_sequence()
+        self.assertEqual(len(seq), 2)
+        # check job properties
+        actual_train_job = seq[0]
+        actual_compute_metric_job = seq[1]
+        expected_train_job = (
+            'gdmix_tfjob',
+            'global-tf-train',
+            '',
+            {'--stage': 'fixed_effect',
+             '--action': 'train',
+             '--model_type': 'linear_regression',
+             '--train_data_path': 'movieLens/global/trainingData',
+             '--validation_data_path': 'movieLens/global/validationData',
+             '--copy_to_local': False,
+             '--feature_file': 'movieLens/global/featureList/global',
+             '--label': 'response',
+             '--sample_id': 'uid',
+             '--sample_weight': 'weight',
+             '--feature_bag': 'global',
+             '--metadata_file': 'movieLens/global/metadata/tensor_metadata.json',
+             '--l2_reg_weight': 1.0,
+             '--regularize_bias': False,
+             '--optimizer_name': 'LBFGS',
+             '--lbfgs_tolerance': 1e-12,
+             '--num_of_lbfgs_iterations': 100,
+             '--num_of_lbfgs_curvature_pairs': 10,
+             '--prediction_score': 'predictionScore',
+             '--model_output_dir': 'linear-regression-training/global/models',
+             '--training_output_dir': 'linear-regression-training/global/train_scores',
+             '--validation_output_dir': 'linear-regression-training/global/validation_scores'})
+
+        expected_compute_metric_job = (
+            'gdmix_sparkjob',
+            'global-compute-metric',
+            'com.linkedin.gdmix.evaluation.Evaluator',
+            {'\\-inputPath': 'linear-regression-training/global/validation_scores',
+             '-outputPath': 'linear-regression-training/global/metric',
+             '-labelName': 'response',
+             '-scoreName': 'predictionScore',
+             '-metricName': 'mse'})
+        self.assertEqual(actual_train_job, expected_train_job)
         self.assertEqual(actual_compute_metric_job, expected_compute_metric_job)
 
     def test_detext_model_fixed_effect_workflow_generator(self):
@@ -102,25 +168,43 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
         expected_train_job = ('gdmix_tfjob', 'global-tf-train', '', expected_train_job_param)
         self.assertEqual(expected_train_job, actual_train_job)
 
-        expected_inference_job_param = (replace(expected_train_job_param[0],
-                                                action=ACTION_INFERENCE,
-                                                training_score_dir="detext-training/global/training_scores",
-                                                validation_score_dir="detext-training/global/validation_scores"), expected_train_job_param[1])
-        expected_inference_job = 'gdmix_tfjob', 'global-tf-inference', '', expected_inference_job_param
-        self.assertEqual(expected_inference_job, actual_inference_job)
+        expected_inference_training_data_job_param = deepcopy(expected_train_job_param)
+        expected_inference_training_data_job_param["--dev_file"] = 'movieLens/detext/trainingData/train_data.tfrecord'
+        expected_inference_training_data_job_param["--validation_output_dir"] = "detext-training/global/train_scores"
+        expected_inference_training_data_job_param["--action"] = "inference"
+        expected_inference_training_data_job = (
+            'gdmix_tfjob',
+            'global-tf-inference-train-data',
+            '',
+            expected_inference_training_data_job_param)
+        self.assertEqual(expected_inference_training_data_job, actual_inference_training_data_job)
+
+        expected_inference_validation_data_job_param = deepcopy(expected_train_job_param)
+        expected_inference_validation_data_job_param[
+            "--dev_file"] = 'movieLens/detext/validationData/test_data.tfrecord'
+        expected_inference_validation_data_job_param[
+            "--validation_output_dir"] = "detext-training/global/validation_scores"
+        expected_inference_validation_data_job_param["--action"] = "inference"
+        expected_inference_validation_data_job = (
+            'gdmix_tfjob',
+            'global-tf-inference-validation-data',
+            '',
+            expected_inference_validation_data_job_param)
+        self.assertEqual(expected_inference_validation_data_job, actual_inference_validation_data_job)
 
         expected_compute_metric_job = (
             'gdmix_sparkjob',
             'global-compute-metric',
-            'com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator',
-            {'\\--metricsInputDir': 'detext-training/global/validation_scores',
-             '--outputMetricFile': 'detext-training/global/metric',
-             '--labelColumnName': 'response',
-             '--predictionColumnName': 'predictionScore'})
+            'com.linkedin.gdmix.evaluation.Evaluator',
+            {'\\-inputPath': 'detext-training/global/validation_scores',
+             '-outputPath': 'detext-training/global/metric',
+             '-labelName': 'response',
+             '-scoreName': 'predictionScore',
+             '-metricName': 'auc'})
         self.assertEqual(actual_compute_metric_job, expected_compute_metric_job)
 
-    def test_lr_model_random_effect_workflow_generator(self):
-        re_workflow = RandomEffectWorkflowGenerator(self.lr_config_obj, prev_model_name='global')
+    def test_logistic_regression_model_random_effect_workflow_generator(self):
+        re_workflow = RandomEffectWorkflowGenerator(self.logistic_regression_config_obj)
         # check sequence
         seq = re_workflow.get_job_sequence()
         self.assertEqual(len(seq), 6)
@@ -133,42 +217,63 @@ class TestGDMixWorkflowGenerator(unittest.TestCase):
             'gdmix_sparkjob',
             'per-user-partition',
             'com.linkedin.gdmix.data.DataPartitioner',
-            {'\\--trainingDataDir': 'movieLens/per_user/trainingData',
-             '--validationDataDir': 'movieLens/per_user/validationData',
-             '--metadataFile': 'movieLens/per_user/metadata/tensor_metadata.json',
-             '--partitionId': 'user_id',
-             '--numPartitions': 1,
-             '--dataFormat': 'tfrecord',
-             '--partitionedTrainingDataDir': 'lr-training/per-user/partition/trainingData',
-             '--partitionedValidationDataDir': 'lr-training/per-user/partition/validationData',
-             '--outputMetadataFile': 'lr-training/per-user/partition/metadata/tensor_metadata.json',
-             '--outputPartitionListFile': 'lr-training/per-user/partition/partitionList.txt',
-             '--predictionScoreColumnName': 'predictionScore',
-             '--trainingScoreDir': 'lr-training/global/training_scores',
-             '--validationScoreDir': 'lr-training/global/validation_scores'})
+            {'\\-trainInputDataPath': 'movieLens/per_user/trainingData',
+             '--validationInputDataPath': 'movieLens/per_user/validationData',
+             '-inputMetadataFile': 'movieLens/per_user/metadata/tensor_metadata.json',
+             '-partitionEntity': 'user_id',
+             '-numPartitions': 1,
+             '-dataFormat': 'tfrecord',
+             '-featureBag': 'per_user',
+             '-maxNumOfSamplesPerModel': -1,
+             '-minNumOfSamplesPerModel': -1,
+             '-trainOutputPartitionDataPath': 'logistic-regression-training/per-user/partition/trainingData',
+             '-validationOutputPartitionDataPath': 'logistic-regression-training/per-user/partition/validationData',
+             '-outputMetadataFile': 'logistic-regression-training/per-user/partition/metadata/tensor_metadata.json',
+             '-outputPartitionListFile': 'logistic-regression-training/per-user/partition/partitionList.txt',
+             '-predictionScore': 'predictionScore',
+             '-trainInputScorePath': 'logistic-regression-training/global/train_scores',
+             '-validationInputScorePath': 'logistic-regression-training/global/validation_scores'})
 
         expected_train_job = (
             'gdmix_tfjob',
             'per-user-tf-train',
             '',
-            (Params(uid_column_name='uid', weight_column_name='weight', label_column_name='response', prediction_score_column_name='predictionScore',
-                    prediction_score_per_coordinate_column_name='predictionScorePerCoordinate', action='train', stage='random_effect',
-                    model_type='logistic_regression', training_score_dir='lr-training/per-user/training_scores',
-                    validation_score_dir='lr-training/per-user/validation_scores', partition_list_file='lr-training/per-user/partition/partitionList.txt'),
-             REParams(metadata_file='lr-training/per-user/partition/metadata/tensor_metadata.json', output_model_dir='lr-training/per-user/models',
-                      training_data_dir='lr-training/per-user/partition/trainingData', validation_data_dir='lr-training/per-user/partition/validationData',
-                      feature_bag='per_user', feature_file='movieLens/per_user/featureList/per_user', regularize_bias=False, l2_reg_weight=1.0,
-                      data_format='tfrecord', partition_entity='user_id', enable_local_indexing=False, max_training_queue_size=10,
-                      training_queue_timeout_in_seconds=300, num_of_consumers=1)))
-
+            {'--stage': 'random_effect',
+             '--action': 'train',
+             '--model_type': 'logistic_regression',
+             '--partition_entity': 'user_id',
+             '--train_data_path': 'logistic-regression-training/per-user/partition/trainingData',
+             '--validation_data_path': 'logistic-regression-training/per-user/partition/validationData',
+             '--feature_file': 'movieLens/per_user/featureList/per_user',
+             '--label': 'response',
+             '--sample_id': 'uid',
+             '--sample_weight': 'weight',
+             '--feature_bag': 'per_user',
+             '--metadata_file': 'logistic-regression-training/per-user/partition/metadata/tensor_metadata.json',
+             '--l2_reg_weight': 1.0,
+             '--regularize_bias': False,
+             '--num_partitions': 1,
+             '--optimizer_name': 'LBFGS',
+             '--lbfgs_tolerance': 1e-12,
+             '--num_of_lbfgs_iterations': 100,
+             '--num_of_lbfgs_curvature_pairs': 10,
+             '--max_training_queue_size': 10,
+             '--num_of_consumers': 1,
+             '--enable_local_indexing': False,
+             '--prediction_score': 'predictionScore',
+             '--partition_list_file': 'logistic-regression-training/per-user/partition/partitionList.txt',
+             '--model_output_dir': 'logistic-regression-training/per-user/models',
+             '--training_output_dir': 'logistic-regression-training/per-user/train_scores',
+             '--validation_output_dir': 'logistic-regression-training/per-user/validation_scores'})
         expected_compute_metric_job = (
             'gdmix_sparkjob',
             'per-user-compute-metric',
-            'com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator',
-            {'\\--metricsInputDir': 'lr-training/per-user/validation_scores',
-             '--outputMetricFile': 'lr-training/per-user/metric',
-             '--labelColumnName': 'response',
-             '--predictionColumnName': 'predictionScore'})
+            'com.linkedin.gdmix.evaluation.Evaluator',
+            {'\\-inputPath': 'logistic-regression-training/per-user/validation_scores',
+             '-outputPath': 'logistic-regression-training/per-user/metric',
+             '-labelName': 'response',
+             '-scoreName': 'predictionScore',
+             '-metricName': 'auc'})
 
         self.assertEqual(expected_partition_job, actual_partition_job)
         self.assertEqual(expected_train_job, actual_train_job)

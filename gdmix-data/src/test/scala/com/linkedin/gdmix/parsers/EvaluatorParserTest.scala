@@ -4,9 +4,9 @@ import org.testng.annotations.{DataProvider, Test}
 import org.testng.Assert.assertEquals
 
 /**
- * Unit tests for AreaUnderROCCurveEvaluatorParser.
+ * Unit tests for EvaluatorParser.
  */
-class AreaUnderROCCurveEvaluatorParserTest {
+class EvaluatorParserTest {
 
   @DataProvider
   def dataCompleteArgs(): Array[Array[Any]] = {
@@ -16,7 +16,8 @@ class AreaUnderROCCurveEvaluatorParserTest {
           "--metricsInputDir", "global/validationScore",
           "--outputMetricFile", "global/metric/0",
           "--labelColumnName", "response",
-          "--predictionColumnName", "predictionScore")))
+          "--predictionColumnName", "predictionScore",
+          "--metricName", "auc")))
   }
 
   @DataProvider
@@ -28,43 +29,63 @@ class AreaUnderROCCurveEvaluatorParserTest {
         Seq(
           "--outputMetricFile", "global/metric/0",
           "--labelColumnName", "response",
-          "--predictionColumnName", "predictionScore")),
+          "--predictionColumnName", "predictionScore",
+          "--metricName", "auc")),
       // miss outputMetricFile
       Array(
         Seq(
           "--metricsInputDir", "global/validationScore",
           "--labelColumnName", "response",
-          "--predictionColumnName", "predictionScore")),
+          "--predictionColumnName", "predictionScore",
+          "--metricName", "auc")),
       // miss labelColumnName
       Array(
         Seq(
           "--metricsInputDir", "global/validationScore",
           "--outputMetricFile", "global/metric/0",
-          "--predictionColumnName", "predictionScore")),
+          "--predictionColumnName", "predictionScore",
+          "--metricName", "auc")),
       // miss predictionColumnName
       Array(
         Seq(
           "--metricsInputDir", "global/validationScore",
           "--outputMetricFile", "global/metric/0",
-          "--labelColumnName", "response"))
+          "--labelColumnName", "response",
+          "--metricName", "auc")),
+      // miss metricName
+      Array(
+        Seq(
+          "--metricsInputDir", "global/validationScore",
+          "--outputMetricFile", "global/metric/0",
+          "--labelColumnName", "response",
+          "--predictionColumnName", "predictionScore")),
+      // metricName not supported
+      Array(
+        Seq(
+          "--metricsInputDir", "global/validationScore",
+          "--outputMetricFile", "global/metric/0",
+          "--labelColumnName", "response",
+          "--predictionColumnName", "predictionScore",
+          "--metricName", "UnsupportedMetric"))
     )
   }
 
   @Test(dataProvider = "dataCompleteArgs")
   def testParseCompleteArguments(completeArgs: Seq[String]): Unit = {
 
-    val params = AreaUnderROCCurveEvaluatorParser.parse(completeArgs)
-    val expectedParams = AreaUnderROCCurveEvaluatorParams(
+    val params = EvaluatorParser.parse(completeArgs)
+    val expectedParams = EvaluatorParams(
       metricsInputDir = "global/validationScore",
       outputMetricFile = "global/metric/0",
       labelColumnName = "response",
-      predictionColumnName = "predictionScore"
+      predictionColumnName = "predictionScore",
+      metricName = "auc"
     )
     assertEquals(params, expectedParams)
   }
 
   @Test(dataProvider = "dataIncompleteArgs", expectedExceptions = Array(classOf[IllegalArgumentException]))
   def testThrowIllegalArgumentException(inCompleteArgs: Seq[String]): Unit = {
-    AreaUnderROCCurveEvaluatorParser.parse(inCompleteArgs)
+    EvaluatorParser.parse(inCompleteArgs)
   }
 }

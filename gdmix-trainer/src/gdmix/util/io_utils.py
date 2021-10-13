@@ -60,7 +60,7 @@ def load_linear_models_from_avro(model_file, feature_file):
         :return: a numpy array of the model coefficients, intercept is at the end. Elements are in np.float64.
         """
         num_features = 0 if feature_map is None else len(feature_map)
-        model_coefficients = np.zeros(num_features+1, dtype=np.float64)
+        model_coefficients = np.zeros(num_features + 1, dtype=np.float64)
         # Reading the mean only since no downstream tasks need the variance.
         has_bias = 0
         for ntv in model_record["means"]:
@@ -72,7 +72,7 @@ def load_linear_models_from_avro(model_file, feature_file):
                 feature_index = feature_map.get((name, term), None)
                 if feature_index is not None:  # Take only the features that in the current training dataset.
                     model_coefficients[feature_index] = value
-        return model_coefficients[:num_features+has_bias]
+        return model_coefficients[:num_features + has_bias]
 
     if feature_file is None:
         feature_map = None
@@ -90,10 +90,12 @@ def add_dummy_weight(models):
     :param models: the models with intercept only.
     :return: models with zero prepend to the intercept.
     """
+
     def process_one_model(model):
         model_coefficients = np.zeros(2, dtype=np.float64)
         model_coefficients[1] = model[0]
         return model_coefficients
+
     return tuple(process_one_model(m) for m in models)
 
 
@@ -120,7 +122,7 @@ def gen_one_avro_model(model_id, model_class, weight_indices, weight_values, bia
     has_bias = bias is not None
     if isinstance(bias, tuple) and len(bias) == 2 and bias[1] is not None:
         has_variance = True
-    elif weight_values is not None and isinstance(weight_values, tuple)\
+    elif weight_values is not None and isinstance(weight_values, tuple) \
             and len(weight_values) == 2 and weight_values[1] is not None:
         has_variance = True
     else:
@@ -205,6 +207,7 @@ def export_linear_model_to_avro(model_ids,
                 yield gen_one_avro_model(str(model_ids[i]), model_class, list_of_weight_indices[i],
                                          list_of_weight_values[i], current_bias,
                                          feature_list, sparsity_threshold)
+
     batched_write_avro(gen_records(), output_file, schema, model_log_interval)
     logger.info(f"dumped {num_models} models to avro file at {output_file}.")
 
@@ -319,7 +322,8 @@ def batched_write_avro(records: Iterator, output_file, schema, write_frequency=1
             n_batch += 1
             if n_batch % write_frequency == 0:
                 delta_time = time.time() - t0
-                logger.info(f"nbatch = {n_batch}, deltaT = {delta_time:0.2f} seconds, speed = {n_batch / delta_time :0.2f} batches/sec")
+                logger.info(
+                    f"nbatch = {n_batch}, deltaT = {delta_time:0.2f} seconds, speed = {n_batch / delta_time :0.2f} batches/sec")
         logger.info(f"Finished writing to {local_file}.")
     finally:
         f and f.close()
@@ -361,8 +365,9 @@ def dataset_reader(iterator):
 
 
 def get_inference_output_avro_schema(metadata, has_logits_per_coordinate, schema_params, has_weight=False):
-    fields = [{'name': schema_params.uid_column_name, 'type': 'long'}, {'name': schema_params.prediction_score_column_name, 'type': 'float'},
-              {'name': schema_params.label_column_name, 'type': ['null', 'int'], "default": None}]
+    fields = [{'name': schema_params.uid_column_name, 'type': 'long'},
+              {'name': schema_params.prediction_score_column_name, 'type': 'float'},
+              {'name': schema_params.label_column_name, 'type': ['null', 'float'], "default": None}]
     if has_weight or metadata.get(schema_params.weight_column_name) is not None:
         fields.append({'name': schema_params.weight_column_name, 'type': 'float'})
     if has_logits_per_coordinate:
