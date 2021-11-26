@@ -78,7 +78,7 @@ object LrModelSplitter {
     val schema = new Schema.Parser().parse(
       getClass.getClassLoader.getResourceAsStream(LR_MODEL_SCHEMA_FILE))
 
-    outDf.repartition(numOutputFiles).write.option("avroSchema", schema.toString)
+    outDf.repartition(numOutputFiles).write.option("forceSchema", schema.toString)
       .mode(SaveMode.Overwrite).format(AVRO_FORMAT).save(modelOutputDir)
   }
 

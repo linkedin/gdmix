@@ -4,7 +4,7 @@ from sys import platform as _platform
 
 import sys
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 current_dir = Path(__file__).resolve().parent
 with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
@@ -12,6 +12,8 @@ with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
 if _platform not in ["linux", "linux2", "darwin"]:
     print("ERROR: platform {} isn't supported".format(_platform))
     sys.exit(1)
+
+TF_VERSION_QUANTIFIER = '>=2.4,<2.5'
 
 setup(
     name="gdmix-trainer",
@@ -28,16 +30,27 @@ setup(
     packages=find_namespace_packages(where='src'),
     include_package_data=True,
     install_requires=[
-        "setuptools>=41.0.0",
-        "tensorflow==1.15.2",
-        "tensorflow_ranking==0.1.4",
-        "fastavro==0.21.22",
+        "absl-py==0.10",
         "decorator==4.4.2",
-        "detext-nodep==2.1.1",
+        "detext-nodep==3.0.0",
+        "fastavro==1.4.7",
+        "google-auth==1.25.0",
+        "google-cloud-bigquery==2.18.0",
+        "grpcio==1.32.0",
+        "numpy==1.19.5",
+        "protobuf==3.19",
         "psutil==5.7.0",
-        "scipy==1.3.2",
-        "scikit-learn==0.21.2",
-        "smart-arg==0.4"
+        "scikit-learn==1.0",
+        "setuptools>=41.0.0",
+        "six==1.15.0",
+        "smart-arg==0.4",
+        "statsmodels==0.13.1",
+        f"tensorflow{TF_VERSION_QUANTIFIER}",
+        f"tensorflow-text{TF_VERSION_QUANTIFIER}",
+        f"tensorflow-serving-api{TF_VERSION_QUANTIFIER}",
+        "tensorflow_ranking",
+        f"tf-models-official{TF_VERSION_QUANTIFIER}",
+        "tomli==1.2.2"
     ],
     tests_require=['pytest']
 )
