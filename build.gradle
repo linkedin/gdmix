@@ -22,7 +22,7 @@ allprojects {
 ext {
   sparkVersion = '2.4.7'
   scalaSuffix = "_2.11"
-  gdmixDataVersion = "0.3.0"
+  gdmixDataVersion = "0.4.0"
   pomConfig = {
       licenses {
           license {
