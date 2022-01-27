@@ -25,10 +25,9 @@ USER_FEATURE_VALUES = ['age', 'M', 'F', 'administrator', 'artist', 'doctor', 'ed
                        'salesman', 'scientist', 'student', 'technician', 'writer']
 MOVIE_FEATURE_VALUES = MOVIE_FEATURE_COLUMNS
 
-DETEXT_LABEL = 'label'
 DETEXT_QUERY = 'doc_query'
-DETEXT_WIDE_IDX = 'wide_ftrs_sp_idx'
-DETEXT_WIDE_VAL = 'wide_ftrs_sp_val'
+DETEXT_WIDE_IDX = 'wide_ftrs_sp_indices0'
+DETEXT_WIDE_VAL = 'wide_ftrs_sp_values'
 
 GLOBAL_FEATURE_VALUES = USER_FEATURE_VALUES + MOVIE_FEATURE_VALUES
 GLOBAL_INDEX_MAP = {GLOBAL_FEATURE_VALUES[i]: i for i in range(len(GLOBAL_FEATURE_VALUES))}
@@ -107,6 +106,8 @@ def process_data(data, items, users):
     users['age'] = users['age'] / 100.0
     # append uid to data
     data.insert(0, 'uid', range(len(data)))
+    # append weight to data
+    data.insert(0, 'weight', [1.0] * len(data))
     # binarize the score, use 3.0 as threshold.
     data['response'] = data['rating'].apply(lambda x: 1 if x > 3.0 else 0)
     data = data.drop('rating', 1)
@@ -208,9 +209,9 @@ def save_tfrecord(data, feature_bag, other_features_map, label_name, output_file
             if feature_type in [tf.int16, tf.int32, tf.int64]:
                 feature = tf.train.Feature(int64_list=tf.train.Int64List(
                     value=[getattr(row, key)]))
-            elif feature_type == tf.float:
+            elif feature_type == tf.float32:
                 feature = tf.train.Feature(float_list=tf.train.FloatList(
-                    value=getattr(row, key)))
+                    value=[getattr(row, key)]))
             else:
                 print(f'unknown type {feature_type}')
             if feature:
@@ -248,7 +249,7 @@ def convert_to_detext(indf):
         a = np.array(x) + 1
         return a.tolist()
 
-    outdf = indf.rename(columns={'response': DETEXT_LABEL, 'title': DETEXT_QUERY,
+    outdf = indf.rename(columns={'title': DETEXT_QUERY,
                                  'global_indices': DETEXT_WIDE_IDX, 'global_values': DETEXT_WIDE_VAL})
     outdf[DETEXT_WIDE_IDX] = outdf[DETEXT_WIDE_IDX].apply(increase_one)
     return outdf
@@ -256,7 +257,7 @@ def convert_to_detext(indf):
 
 def gen_vocab(titles, outfile):
     """Generate vocabulary for the training dataset. """
-    vocab = set(['[PAD]', '[UNK]'])
+    vocab = set(['[PAD]', '[UNK]', '[CLS]', '[SEP]'])
     for t in titles:
         for w in t.split():
             vocab.add(w)
@@ -275,17 +276,22 @@ def get_metadatas():
             "isSparse": True
         }, {
             "name": "uid",
-            "dtype": "int",
+            "dtype": "long",
+            "shape": [],
+            "isSparse": False
+        }, {
+            "name": "weight",
+            "dtype": "float",
             "shape": [],
             "isSparse": False
         }, {
             "name": "movie_id",
-            "dtype": "int",
+            "dtype": "long",
             "shape": [],
             "isSparse": False
         }, {
             "name": "user_id",
-            "dtype": "int",
+            "dtype": "long",
             "shape": [],
             "isSparse": False
         }],
@@ -305,17 +311,22 @@ def get_metadatas():
             "isSparse": True
         }, {
             "name": "uid",
-            "dtype": "int",
+            "dtype": "long",
+            "shape": [],
+            "isSparse": False
+        }, {
+            "name": "weight",
+            "dtype": "float",
             "shape": [],
             "isSparse": False
         }, {
             "name": "movie_id",
-            "dtype": "int",
+            "dtype": "long",
             "shape": [],
             "isSparse": False
         }, {
             "name": "user_id",
-            "dtype": "int",
+            "dtype": "long",
             "shape": [],
             "isSparse": False
         }],
@@ -335,17 +346,22 @@ def get_metadatas():
             "isSparse": True
         }, {
             "name": "uid",
-            "dtype": "int",
+            "dtype": "long",
+            "shape": [],
+            "isSparse": False
+        }, {
+            "name": "weight",
+            "dtype": "float",
             "shape": [],
             "isSparse": False
         }, {
             "name": "movie_id",
-            "dtype": "int",
+            "dtype": "long",
             "shape": [],
             "isSparse": False
         }, {
             "name": "user_id",
-            "dtype": "int",
+            "dtype": "long",
             "shape": [],
             "isSparse": False
         }],
@@ -364,7 +380,7 @@ def data_process(input_dir, base_output_dir):
     output_dir = os.path.join(base_output_dir, "movieLens")
     data, items, users = read_data(input_dir)
     global_data, per_movie, per_user = process_data(data, items, users)
-    kept_columns = ['user_id', 'movie_id', 'uid', 'response', 'title']
+    kept_columns = ['user_id', 'movie_id', 'uid', 'response', 'title', 'weight']
     per_user_numerical_features = MOVIE_FEATURE_COLUMNS
     per_user_categorical_features = []
     per_movie_numerical_features = ['age']
@@ -395,7 +411,7 @@ def data_process(input_dir, base_output_dir):
     per_movie_train, per_movie_test = split_train_test(ts_per_movie_data, masks)
 
     # Serialize data to TF record, create metadata for GDMix training
-    other_features_map = {'user_id': tf.int32, 'movie_id': tf.int32, 'uid': tf.int64}
+    other_features_map = {'user_id': tf.int32, 'movie_id': tf.int32, 'uid': tf.int64, 'weight': tf.float32}
     datasets = [[global_train, global_test],
                 [per_user_train, per_user_test],
                 [per_movie_train, per_movie_test]]
@@ -431,13 +447,13 @@ def data_process(input_dir, base_output_dir):
     detext_train = convert_to_detext(global_train)
     training_dir = os.path.join(detext_dir, 'trainingData')
     prepare_dir(training_dir)
-    save_tfrecord(detext_train, None, other_features_map, DETEXT_LABEL,
+    save_tfrecord(detext_train, None, other_features_map, "response",
                   os.path.join(training_dir, 'train_data.tfrecord'), True)
     # validation data
     detext_test = convert_to_detext(global_test)
     validation_dir = os.path.join(detext_dir, 'validationData')
     prepare_dir(validation_dir)
-    save_tfrecord(detext_test, None, other_features_map, DETEXT_LABEL,
+    save_tfrecord(detext_test, None, other_features_map, "response",
                   os.path.join(validation_dir, 'test_data.tfrecord'), True)
 
     # generate vocab file

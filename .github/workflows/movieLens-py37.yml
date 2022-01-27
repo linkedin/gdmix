@@ -21,24 +21,18 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest
     - name: Build gdmix-data jar 
       run: |
         ./gradlew shadowJar 
-    - name: Install GDMix dependencies and Test with pytest
+    - name: Install GDMix dependencies and run unit tests
       run: |
-        cd gdmix-trainer 
-        python setup.py develop 
-        pytest
-        cd ../gdmix-workflow 
-        python setup.py develop 
-        pytest
-        cd ..
+        python -m pip install --upgrade pip
+        pip install --upgrade setuptools pytest
+        cd gdmix-trainer && pip install . && pytest && cd ..
+        cd gdmix-workflow && pip install . && pytest && cd ..
     - name: Prepare movieLens data
       run: |
+        pip install pandas numpy
         python scripts/download_process_movieLens_data.py
     - name: MovieLens logistic regression workflow
       run: |

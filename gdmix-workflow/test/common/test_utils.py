@@ -1,4 +1,4 @@
-import json
+import yaml
 import os
 import tempfile
 import unittest
@@ -15,9 +15,9 @@ class TestUtils(unittest.TestCase):
         self.output_dir = tempfile.mkdtemp()
         config = {"a": {"b1": "b2"},
                   "c": "d"}
-        self.config_file_name = os.path.join(self.output_dir, "config.json")
+        self.config_file_name = os.path.join(self.output_dir, "config.yaml")
         with open(self.config_file_name, 'w') as f:
-            json.dump(config, f)
+            yaml.dump(config, f)
 
     def tearDown(self):
         shutil.rmtree(self.output_dir)
@@ -34,8 +34,8 @@ class TestUtils(unittest.TestCase):
         actual = abbr(inputStr)
         self.assertEqual(actual, expected)
 
-    def test_json_config_file_to_obj(self):
-        config_obj = json_config_file_to_obj(self.config_file_name)
+    def test_yaml_config_file_to_obj(self):
+        config_obj = yaml_config_file_to_obj(self.config_file_name)
         self.assertEqual(config_obj.a['b1'], "b2")
         self.assertEqual(config_obj.c, "d")
 

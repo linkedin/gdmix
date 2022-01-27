@@ -38,9 +38,9 @@ class DetextWriter:
             # we only support pointwise training for detext
             # label is list of one scalar
             # score is also scalar
-            record = {self.schema_params.prediction_score_column_name: predicts[i][0],
+            record = {self.schema_params.prediction_score_column_name: predicts[i],
                       self.schema_params.uid_column_name: ids[i],
-                      self.schema_params.label_column_name: int(labels[i][0]),
+                      self.schema_params.label_column_name: int(labels[i]),
                       self.schema_params.weight_column_name: weights[i]}
             records.append(record)
         return batch_size
@@ -51,9 +51,9 @@ class DetextWriter:
         # save one batch of score
         try:
             predict_val = batch_score['score'].numpy()
-            ids = batch_score['uid'].numpy()
-            labels = batch_score['label'].numpy()
-            weights = batch_score['weight'].numpy()
+            ids = batch_score[self.schema_params.uid_column_name].numpy()
+            labels = batch_score[self.schema_params.label_column_name].numpy()
+            weights = batch_score[self.schema_params.weight_column_name].numpy()
             n_records += self.append_validation_results(validation_results,
                                                         predict_val,
                                                         ids,
