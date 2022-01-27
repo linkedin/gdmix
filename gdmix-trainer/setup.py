@@ -4,7 +4,7 @@ from sys import platform as _platform
 
 import sys
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 current_dir = Path(__file__).resolve().parent
 with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
@@ -30,14 +30,13 @@ setup(
     packages=find_namespace_packages(where='src'),
     include_package_data=True,
     install_requires=[
+        "numpy>=1.19.5",
         "absl-py==0.10",
         "decorator==4.4.2",
-        "detext-nodep==3.0.0",
-        "fastavro==1.4.7",
-        "google-auth==1.25.0",
-        "google-cloud-bigquery==2.18.0",
+        "detext-nodep==3.2.0",
+        "gin-config==0.3.0",
+        "fastavro==0.21.22",
         "grpcio==1.32.0",
-        "numpy==1.19.5",
         "protobuf==3.19",
         "psutil==5.7.0",
         "scikit-learn==1.0",
@@ -45,7 +44,9 @@ setup(
         "six==1.15.0",
         "smart-arg==0.4",
         "statsmodels==0.13.1",
+        "scipy==1.5.4",
         f"tensorflow{TF_VERSION_QUANTIFIER}",
+        "tensorflow-addons==0.12.1",
         f"tensorflow-text{TF_VERSION_QUANTIFIER}",
         f"tensorflow-serving-api{TF_VERSION_QUANTIFIER}",
         "tensorflow_ranking",

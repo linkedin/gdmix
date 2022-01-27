@@ -17,8 +17,9 @@ def get_tfjob_cmd(params):
     """
     cmd = ['python', '-m', 'gdmix.gdmix']
     for param in params:
-        # smart-arg serialization for parameters'
-        cmd.extend(param.__to_argv__())
+        for k, v in param.items():
+            if v != "" and v is not None:
+                cmd.append(f"--{k}={v}")
     return cmd
 
 

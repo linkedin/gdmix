@@ -1,4 +1,4 @@
-from gdmixworkflow.common.utils import json_config_file_to_obj, gen_random_string
+from gdmixworkflow.common.utils import yaml_config_file_to_obj, gen_random_string
 from gdmixworkflow.common.constants import *
 from gdmixworkflow.distributed.container_ops import no_op
 from gdmixworkflow.fixed_effect_workflow_generator \
@@ -13,7 +13,7 @@ def gdmix_distributed_workflow(gdmix_config_file, namespace, secret_name, image,
     """ Generate gdmix kubeflow pipeline using Kubeflow pipeline python DSL( kfp.dsl).
     """
 
-    gdmix_config_obj = json_config_file_to_obj(gdmix_config_file)
+    gdmix_config_obj = yaml_config_file_to_obj(gdmix_config_file)
 
     current_op = no_op("GDMix-training-start")
     suffix = gen_random_string()

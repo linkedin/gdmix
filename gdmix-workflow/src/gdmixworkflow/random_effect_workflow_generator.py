@@ -90,7 +90,7 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
                               training_score_dir=training_score_dir, validation_score_dir=validation_score_dir)
         re_params = replace(REParams(**random_effect_config_obj, output_model_dir=output_model_dir),
                             training_data_dir=training_data_dir, validation_data_dir=validation_data_dir, metadata_file=metadata_file)
-        return GDMIX_TFJOB, f"{name}-tf-train", "", (gdmix_params, re_params)
+        return GDMIX_TFJOB, f"{name}-tf-train", "", (gdmix_params.__dict__, re_params.__dict__)
 
     def get_compute_metric_job(self, random_effect_config_obj):
         """ Get sparkjob compute metrics command.
@@ -101,10 +101,11 @@ class RandomEffectWorkflowGenerator(WorkflowGenerator):
         params = {
             r"\--metricsInputDir": validation_score_dir,
             "--outputMetricFile": self.get_metric_output_path(random_effect_name),
+            "--metricName": "auc",
             "--labelColumnName": random_effect_config_obj.gdmix_config['label_column_name'],
             "--predictionColumnName": random_effect_config_obj.gdmix_config['prediction_score_column_name']}
         return (GDMIX_SPARKJOB, f"{random_effect_name}-compute-metric",
-                "com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator", params)
+                "com.linkedin.gdmix.evaluation.Evaluator", params)
 
     def get_job_sequence(self):
         """ Get gdmix job sequence.

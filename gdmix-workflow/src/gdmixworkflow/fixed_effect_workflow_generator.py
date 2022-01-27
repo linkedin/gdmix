@@ -24,6 +24,7 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         self.output_model_dir = path_join(self.output_dir, MODELS)
         self.validation_score_dir = path_join(self.output_dir, VALIDATION_SCORES)
 
+        # Validate gdmix params
         self.gdmix_params: Params = Params(**self.fixed_effect_config.pop('gdmix_config'),
                                            training_score_dir=path_join(self.output_dir, TRAINING_SCORES),
                                            validation_score_dir=self.validation_score_dir)
@@ -32,15 +33,17 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
 
     def get_train_job(self):
         """ Get tfjob training job.
-        :return (job_type, job_name, "", job_params) where job_params are typed param containers supported by smart-arg
+        :return (job_type, job_name, "", job_params) where job_params are params in dict
         """
+        model_param_dict = self.fixed_effect_config
         if self.model_type == LOGISTIC_REGRESSION:
-            params = FixedLRParams(**self.fixed_effect_config, output_model_dir=self.output_model_dir)
+            model_param_dict["output_model_dir"] = self.output_model_dir
         elif self.model_type == DETEXT:
-            params = DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
+            # smart-arg's serialization for parameters' doesn't support NoneType(from default value), so use original params
+            model_param_dict["out_dir"] = self.output_model_dir
         else:
             raise ValueError(f'unsupported model_type: {self.model_type}')
-        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-train", "", (self.gdmix_params, params)
+        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-train", "", (self.gdmix_params.__dict__, model_param_dict)
 
     def get_detext_inference_job(self):
         """ Get detext inference job. For LR model the inference job is included in train
@@ -48,8 +51,10 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
         Return: an inference job inferencing training and validation data
         (job_type, job_name, "", job_params)
         """
-        params = replace(self.gdmix_params, action=ACTION_INFERENCE), DetextArg(**self.fixed_effect_config, out_dir=self.output_model_dir)
-        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-inference", "", params
+        updated_gdmix_params = replace(self.gdmix_params, action=ACTION_INFERENCE)
+        model_param_dict = self.fixed_effect_config
+        model_param_dict["out_dir"] = self.output_model_dir
+        return GDMIX_TFJOB, f"{self.fixed_effect_name}-tf-inference", "", (updated_gdmix_params.__dict__, model_param_dict)
 
     def get_compute_metric_job(self):
         """ Get sparkjob compute metric job.
@@ -59,11 +64,12 @@ class FixedEffectWorkflowGenerator(WorkflowGenerator):
             r"\--metricsInputDir": self.validation_score_dir,
             "--outputMetricFile": path_join(self.output_dir, METRIC),
             "--labelColumnName": self.gdmix_params.label_column_name,
+            "--metricName": "auc",
             "--predictionColumnName": self.gdmix_params.prediction_score_column_name
         }
         return (GDMIX_SPARKJOB,
                 f"{self.fixed_effect_name}-compute-metric",
-                "com.linkedin.gdmix.evaluation.AreaUnderROCCurveEvaluator",
+                "com.linkedin.gdmix.evaluation.Evaluator",
                 params)
 
     def get_job_sequence(self):

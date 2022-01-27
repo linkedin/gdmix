@@ -27,11 +27,11 @@ def rm_backslash(params):
     return {k.strip('\\'): v for k, v in params.items()}
 
 
-def json_config_file_to_obj(config_file):
-    """ load gdmix config from json file to object. """
-    def _json_object_hook(d):
+def yaml_config_file_to_obj(config_file):
+    """ load gdmix config from yaml file to object. """
+    def _yaml_object_hook(d):
         return namedtuple('GDMIX_CONFIG', d.keys())(*d.values())
 
     with open(config_file) as f:
-        config_obj = _json_object_hook(yaml.safe_load(f))
+        config_obj = _yaml_object_hook(yaml.safe_load(f))
     return config_obj

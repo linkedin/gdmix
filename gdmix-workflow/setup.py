@@ -4,7 +4,7 @@ from sys import platform as _platform
 
 import sys
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 current_dir = Path(__file__).resolve().parent
 with open(current_dir.joinpath('README.md'), encoding='utf-8') as f:
     long_description = f.read()
@@ -30,7 +30,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "setuptools>=41.0.0",
-        "gdmix-trainer==0.4.0",
+        "gdmix-trainer>=0.5.0",
         "kfp==0.2.5"
     ],
     tests_require=['pytest']

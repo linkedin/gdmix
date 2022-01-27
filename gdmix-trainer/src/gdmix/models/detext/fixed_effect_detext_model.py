@@ -60,14 +60,16 @@ class FixedEffectDetextModel(Model):
         inference_dataset = input_fn_tfrecord(input_pattern=','.join(sharded_dataset_paths),  # noqa: E731
                                               batch_size=self.model_params.test_batch_size,
                                               mode=tf.estimator.ModeKeys.EVAL,
-                                              feature_map=self.model_params.feature_map)
+                                              feature_type2name=self.model_params.feature_type2name,
+                                              feature_name2num=self.model_params.feature_name2num,
+                                              task_type=self.model_params.task_type)
 
         self.model = train_model_helper.load_model_with_ckpt(
             parsing_utils.HParams(**asdict(self.model_params)),
             self.best_checkpoint)
         output = train_flow_helper.predict_with_additional_info(inference_dataset,
                                                                 self.model,
-                                                                self.model_params.feature_map)
+                                                                self.model_params.feature_type2name)
         detext_writer = DetextWriter(schema_params=schema_params)
         shard_index = execution_context[constants.SHARD_INDEX]
         output_file = os.path.join(output_dir, f"part-{shard_index:05d}.avro")

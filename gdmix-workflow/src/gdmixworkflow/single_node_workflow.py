@@ -23,7 +23,7 @@ def run_gdmix_single_node(gdmix_config_file, jar_path):
         - fixed-effect jobs
         - random-effect jobs
     """
-    gdmix_config_obj = json_config_file_to_obj(gdmix_config_file)
+    gdmix_config_obj = yaml_config_file_to_obj(gdmix_config_file)
     output_dir = gdmix_config_obj.output_dir
 
     if not hasattr(gdmix_config_obj, FIXED_EFFECT_CONFIG):
