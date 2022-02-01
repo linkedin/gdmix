@@ -41,38 +41,4 @@ jobs:
           python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
       - name: MovieLens DeText workflow
         run: |
-          python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar    
-      # We must set the commit status manually
-      # Reference: https://github.com/bahmutov/eleventy-example/blob/main/.github/workflows/ci.yml#L27
-      - name: testbox ✅
-        if: ${{ success() }}
-        # set the merge commit status check
-        # using GitHub REST API
-        # see https://docs.github.com/en/rest/reference/repos#create-a-commit-status
-        run: |
-          curl --request POST \
-          --url https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-          --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
-          --header 'content-type: application/json' \
-          --data '{
-            "context": "testbox",
-            "state": "success",
-            "description": "Testbox tests passed",
-            "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          }'
-      - name: testbox 🚨
-        if: ${{ failure() }}
-        # set the merge commit status check
-        # using GitHub REST API
-        # see https://docs.github.com/en/rest/reference/repos#create-a-commit-status
-        run: |
-          curl --request POST \
-          --url https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-          --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
-          --header 'content-type: application/json' \
-          --data '{
-            "context": "testbox",
-            "state": "failure",
-            "description": "Testbox tests failed",
-            "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          }'
+          python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
