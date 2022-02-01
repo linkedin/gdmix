@@ -1,14 +1,11 @@
 
 # GDMix Configs
 To train fixed effect and random effect models using GDMix, users need to provide a GDMix config, which consists of configs for
-fixed-effect and random-effect models. For distributed training, computing resource
-configs for Tensorflow and Spark jobs are needed.
+fixed-effect and random-effect models. For distributed training, computing resource configs for Tensorflow and Spark jobs are needed.
 
 GDMix config examples for movieLens with a fixed-effect `global` model and two random effect `per-user` and `per-movie` models are available in directory `examples/movielens-100k`:
-  - [lr-single-node-movieLens.config](examples/movielens-100k/lr-single-node-movieLens.config): train logistic regression models for the `global`, `per-user` and `per-movie` models
-  - [lr-distributed-movieLens.config](examples/movielens-100k/lr-distributed-movieLens.config): same as above plus resource config for distributed training
-  - [detext-single-node-movieLens.config](examples/movielens-100k/detext-single-node-movieLens.config): train a deep and wide neural network model for the `global` and logistic regression models for the `per-user` and `per-movie`
-  - [detext-distributed-movieLens.config](examples/movielens-100k/detext-distributed-movieLens.config): same as above plus resource config for distributed training
+  - [lr-movieLens.yaml](examples/movielens-100k/lr-single-node-movieLens.config): train logistic regression models for the `global`, `per-user` and `per-movie` models; `spark_config` and `tfjob_config` sections are resources used for distributed training only.
+  - [detext-movieLens.yaml](examples/movielens-100k/detext-movieLens.yaml): train a deep and wide neural network model for the `global` and logistic regression models for the `per-user` and `per-movie`; `spark_config` and `tfjob_config` sections are resources used for distributed training only.
 
 ## Logistic regression models
 ### Fixed-effect config
