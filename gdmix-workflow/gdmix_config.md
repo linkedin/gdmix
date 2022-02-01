@@ -15,19 +15,23 @@ GDMix config examples for movieLens with a fixed-effect `global` model and two r
 Required fields:
   - **name**: name of the model. String.
   - **training_data_dir**: path to training data directory. String.
-  - **input_column_names**: input column names for label, unique id, weight and feature bag(the collection of features). String map.
-  - **prediction_score_column_name**: column name for prediction score. String.
+  - **uid_column_name**: unique id column name in the train/validation data.
   - **metadata_file**: path to an input data tensor metadata file. String.
   - **feature_file**: path to a feature list file for outputing model in name-term-value format. String.
+  - **model_type**: the model type to train, e.g, logistic regression, linear regression, detext, etc.
+  - **output_model_dir**: model output directory.
 
 Optional fields:
   - **validation_data_dir**: path to validation data directory. String, default is "".
-  - **regularize_bias**: whether to regularize the intercept. Ususally we don't put regularization on intercept since it is an important feature. Boolean, default is false.
+  - **regularize_bias**: whether to regularize the intercept. Ususally we do not put regularization on intercept since it is an important feature. Boolean, default is false.
   - **l2_reg_weight**: weight of L2 regularization for each feature bag. Float, default is 0.001.
-  - **optimizer**: optimizer used in the training, currently support LBFGS only. Map, default values are {"name": "LBFGS", "params": [{ "lbfgs_tolerance": 1.0e-7, "num_of_lbfgs_iterations": 100, "num_of_lbfgs_curvature_pairs": 10 }] }
+  - **optimizer**: optimizer used in the training, currently support LBFGS only.
   - **metric**: metric of the model. String, support "auc" and "mse" Default is "auc".
-  - **batch_size**: batch size to iterative read data to avoid out-of-memory error. Please note this is different from the batch size for sgd, its value only impacts IO and won't impact final metrics. Integer, default is 500.
   - **copy_to_local**: whether copy training data to local disk. Boolean, default is true.
+  - **label_column_name**: label column name in the train/validation data.
+  - **weight_column_name**: weight column name in the train/validation data.
+  - **prediction_score_column_name**: prediction score column name in the generated result file.
+  - **feature_bag**: feature bag name that is used for training and scoring.
 
 ### Random-effect config
 Required fields include all fields from fixed-effect config plus:
