@@ -5,8 +5,10 @@ name: Gdmix movieLens workflow
 
 on:
   push:
-    branches-ignore:
-      - master
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+    
 jobs:
   testbox:
     runs-on: ubuntu-latest
@@ -16,27 +18,27 @@ jobs:
     container:
       image: linkedin/gdmix-dev
     steps:  
-    - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Build gdmix-data jar 
-      run: |
-        ./gradlew shadowJar 
-    - name: Install GDMix dependencies and run unit tests
-      run: |
-        python -m pip install --upgrade pip
-        pip install --upgrade setuptools pytest
-        cd gdmix-trainer && pip install . && pytest && cd ..
-        cd gdmix-workflow && pip install . && pytest && cd ..
-    - name: Prepare movieLens data
-      run: |
-        pip install pandas numpy
-        python scripts/download_process_movieLens_data.py
-    - name: MovieLens logistic regression workflow
-      run: |
-        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
-    - name: MovieLens DeText workflow
-      run: |
-        python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build gdmix-data jar 
+        run: |
+          ./gradlew shadowJar 
+      - name: Install GDMix dependencies and run unit tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade setuptools pytest
+          cd gdmix-trainer && pip install . && pytest && cd ..
+          cd gdmix-workflow && pip install . && pytest && cd ..
+      - name: Prepare movieLens data
+        run: |
+          pip install pandas numpy
+          python scripts/download_process_movieLens_data.py
+      - name: MovieLens logistic regression workflow
+        run: |
+          python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
+      - name: MovieLens DeText workflow
+        run: |
+          python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
