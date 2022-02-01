@@ -28,17 +28,16 @@ For DeText models, efficiency is achieved by either Tensorflow based parameter s
 
 ## How to setup
 GDMix has mixed implementation of Python and Scala, which used for training model and processing intermediate data on Spark,
-GDMix requires [Python 3.3+](https://www.python.org/downloads) and [Apache Spark 2.0+](http://spark.apache.org/).
+GDMix requires [Python 3.7+](https://www.python.org/downloads) and [Apache Spark 2.0+](http://spark.apache.org/).
 
 ### As user
 User will need to :
 - Install Spark 2.0+
-- Download the `gdmix-data` fat jar for intermediate data processing
+- Compile a `gdmix-data` fat jar used for intermediate data processing
 - Install the `gdmix-trainer` and `gdmix-workflow` python packages
 ```
-version=0.3.0
-wget -c https://linkedin.jfrog.io/ui/native/open-source/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
-
+# The compiled jar will be at directory build/gdmix-data-all_2.11/libs
+./gradlew shadowJar
 pip install gdmix-trainer gdmix-workflow
 ```
 See more details in the section [Tryout the movieLens example](#Try-out-the-movieLens-example) for a hands-on example and the section [Run GDMix on Kubernetes for distributed training](#Run-GDMix-on-Kubernetes-for-distributed-training) for distributed training.
@@ -48,7 +47,6 @@ GDMix's Python and Scala module use [setuptools](https://pypi.org/project/setupt
 Local build and test is shown below.
 ```
 # Build scala module
-./gradlew wrapper --gradle-version  4.5
 ./gradlew clean build
 
 # Create virtural env
@@ -138,7 +136,6 @@ The input data should be organized in following structure, in which fixed-effect
 The `trainingData` and `validationData` are the preprocessed training and validation data in [tfrecord](https://www.tensorflow.org/tutorials/load_data/tfrecord) format; `featureList` directory contains a text file that lists all feature names; `metadata` directory has a json file that stores the number of training samples and metdata such as name, data type, shape and if is sparse vector, which is used to deserialize the tfrecord data. An example for the `global` model is shown below:
 ```
 {
-  "numberOfTrainingSamples" : 179087,
   "features" : [ {
     "name" : "weight",
     "dtype" : "float",
@@ -165,7 +162,7 @@ The `trainingData` and `validationData` are the preprocessed training and valida
 ```
 
 ### GDMix config
-GDMix config is a json file that specifies GDMix training related parameters such as input data path, output path, model parameters for fixed-effect/random-effect models, computation resources (distributed only), etc. More detailed information of GDMix config can be found at [gdmix_config.md](gdmix-workflow/gdmix_config.md).
+GDMix config is a yaml file that specifies GDMix training related parameters such as input data directory, output path, model parameters for fixed-effect/random-effect models, computation resources (distributed only), etc. More detailed information of GDMix config can be found at [gdmix_config.md](gdmix-workflow/gdmix_config.md).
 
 ## Try out the [movieLens](https://grouplens.org/datasets/movielens/) example
 In this section we will introduce how to train a fixed effect model `global` and two random effect models `per-user` and `per-movie` using GDMix with the [movieLens data](https://grouplens.org/datasets/movielens/). The features for each model are prepared in the script [download_process_movieLens_data.py](scripts/download_process_movieLens_data.py). `per-user` uses feature age, gender and occupation, `per-movie` uses feature genre and release date, and `global` uses all the five features.
@@ -177,36 +174,43 @@ docker run --name gdmix -it linkedin/gdmix bash
 ```
 - Train logistic regression models for the `global`  `per-user` and `per-movie` (see the section [Train logsitic regression models](#Train-logsitic-regression-models) for details):
 ```
-python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
+python -m gdmixworkflow.main --config_path lr-movieLens.yaml --jar_path gdmix-data-all_2.11-*.jar
 ```
 - Train a deep and wide neutal network model for the `global` and two logistic regression models for the `per-user` and `per-movie` (see the section [Train neural network model plus logsitic regression models](#Train-neural-network-model-plus-logsitic-regression-models) for details):
 ```
-python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
+python -m gdmixworkflow.main --config_path detext-movieLens.yaml --jar_path gdmix-data-all_2.11-*.jar
+
 ```
 
 ### Run GDMix directly
 To run GDMix directly, user will need to follow the instruction in the section [As user](#As-user), we elaborate the steps below.
-Spark installation is required as we haven't supported PySpark yet. We present how to install Spark 2.4.7 on CentOS/RHEL 7.x below, installation on other systems can be done similarly.
+Spark installation is required as we haven't supported PySpark yet. We present how to install Spark 2.4.8 on Ubuntu below, installation on other systems can be done similarly.
 ```
-yum  install -y java-1.8.0-openjdk
-export JAVA_HOME=/etc/alternatives/jre
-spark_version=2.4.7
-spark_pkg=spark-${spark_version}-bin-hadoop2.7
-wget https://downloads.apache.org/spark/spark-${spark_version}/${spark_pkg}.tgz
-mkdir /opt/spark
-tar -xf ${spark_pkg}.tgz && \
+ARG spark_version=2.4.8
+ARG spark_pkg=spark-${spark_version}-bin-hadoop2.7
+
+RUN apt-get update
+RUN apt-get install software-properties-common -y
+RUN apt-add-repository 'deb http://security.debian.org/debian-security stretch/updates main'
+RUN apt-get update && apt-get install openjdk-8-jdk git -y
+RUN mkdir -p /opt/spark
+RUN wget https://downloads.apache.org/spark/spark-${spark_version}/${spark_pkg}.tgz && tar -xf ${spark_pkg}.tgz && \
     mv ${spark_pkg}/jars /opt/spark && \
     mv ${spark_pkg}/bin /opt/spark && \
     mv ${spark_pkg}/sbin /opt/spark && \
-    mv ${spark_pkg}/kubernetes/dockerfiles/spark/entrypoint.sh /opt/ && \
     mv ${spark_pkg}/examples /opt/spark && \
-    mv ${spark_pkg}/kubernetes/tests /opt/spark && \
     mv ${spark_pkg}/data /opt/spark && \
+    mv ${spark_pkg}/kubernetes/tests /opt/spark && \
+    mv ${spark_pkg}/kubernetes/dockerfiles/spark/entrypoint.sh /opt/ && \
+    mkdir -p /opt/spark/conf && \
+    cp ${spark_pkg}/conf/log4j.properties.template /opt/spark/conf/log4j.properties && \
+    sed -i 's/INFO/ERROR/g' /opt/spark/conf/log4j.properties && \
     chmod +x /opt/*.sh && \
     rm -rf spark-*
-export SPARK_HOME=/opt/spark
-export PATH=/opt/spark/bin:$PATH
-export SPARK_CLASSPATH=$SPARK_CLASSPATH:/opt/spark/jars/
+
+ENV SPARK_HOME=/opt/spark
+ENV PATH=/opt/spark/bin:$PATH
+ENV SPARK_CLASSPATH=$SPARK_CLASSPATH:/opt/spark/jars/
 ```
 Download and run the provided script [download_process_movieLens_data.py](scripts/download_process_movieLens_data.py) to download and preprocess moveLens data, `--dest_path` can be used to save the result to a different path, default is a `movieLens` directory on current path:
 ```
@@ -215,22 +219,21 @@ wget https://raw.githubusercontent.com/linkedin/gdmix/master/scripts/download_pr
 pip install pandas
 python download_process_movieLens_data.py
 ```
-Download the `gdmix-data` fat jar for spark to process intermediate data:
+Checkout the GDMix repo, do
+1. Compile a `gdmix-data` fat jar used for intermediate data processing, the compiled jar will be at directory `build/gdmix-data-all_2.11/libs`:
 ```
-version=0.3.0
-wget -c https://linkedin.jfrog.io/ui/native/open-source/com/linkedin/gdmix/gdmix-data-all_2.11/${version}/gdmix-data-all_2.11-${version}.jar -O gdmix-data-all_2.11.jar
+./gradlew shadowJar
 ```
-Install python packages `gdmix-trainer` and `gdmix-workflow`:
+2. Install python modules `gdmix-trainer` and `gdmix-workflow`:
 ```
-pip install gdmix-trainer gdmix-workflow
+cd gdmix-trainer; pip install .; cd ..
+cd gdmix-workflow; pip install .;
 ```
 
 #### Train logsitic regression models
-A GDMix config [lr-single-node-movieLens.config](gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config) is provided for the demo purpose, download it and start gdmix training with following command:
+A GDMix config [lr-movieLens.yaml](gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml) is provided for the demo purpose:
 ```
-wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/lr-single-node-movieLens.config
-
-python -m gdmixworkflow.main --config_path lr-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
+python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
 ```
 On a machine with 16 Intel Xeon CPU @ 2.10GHz it took 2 minutes to complete the training. The result directory(from the `output_dir` field in the GDMix config) is shown at the end of the training if it succeeds:
 ```
@@ -299,11 +302,9 @@ The metric for each model is summarized in the table below. As we can see, addin
 As a comparison, we'll train a neural network model supported by DeText for the fixed effect `global` and keep the random effect models unchanged.
 We added movie title as an additional feature for the `global` model, and the neural network is the [wide-and-deep ](https://arxiv.org/pdf/1606.07792.pdf) that the movie title is the "deep" and the rest of the features are "wide".
 
-We use the [detext-single-node-movieLens.config](gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config) GDMix config to do the training:
+We use the [detext-movieLens.yaml](gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml) GDMix config to do the training:
 ```
-wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/detext-single-node-movieLens.config
-
-python -m gdmixworkflow.main --config_path detext-single-node-movieLens.config --jar_path gdmix-data-all_2.11.jar
+python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar
 ```
 
 On a machine with 16 Intel Xeon CPU @ 2.10GHz it took 3 minutes to complete the training. The AUC for each model is shown in the table below. The wide-and-deep fixed effect `global` model performs much better than its logistic regression counterpart (0.7090 v.s. 0.6237), and

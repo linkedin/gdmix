@@ -2,15 +2,15 @@
 GDMix-workflow is a workflow generation toolkit to orchestrate training jobs of the [GDMix](https://github.com/linkedin/gdmix), which is a framework to train non-linear fixed effect and random effect models. By providing a [GDMix config](gdmix_config.md), GDMix-workflow can generate jobs and run them directly, or generate a YAML file that can be uploaded to Kubeflow Pipeline to run training job distributedly on Kubernetes cluster with Kubeflow Pipeline deployed.
 
 ## Configuration
-GDMix-workflow supports two modes, single_node and distributed. For single_node mode, user will need to install the [gdmix-workflow](https://pypi.org/project/gdmix-workflow/) package and spark, GDMix-workflow will prepare jobs and run them on the node. For distributed mode, GDMix-workflow generates a YAML file that can be uploaded to Kubeflow Pipeline. We'll explain more about distributed mode in the section [Run on Kubernetes](#Run-on-Kubernetes).
+GDMix-workflow supports two modes, single_node and distributed. For the single_node mode, user will need to install the [gdmix-workflow](https://pypi.org/project/gdmix-workflow/) package and spark, GDMix-workflow will prepare jobs and run them on the node. For the distributed mode, GDMix-workflow generates a YAML file that can be uploaded to Kubeflow Pipeline UI. We'll explain more about distributed mode in the section [Run on Kubernetes](#Run-on-Kubernetes).
 Once the `gdmix-workflow` package is installed (`pip install gdmix-workflow`),  user can call
 ```
 python -m gdmixworkflow.main
 ```
 plus following parameters:
-  - **--config_path**: path to gdmix config. Required.
-  - **--mode**: distributed or single_node. Required.
-  - **--jar_path**: path to the gdmix-data jar for GDMix processing intermediate data. Required by single_node mode only.
+  - **--config_path**: path to a gdmix config. Required.
+  - **--mode**: distributed or single_node. Required, default is single_node.
+  - **--jar_path**: path to the gdmix-data jar for GDMix processing intermediate data.
   - **--workflow_name**: name for the generated zip file to upload to Kubeflow Pipeline. Required by distributed mode only.
   - **--namespace**: Kubernetes namespace. Required by distributed mode only.
   - **--secret_name**: secret name to access storage. Required by distributed mode only.
@@ -42,15 +42,15 @@ python download_process_movieLens_data.py
 ```
 For distributed training, the processed movieLens data need to be copied to the centralized storage.
 
-We'll also need a GDMix config, a reference of training logistic regression models for the fixed effect `global` and the random effects `per-user` and `per-movie` with distributed training can be found at [lr-distributed-movieLens.config](examples/movielens-100k/lr-distributed-movieLens.config).
+We'll also need a GDMix config, a reference of training logistic regression models for the fixed effect `global` and the random effects `per-user` and `per-movie` with distributed training can be found at [lr-movieLens.yaml](gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml).
 
 ### Run on single node
 Please see the section [Try out the movieLens example](../README.md#Try-out-the-movieLens-example) in the root [README.md](../README.md) for details of how to run the movieLens example on single node.
 
 ### Run on Kubernetes for distributed training
-To run on Kubernetes, as mentioned earlier, user will need to copy the processed movieLens data to the centralized storage, modify the input path fields such as `training_data_dir`,  `validation_data_dir`, `feature_file` and `metadata_file` of the GDMix config for distributed training [lr-distributed-movieLens.config](examples/movielens-100k/lr-distributed-movieLens.config).
+To run on Kubernetes, as mentioned earlier, user will need to copy the processed movieLens data to the centralized storage, modify the input path fields such as `training_data_dir`,  `validation_data_dir`, `feature_file` and `metadata_file` of the GDMix config for distributed training [lr-movieLens.yaml](gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml).
 
-If using the provided image [linkedin/gdmix](https://hub.docker.com/repository/docker/linkedin/gdmix), user can mount the processed movieLens data from the centralized storage to path `/workspace/notebook/movieLens` for each worker then no change is needed for the distributed training GDMix config [lr-distributed-movieLens.config](examples/movielens-100k/resources/lr-distributed-movieLens.config).
+If using the provided image [linkedin/gdmix](https://hub.docker.com/repository/docker/linkedin/gdmix), user can mount the processed movieLens data from the centralized storage to path `/workspace/notebook/movieLens` for each worker, then no change is needed for the distributed training GDMix config [lr-movieLens.yaml](gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml).
 
 
 #### Generate YAML file
@@ -61,9 +61,9 @@ pip install gdmix-workflow
 
 Download the example GDMix config for distributed training and generate the YAML file with following command:
 ```
-wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/lr-distributed-movieLens.config
+wget https://raw.githubusercontent.com/linkedin/gdmix/master/gdmix-workflow/examples/movielens-100k/lr-movieLens.yaml
 
-python -m gdmixworkflow.main --config_path lr-distributed-movieLens.config --mode=distributed --workflow_name=movieLens --namespace=default --secret_name default --image linkedin:gdmix --service_account default
+python -m gdmixworkflow.main --config_path lr-movieLens.yaml --mode=distributed --workflow_name=movieLens --namespace=default --secret_name default --image linkedin:gdmix --service_account default
 ```
 
 Parameters of `namespace`, `secret_name` and `service_account` relate to the Kubernetes cluster setting and job scheduling operator deployments. A zip file named `movieLens.zip` is expected to be produced.
