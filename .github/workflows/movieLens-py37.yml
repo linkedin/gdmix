@@ -44,7 +44,7 @@ jobs:
           python -m gdmixworkflow.main --config_path gdmix-workflow/examples/movielens-100k/detext-movieLens.yaml --jar_path build/gdmix-data-all_2.11/libs/gdmix-data-all_2.11-*.jar    
       # We must set the commit status manually
       # Reference: https://github.com/bahmutov/eleventy-example/blob/main/.github/workflows/ci.yml#L27
-      - name: Staging Tests ✅
+      - name: testbox ✅
         if: ${{ success() }}
         # set the merge commit status check
         # using GitHub REST API
@@ -55,12 +55,12 @@ jobs:
           --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
           --header 'content-type: application/json' \
           --data '{
-            "context": "Staging Tests",
+            "context": "testbox",
             "state": "success",
-            "description": "Staging tests passed",
+            "description": "Testbox tests passed",
             "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           }'
-      - name: Staging Tests 🚨
+      - name: testbox 🚨
         if: ${{ failure() }}
         # set the merge commit status check
         # using GitHub REST API
@@ -71,8 +71,8 @@ jobs:
           --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
           --header 'content-type: application/json' \
           --data '{
-            "context": "Staging Tests",
+            "context": "testbox",
             "state": "failure",
-            "description": "Staging tests failed",
+            "description": "Testbox tests failed",
             "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           }'
