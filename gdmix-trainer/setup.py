@@ -44,7 +44,7 @@ setup(
         "six==1.15.0",
         "smart-arg==0.4",
         "statsmodels==0.13.1",
-        "scipy==1.5.4",
+        "scipy==1.10.0",
         f"tensorflow{TF_VERSION_QUANTIFIER}",
         "tensorflow-addons==0.12.1",
         f"tensorflow-text{TF_VERSION_QUANTIFIER}",
